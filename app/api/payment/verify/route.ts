@@ -1,4 +1,6 @@
 import { verifyRazorpayPayment } from '@/lib/payment'
+
+export const maxDuration = 30
 import { sendBookingConfirmation } from '@/lib/notifications'
 import { generateInvoiceNumber } from '@/lib/utils'
 import { supabaseAdmin } from '@/lib/supabase-admin'

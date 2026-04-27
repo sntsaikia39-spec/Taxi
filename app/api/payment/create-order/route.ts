@@ -1,5 +1,7 @@
 import { createRazorpayOrder } from '@/lib/payment'
 
+export const maxDuration = 30
+
 export async function POST(request: Request) {
   try {
     const body = await request.json()

@@ -1,13 +1,18 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  swcMinify: true,
   compress: true,
   poweredByHeader: false,
   productionBrowserSourceMaps: false,
   images: {
-    domains: ['images.unsplash.com', 'via.placeholder.com'],
-    formats: ['image/avif', 'image/webp'],
+    remotePatterns: [
+      { protocol: 'https', hostname: 'images.unsplash.com' },
+      { protocol: 'https', hostname: 'via.placeholder.com' },
+      { protocol: 'https', hostname: 'images.pexels.com' },
+      { protocol: 'https', hostname: 'www.goodfreephotos.com' },
+      { protocol: 'https', hostname: 'i0.wp.com' },
+      { protocol: 'https', hostname: 'picjumbo.com' },
+    ],
   },
   headers: async () => {
     return [
@@ -29,11 +34,6 @@ const nextConfig = {
         ],
       },
     ]
-  },
-  env: {
-    NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
-    NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-    NEXT_PUBLIC_RAZORPAY_KEY_ID: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
   },
 }
 
