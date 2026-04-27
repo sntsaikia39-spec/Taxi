@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run *)",
+      "Bash(npx tsc *)",
+      "Bash(grep -n \"tourData\\\\.car[^_]\\\\\\\\|tour\\\\.car[^_]\\\\\\\\|: car,\" d:/CODE/BeeDigital/TaxiHollongi/app/admin/page.tsx)"
+    ]
+  }
+}
