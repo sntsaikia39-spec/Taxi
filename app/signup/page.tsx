@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { useAuth } from '@/context/AuthContext'
@@ -9,7 +9,7 @@ import Footer from '@/components/Footer'
 import { Mail, Lock, User as UserIcon, UserPlus } from 'lucide-react'
 import toast from 'react-hot-toast'
 
-export default function Signup() {
+function SignupContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const redirect = searchParams.get('redirect') || '/bookings'
@@ -202,4 +202,8 @@ export default function Signup() {
       <Footer />
     </div>
   )
+}
+
+export default function Signup() {
+  return <Suspense><SignupContent /></Suspense>
 }

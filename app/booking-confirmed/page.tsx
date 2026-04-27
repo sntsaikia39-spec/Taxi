@@ -1,14 +1,14 @@
 'use client'
 
 import { useSearchParams } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Suspense } from 'react'
 import Link from 'next/link'
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
 import { generateInvoicePDF, downloadInvoicePDF, type InvoiceData } from '@/lib/invoice'
 import { CheckCircle, Download, Home } from 'lucide-react'
 
-export default function BookingConfirmed() {
+function BookingConfirmedContent() {
   const searchParams = useSearchParams()
   const bookingId = searchParams.get('bookingId')
   const [booking, setBooking] = useState<any>(null)
@@ -295,4 +295,8 @@ export default function BookingConfirmed() {
       <Footer />
     </div>
   )
+}
+
+export default function BookingConfirmed() {
+  return <Suspense><BookingConfirmedContent /></Suspense>
 }

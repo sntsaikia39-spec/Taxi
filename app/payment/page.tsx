@@ -1,7 +1,7 @@
 'use client'
 
 import { useSearchParams } from 'next/navigation'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
 import toast from 'react-hot-toast'
@@ -14,7 +14,7 @@ declare global {
   }
 }
 
-export default function Payment() {
+function PaymentContent() {
   const searchParams = useSearchParams()
   const bookingId = searchParams.get('bookingId')
   const amount = parseFloat(searchParams.get('amount') || '0')
@@ -421,4 +421,8 @@ export default function Payment() {
       <Footer />
     </div>
   )
+}
+
+export default function Payment() {
+  return <Suspense><PaymentContent /></Suspense>
 }
