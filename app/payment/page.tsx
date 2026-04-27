@@ -2,8 +2,8 @@
 
 export const dynamic = 'force-dynamic'
 
+import { Suspense, useState, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { useState, useEffect } from 'react'
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
 import toast from 'react-hot-toast'
@@ -16,7 +16,7 @@ declare global {
   }
 }
 
-export default function Payment() {
+function PaymentContent() {
   const searchParams = useSearchParams()
   const bookingId = searchParams.get('bookingId')
   const amount = parseFloat(searchParams.get('amount') || '0')
@@ -422,5 +422,23 @@ export default function Payment() {
 
       <Footer />
     </div>
+  )
+}
+
+export default function Payment() {
+  return (
+    <Suspense fallback={
+      <div className="flex flex-col min-h-screen">
+        <Header />
+        <main className="flex-1 flex items-center justify-center py-20">
+          <div className="text-center">
+            <p className="text-lg text-gray-600">Loading payment...</p>
+          </div>
+        </main>
+        <Footer />
+      </div>
+    }>
+      <PaymentContent />
+    </Suspense>
   )
 }

@@ -2,7 +2,7 @@
 
 export const dynamic = 'force-dynamic'
 
-import { useState } from 'react'
+import { Suspense, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { useAuth } from '@/context/AuthContext'
@@ -11,7 +11,7 @@ import Footer from '@/components/Footer'
 import { Mail, Lock, LogIn } from 'lucide-react'
 import toast from 'react-hot-toast'
 
-export default function Login() {
+function LoginContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const redirect = searchParams.get('redirect') || '/bookings'
@@ -166,5 +166,23 @@ export default function Login() {
 
       <Footer />
     </div>
+  )
+}
+
+export default function Login() {
+  return (
+    <Suspense fallback={
+      <div className="flex flex-col min-h-screen bg-gray-50">
+        <Header />
+        <main className="flex-1 flex items-center justify-center py-20">
+          <div className="text-center">
+            <p className="text-lg text-gray-600">Loading login...</p>
+          </div>
+        </main>
+        <Footer />
+      </div>
+    }>
+      <LoginContent />
+    </Suspense>
   )
 }

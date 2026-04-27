@@ -2,15 +2,15 @@
 
 export const dynamic = 'force-dynamic'
 
+import { Suspense, useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
 import { generateInvoicePDF, downloadInvoicePDF, type InvoiceData } from '@/lib/invoice'
 import { CheckCircle, Download, Home } from 'lucide-react'
 
-export default function BookingConfirmed() {
+function BookingConfirmedContent() {
   const searchParams = useSearchParams()
   const bookingId = searchParams.get('bookingId')
   const [booking, setBooking] = useState<any>(null)
@@ -296,5 +296,23 @@ export default function BookingConfirmed() {
 
       <Footer />
     </div>
+  )
+}
+
+export default function BookingConfirmed() {
+  return (
+    <Suspense fallback={
+      <div className="flex flex-col min-h-screen">
+        <Header />
+        <main className="flex-1 flex items-center justify-center py-20">
+          <div className="text-center">
+            <p className="text-lg text-gray-600">Loading booking confirmation...</p>
+          </div>
+        </main>
+        <Footer />
+      </div>
+    }>
+      <BookingConfirmedContent />
+    </Suspense>
   )
 }

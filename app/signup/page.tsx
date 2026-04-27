@@ -2,7 +2,7 @@
 
 export const dynamic = 'force-dynamic'
 
-import { useState } from 'react'
+import { Suspense, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { useAuth } from '@/context/AuthContext'
@@ -11,7 +11,7 @@ import Footer from '@/components/Footer'
 import { Mail, Lock, User as UserIcon, UserPlus } from 'lucide-react'
 import toast from 'react-hot-toast'
 
-export default function Signup() {
+function SignupContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const redirect = searchParams.get('redirect') || '/bookings'
@@ -203,5 +203,23 @@ export default function Signup() {
 
       <Footer />
     </div>
+  )
+}
+
+export default function Signup() {
+  return (
+    <Suspense fallback={
+      <div className="flex flex-col min-h-screen bg-gray-50">
+        <Header />
+        <main className="flex-1 flex items-center justify-center py-20">
+          <div className="text-center">
+            <p className="text-lg text-gray-600">Loading signup...</p>
+          </div>
+        </main>
+        <Footer />
+      </div>
+    }>
+      <SignupContent />
+    </Suspense>
   )
 }
