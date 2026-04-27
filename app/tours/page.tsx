@@ -137,10 +137,10 @@ export default function Tours() {
                             <span>Up to {tour.max_passengers} passengers</span>
                           </div>
                         )}
-                        {tour.car_type && (
+                        {tour.car_model && (
                           <div className="flex items-center gap-2 text-gray-700 text-sm">
                             <Car size={16} className="text-yellow-500 flex-shrink-0" />
-                            <span>{tour.car_type}</span>
+                            <span>{tour.car_model}</span>
                           </div>
                         )}
                         {tour.arrival_time && (

@@ -23,7 +23,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
   try {
     const { id } = params
     const body = await request.json()
-    const { name, description, arrival_time, duration_hours, price, max_passengers, car_type, itinerary, highlights, image_url } = body
+    const { name, description, arrival_time, duration_hours, price, max_passengers, car_model, itinerary, highlights, image_url } = body
 
     // Validation
     if (!name || !price) {
@@ -42,7 +42,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
         duration_hours: duration_hours ? parseInt(duration_hours) : null,
         price: parseFloat(price),
         max_passengers: max_passengers ? parseInt(max_passengers) : null,
-        car_type: car_type || null,
+        car_model: car_model || null,
         itinerary: itinerary || null,
         highlights: highlights && Array.isArray(highlights) ? highlights : [],
         image_url: image_url || null,

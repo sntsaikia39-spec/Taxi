@@ -146,7 +146,7 @@ export default function BookTour() {
         destination_id: null,
         tour_package_id: tour.id,
         no_of_hours: null,
-        car_model: tour.car_type || null,
+        car_model: tour.car_model || null,
         amount_total: totalPrice,
         booking_status: 'pending',
       }
@@ -181,8 +181,8 @@ export default function BookTour() {
           date,
           time: displayTime,
           startTime: displayTime,
-          car: tour.car_type || '',
-          carType: tour.car_type || '',
+          car: tour.car_model || '',
+          carType: tour.car_model || '',
           totalPrice,
           advancePayment,
           dbBookingId: savedBooking.id,
@@ -418,10 +418,10 @@ export default function BookTour() {
                       <span className="text-gray-600">Departure Time</span>
                       <span className="font-semibold">{departureTime}</span>
                     </div>
-                    {tour.car_type && (
+                    {tour.car_model && (
                       <div className="flex justify-between py-2 border-b">
                         <span className="text-gray-600">Vehicle</span>
-                        <span className="font-semibold">{tour.car_type}</span>
+                        <span className="font-semibold">{tour.car_model}</span>
                       </div>
                     )}
                     {tour.duration_hours && (
@@ -507,10 +507,10 @@ export default function BookTour() {
                         <span>Max {tour.max_passengers} passengers</span>
                       </div>
                     )}
-                    {tour.car_type && (
+                    {tour.car_model && (
                       <div className="flex items-center gap-2">
                         <Car size={14} className="text-yellow-500" />
-                        <span>{tour.car_type}</span>
+                        <span>{tour.car_model}</span>
                       </div>
                     )}
                   </div>

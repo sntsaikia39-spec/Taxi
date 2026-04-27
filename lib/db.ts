@@ -9,7 +9,7 @@ export interface TourPackage {
   duration_hours: number | null
   price: number
   max_passengers: number | null
-  car_type: string | null
+  car_model: string | null
   itinerary: string | null
   highlights: string[] | null
   image_url: string | null
