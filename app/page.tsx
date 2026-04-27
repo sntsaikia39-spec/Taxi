@@ -59,8 +59,8 @@ export default function Home() {
         </div>
 
         {/* Decorative Elements */}
-        <div className="absolute top-0 right-0 w-96 h-96 bg-secondary-500 opacity-5 rounded-full blur-3xl"></div>
-        <div className="absolute bottom-0 left-0 w-96 h-96 bg-secondary-500 opacity-5 rounded-full blur-3xl"></div>
+        <div className="absolute top-0 right-0 w-96 h-96 bg-secondary-500 opacity-5 rounded-full blur-3xl pointer-events-none"></div>
+        <div className="absolute bottom-0 left-0 w-96 h-96 bg-secondary-500 opacity-5 rounded-full blur-3xl pointer-events-none"></div>
       </section>
 
       {/* Featured Tours Section */}
