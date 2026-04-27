@@ -1,8 +1,8 @@
 'use client'
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { User } from '@supabase/supabase-js'
-import { supabase } from '@/lib/supabase'
 
 interface AuthContextType {
   user: User | null
@@ -18,14 +18,12 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined)
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const supabase = createClientComponentClient()
 
   useEffect(() => {
-    // Check current auth state
     const checkUser = async () => {
       try {
-        const {
-          data: { session },
-        } = await supabase.auth.getSession()
+        const { data: { session } } = await supabase.auth.getSession()
         setUser(session?.user || null)
       } catch (error) {
         console.error('Error checking auth:', error)
@@ -36,10 +34,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     checkUser()
 
-    // Subscribe to auth changes
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user || null)
     })
 
@@ -63,10 +58,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signInWithEmail = async (email: string, password: string) => {
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      })
+      const { error } = await supabase.auth.signInWithPassword({ email, password })
       return { error }
     } catch (error) {
       return { error }
@@ -75,16 +67,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signInWithOAuth = async (provider: 'google', redirectTo?: string) => {
     try {
-      // If redirectTo is provided, embed it in the callback URL
-      const callbackUrl = redirectTo 
+      const callbackUrl = redirectTo
         ? `${window.location.origin}/auth/callback?redirect=${encodeURIComponent(redirectTo)}`
         : `${window.location.origin}/auth/callback`
-      
+
       const { error } = await supabase.auth.signInWithOAuth({
-        provider: provider as 'google',
-        options: {
-          redirectTo: callbackUrl,
-        },
+        provider,
+        options: { redirectTo: callbackUrl },
       })
       return { error }
     } catch (error) {
@@ -102,16 +91,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider
-      value={{
-        user,
-        isLoading,
-        signInWithEmail,
-        signUpWithEmail,
-        signInWithOAuth,
-        signOut,
-      }}
-    >
+    <AuthContext.Provider value={{ user, isLoading, signInWithEmail, signUpWithEmail, signInWithOAuth, signOut }}>
       {children}
     </AuthContext.Provider>
   )
