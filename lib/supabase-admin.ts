@@ -8,4 +8,11 @@ export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceRoleKey, {
     autoRefreshToken: false,
     persistSession: false,
   },
+  global: {
+    // Bypass Next.js Data Cache so every request hits Supabase fresh.
+    // Without this, Next.js caches the first response and all routes that
+    // use supabaseAdmin return stale data on Vercel.
+    fetch: (url: RequestInfo | URL, options: RequestInit = {}) =>
+      fetch(url, { ...options, cache: 'no-store' }),
+  },
 })
