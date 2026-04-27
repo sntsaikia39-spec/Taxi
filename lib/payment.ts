@@ -1,20 +1,20 @@
 import Razorpay from 'razorpay'
+import crypto from 'crypto'
 
-const razorpay = new Razorpay({
-  key_id: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || '',
-  key_secret: process.env.RAZORPAY_KEY_SECRET || '',
-})
+function getRazorpay() {
+  return new Razorpay({
+    key_id: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || '',
+    key_secret: process.env.RAZORPAY_KEY_SECRET || '',
+  })
+}
 
-// Create Razorpay order
 export async function createRazorpayOrder(amount: number, bookingId: string) {
   try {
-    const order = await razorpay.orders.create({
-      amount: Math.round(amount * 100), // Convert to paise
+    const order = await getRazorpay().orders.create({
+      amount: Math.round(amount * 100),
       currency: 'INR',
       receipt: `booking_${bookingId}`,
-      notes: {
-        booking_id: bookingId,
-      },
+      notes: { booking_id: bookingId },
     })
     return order
   } catch (error) {
@@ -23,25 +23,20 @@ export async function createRazorpayOrder(amount: number, bookingId: string) {
   }
 }
 
-// Verify Razorpay payment
 export function verifyRazorpayPayment(
   orderId: string,
   paymentId: string,
   signature: string
 ): boolean {
-  const crypto = require('crypto')
   const key_secret = process.env.RAZORPAY_KEY_SECRET || ''
-
   const body = orderId + '|' + paymentId
   const expectedSignature = crypto.createHmac('sha256', key_secret).update(body).digest('hex')
-
   return expectedSignature === signature
 }
 
-// Get payment details
 export async function getPaymentDetails(paymentId: string) {
   try {
-    const payment = await razorpay.payments.fetch(paymentId)
+    const payment = await getRazorpay().payments.fetch(paymentId)
     return payment
   } catch (error) {
     console.error('Razorpay Payment Fetch Error:', error)
@@ -49,10 +44,9 @@ export async function getPaymentDetails(paymentId: string) {
   }
 }
 
-// Refund payment
 export async function refundPayment(paymentId: string, amount?: number) {
   try {
-    const refund = await razorpay.payments.refund(paymentId, {
+    const refund = await getRazorpay().payments.refund(paymentId, {
       amount: amount ? Math.round(amount * 100) : undefined,
     })
     return refund
