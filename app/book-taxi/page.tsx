@@ -248,7 +248,8 @@ export default function BookTaxi() {
     setDestinationId('')
     setSelectedDest(null)
     setDestinationSearch('')
-    setNoOfHours(2)
+    setDurationDays(0)
+    setDurationHrs(2)
     setAvailableCarModels([])
   }
 
