@@ -46,7 +46,13 @@ const HOURLY_LABELS: Record<HourlyStep, string> = {
   contact: 'Contact', details: 'Passengers & Date', schedule: 'Time & Duration', car: 'Car', confirm: 'Confirm',
 }
 
-const HOUR_OPTIONS = [1, 2, 3, 4, 5, 6, 8, 10, 12]
+function formatDuration(totalHours: number): string {
+  const d = Math.floor(totalHours / 24)
+  const h = totalHours % 24
+  if (d > 0 && h > 0) return `${d}d ${h}h`
+  if (d > 0) return `${d}d`
+  return `${h}h`
+}
 
 // ── Separate Contact Step Component (memoized to prevent re-creation) ──────
 interface ContactStepProps {
@@ -141,7 +147,9 @@ export default function BookTaxi() {
   const [selectedDest, setSelectedDest] = useState<Destination | null>(null)
 
   // Hourly-only
-  const [noOfHours, setNoOfHours] = useState(2)
+  const [durationDays, setDurationDays] = useState(0)
+  const [durationHrs, setDurationHrs] = useState(2)
+  const noOfHours = durationDays * 24 + durationHrs
 
   // ── Refs for focus management ─────────────────────────────────────────────
   const nameInputRef = useRef<HTMLInputElement>(null)
@@ -815,27 +823,69 @@ export default function BookTaxi() {
                 className="input-field w-full" required />
             </div>
 
-            {/* Hours */}
+            {/* Duration Picker */}
             <div className="border-t pt-8">
               <h3 className="text-xl font-bold mb-4">Select Duration</h3>
-              <p className="text-gray-600 text-sm mb-6">How many hours do you need the taxi?</p>
-              <div className="grid grid-cols-3 gap-3">
-                {HOUR_OPTIONS.map((h) => (
-                  <button key={h} type="button" onClick={() => setNoOfHours(h)}
-                    className={`p-4 border-2 rounded-lg font-semibold transition-smooth flex flex-col items-center ${
-                      noOfHours === h
-                        ? 'border-secondary-500 bg-secondary-50 text-secondary-700'
-                        : 'border-gray-300 hover:border-secondary-300'
-                    }`}>
-                    <Clock className="w-5 h-5 mb-1" />
-                    {h} {h === 1 ? 'Hour' : 'Hours'}
-                  </button>
-                ))}
+              <p className="text-gray-600 text-sm mb-6">How long do you need the taxi? Choose days and/or hours.</p>
+
+              <div className="grid grid-cols-2 gap-6">
+                {/* Days */}
+                <div className="text-center">
+                  <p className="text-sm font-semibold text-gray-600 mb-3">Days</p>
+                  <div className="flex items-center justify-center gap-4">
+                    <button type="button"
+                      onClick={() => setDurationDays(d => Math.max(0, d - 1))}
+                      disabled={durationDays === 0}
+                      className="w-10 h-10 rounded-full border-2 border-gray-300 text-xl font-bold hover:border-secondary-400 hover:bg-secondary-50 transition-smooth flex items-center justify-center disabled:opacity-30 disabled:cursor-not-allowed">
+                      −
+                    </button>
+                    <span className="text-3xl font-bold w-10 text-center">{durationDays}</span>
+                    <button type="button"
+                      onClick={() => setDurationDays(d => d + 1)}
+                      className="w-10 h-10 rounded-full border-2 border-gray-300 text-xl font-bold hover:border-secondary-400 hover:bg-secondary-50 transition-smooth flex items-center justify-center">
+                      +
+                    </button>
+                  </div>
+                  <p className="text-sm text-gray-500 mt-2">day{durationDays !== 1 ? 's' : ''}</p>
+                </div>
+
+                {/* Hours */}
+                <div className="text-center">
+                  <p className="text-sm font-semibold text-gray-600 mb-3">Hours</p>
+                  <div className="flex items-center justify-center gap-4">
+                    <button type="button"
+                      onClick={() => setDurationHrs(h => Math.max(durationDays > 0 ? 0 : 1, h - 1))}
+                      disabled={durationDays === 0 && durationHrs <= 1}
+                      className="w-10 h-10 rounded-full border-2 border-gray-300 text-xl font-bold hover:border-secondary-400 hover:bg-secondary-50 transition-smooth flex items-center justify-center disabled:opacity-30 disabled:cursor-not-allowed">
+                      −
+                    </button>
+                    <span className="text-3xl font-bold w-10 text-center">{durationHrs}</span>
+                    <button type="button"
+                      onClick={() => setDurationHrs(h => Math.min(23, h + 1))}
+                      disabled={durationHrs >= 23}
+                      className="w-10 h-10 rounded-full border-2 border-gray-300 text-xl font-bold hover:border-secondary-400 hover:bg-secondary-50 transition-smooth flex items-center justify-center disabled:opacity-30 disabled:cursor-not-allowed">
+                      +
+                    </button>
+                  </div>
+                  <p className="text-sm text-gray-500 mt-2">hour{durationHrs !== 1 ? 's' : ''}</p>
+                </div>
               </div>
+
+              {/* Total summary */}
+              <div className="mt-6 p-4 bg-secondary-50 border border-secondary-200 rounded-lg text-center">
+                <div className="flex items-center justify-center gap-2">
+                  <Clock className="w-5 h-5 text-secondary-600" />
+                  <span className="text-xl font-bold text-secondary-700">{formatDuration(noOfHours)}</span>
+                </div>
+                {noOfHours >= 24 && (
+                  <p className="text-xs text-gray-500 mt-1">{noOfHours} hours total</p>
+                )}
+              </div>
+
               {selectedCarModel && (
-                <div className="mt-6 p-4 bg-blue-50 rounded-lg">
+                <div className="mt-4 p-4 bg-blue-50 rounded-lg">
                   <p className="text-sm text-blue-800">
-                    <strong>{noOfHours} hr{noOfHours > 1 ? 's' : ''}</strong> × Rs. {selectedCarModel.per_hr_charge}/hr
+                    <strong>{formatDuration(noOfHours)}</strong> ({noOfHours} hrs) × Rs. {selectedCarModel.per_hr_charge}/hr
                     {' = '}
                     <strong>Rs. {hourlyTotal.toFixed(2)}</strong>
                   </p>
@@ -857,14 +907,14 @@ export default function BookTaxi() {
               <Row label="Passengers" value={passengers} />
               <Row label="Date" value={new Date(date).toLocaleDateString('en-IN')} />
               <Row label="Pickup Time" value={startTime} />
-              <Row label="Duration" value={`${noOfHours} hour${noOfHours > 1 ? 's' : ''}`} />
+              <Row label="Duration" value={`${formatDuration(noOfHours)}${noOfHours >= 24 ? ` (${noOfHours} hrs)` : ''}`} />
               <div className="border-t pt-3">
                 <Row label="Car Model" value={selectedCarModel?.model_name ?? '-'} />
                 <Row label="Rate" value={`Rs. ${selectedCarModel?.per_hr_charge}/hr`} />
               </div>
             </div>
             <PriceBox
-              lines={[`${noOfHours} hr${noOfHours > 1 ? 's' : ''} × Rs. ${selectedCarModel?.per_hr_charge}/hr`]}
+              lines={[`${formatDuration(noOfHours)} (${noOfHours} hrs) × Rs. ${selectedCarModel?.per_hr_charge}/hr`]}
               total={totalCost} advance={advance} remaining={remaining}
             />
           </div>

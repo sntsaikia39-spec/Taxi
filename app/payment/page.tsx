@@ -273,7 +273,14 @@ function PaymentContent() {
                     <p><strong>Tour:</strong> {bookingData.tourName}</p>
                   )}
                   {bookingData.noOfHours && (
-                    <p><strong>Duration:</strong> {bookingData.noOfHours} hour{bookingData.noOfHours > 1 ? 's' : ''}</p>
+                    <p><strong>Duration:</strong> {(() => {
+                      const h = bookingData.noOfHours
+                      const d = Math.floor(h / 24)
+                      const rem = h % 24
+                      if (d > 0 && rem > 0) return `${d}d ${rem}h (${h} hrs)`
+                      if (d > 0) return `${d}d (${h} hrs)`
+                      return `${h}h`
+                    })()}</p>
                   )}
                   <p><strong>Car:</strong> {bookingData.car}</p>
                   <p><strong>Passengers:</strong> {bookingData.passengers}</p>
