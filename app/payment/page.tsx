@@ -21,7 +21,6 @@ function PaymentContent() {
   const bookingType = searchParams.get('type') || 'taxi'
 
   const [bookingData, setBookingData] = useState<any>(null)
-  const [paymentMethod, setPaymentMethod] = useState<'partial' | 'full'>('partial')
   const [loading, setLoading] = useState(false)
   const [paymentData, setPaymentData] = useState<any>(null)
 
@@ -46,15 +45,7 @@ function PaymentContent() {
     }
   }, [])
 
-  const calculatePaymentAmount = () => {
-    if (!bookingData) return 0
-    if (paymentMethod === 'full') {
-      return bookingData.totalPrice
-    }
-    return bookingData.advancePayment
-  }
-
-  const handleRazorpayPayment = async () => {
+  const handleRazorpayPayment = async (method: 'partial' | 'full') => {
     if (!bookingData) {
       toast.error('Booking data not found')
       return
@@ -63,7 +54,7 @@ function PaymentContent() {
     setLoading(true)
 
     try {
-      const paymentAmount = calculatePaymentAmount()
+      const paymentAmount = method === 'full' ? bookingData.totalPrice : bookingData.advancePayment
 
       // Create order on backend
       const orderResponse = await fetch('/api/payment/create-order', {
@@ -106,7 +97,7 @@ function PaymentContent() {
                 signature: response.razorpay_signature,
                 bookingId: bookingData.dbBookingId,
                 bookingType,
-                paymentMethod,
+                paymentMethod: method,
                 amount: paymentAmount,
               }),
             })
@@ -147,7 +138,7 @@ function PaymentContent() {
     }
   }
 
-  const handleDemoPayment = async () => {
+  const handleDemoPayment = async (method: 'partial' | 'full') => {
     if (!bookingData) {
       toast.error('Booking data not found')
       return
@@ -156,14 +147,14 @@ function PaymentContent() {
     setLoading(true)
     try {
       console.log('=== Demo Payment Flow Started ===')
-      console.log('Payment Method:', paymentMethod)
+      console.log('Payment Method:', method)
       console.log('Booking ID:', bookingData.bookingId)
       console.log('Total Amount:', bookingData.totalPrice)
 
       // Calculate payment amounts based on payment type
       const { amountOnlinePaid, amountCashPaid } = calculatePaymentAmounts(
         bookingData.totalPrice,
-        paymentMethod
+        method
       )
 
       console.log('Calculated amounts:', { amountOnlinePaid, amountCashPaid })
@@ -184,7 +175,7 @@ function PaymentContent() {
         },
         body: JSON.stringify({
           bookingId: bookingData.dbBookingId,
-          paymentType: paymentMethod,
+          paymentType: method,
           amountTotal: bookingData.totalPrice,
           amountOnlinePaid: amountOnlinePaid,
           txnId: demoTxnId,
@@ -204,7 +195,7 @@ function PaymentContent() {
       console.log('✅ Payment created successfully:', paymentResult.payment)
 
       // Show success message with payment details
-      const message = paymentMethod === 'full'
+      const message = method === 'full'
         ? `Full payment of ₹${amountOnlinePaid.toFixed(2)} completed successfully!`
         : `Advance payment of ₹${amountOnlinePaid.toFixed(2)} received. Remaining ₹${amountCashPaid.toFixed(2)} to be paid at airport.`
 
@@ -237,8 +228,8 @@ function PaymentContent() {
     )
   }
 
-  const paymentAmount = calculatePaymentAmount()
-  const remaining = bookingData.totalPrice - paymentAmount
+  const advanceAmount = bookingData.advancePayment
+  const remainingAmount = bookingData.totalPrice - advanceAmount
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -251,42 +242,7 @@ function PaymentContent() {
           <div className="max-w-4xl mx-auto grid md:grid-cols-3 gap-8">
             {/* Payment Form */}
             <div className="md:col-span-2 bg-white rounded-lg shadow-lg p-8">
-              <h2 className="text-2xl font-bold mb-6">Payment Options</h2>
-
-              {/* Payment Method Selection */}
-              <div className="space-y-4 mb-8">
-                <label className="block">
-                  <input
-                    type="radio"
-                    name="paymentMethod"
-                    value="partial"
-                    checked={paymentMethod === 'partial'}
-                    onChange={() => setPaymentMethod('partial')}
-                    className="mr-3"
-                  />
-                  <span className="font-semibold cursor-pointer">
-                    Partial Payment (30% Advance)
-                  </span>
-                  <p className="text-sm text-gray-600 mt-2 ml-6">
-                    Pay ₹{bookingData.advancePayment.toFixed(2)} now and ₹{remaining.toFixed(2)} in cash at pickup
-                  </p>
-                </label>
-
-                <label className="block">
-                  <input
-                    type="radio"
-                    name="paymentMethod"
-                    value="full"
-                    checked={paymentMethod === 'full'}
-                    onChange={() => setPaymentMethod('full')}
-                    className="mr-3"
-                  />
-                  <span className="font-semibold cursor-pointer">Full Online Payment</span>
-                  <p className="text-sm text-gray-600 mt-2 ml-6">
-                    Pay ₹{bookingData.totalPrice.toFixed(2)} now. No additional payments required.
-                  </p>
-                </label>
-              </div>
+              <h2 className="text-2xl font-bold mb-6">Payment</h2>
 
               {/* Payment Details */}
               <div className="bg-gray-50 rounded-lg p-6 mb-8">
@@ -296,15 +252,9 @@ function PaymentContent() {
                     <span>Total Booking Amount:</span>
                     <span>₹{bookingData.totalPrice.toFixed(2)}</span>
                   </div>
-                  {paymentMethod === 'partial' && (
-                    <div className="flex justify-between text-green-600">
-                      <span>Advance Payment (30%):</span>
-                      <span>₹{bookingData.advancePayment.toFixed(2)}</span>
-                    </div>
-                  )}
                   <div className="border-t pt-2 flex justify-between font-bold text-lg">
                     <span>You pay now:</span>
-                    <span className="text-secondary-500">₹{paymentAmount.toFixed(2)}</span>
+                    <span className="text-secondary-500">₹{bookingData.totalPrice.toFixed(2)}</span>
                   </div>
                 </div>
               </div>
@@ -332,25 +282,56 @@ function PaymentContent() {
                 </div>
               </div>
 
-              {/* Payment Methods */}
-              <h3 className="font-bold mb-4">Select Payment Method</h3>
-              <div className="space-y-3 mb-8">
+              {/* Primary: Full Payment */}
+              <div className="space-y-3 mb-6">
                 <button
-                  onClick={handleRazorpayPayment}
+                  onClick={() => handleRazorpayPayment('full')}
                   disabled={loading}
                   className="w-full px-6 py-4 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg font-semibold hover:shadow-lg transition-smooth disabled:opacity-50 flex items-center justify-center gap-2"
                 >
                   <span>💳</span>
-                  <span>{loading ? 'Processing...' : 'Pay with Razorpay'}</span>
+                  <span>{loading ? 'Processing...' : `Pay ₹${bookingData.totalPrice.toFixed(2)} — Full Payment`}</span>
                 </button>
 
                 <button
-                  onClick={handleDemoPayment}
+                  onClick={() => handleDemoPayment('full')}
                   disabled={loading}
                   className="w-full px-6 py-4 bg-gradient-to-r from-secondary-500 to-secondary-600 text-primary-950 rounded-lg font-semibold hover:shadow-lg transition-smooth disabled:opacity-50"
                 >
-                  {loading ? 'Processing...' : 'Demo Payment (Testing)'}
+                  {loading ? 'Processing...' : `Demo Full Payment — ₹${bookingData.totalPrice.toFixed(2)} (Testing)`}
                 </button>
+              </div>
+
+              {/* Divider */}
+              <div className="flex items-center gap-4 my-6">
+                <div className="flex-1 border-t border-gray-200" />
+                <span className="text-gray-400 text-sm font-medium">or</span>
+                <div className="flex-1 border-t border-gray-200" />
+              </div>
+
+              {/* Secondary: Prebook with 30% */}
+              <div className="rounded-lg border border-gray-200 p-5 mb-8">
+                <p className="text-sm text-gray-600 mb-4">
+                  Want to just prebook? Pay <strong>₹{advanceAmount.toFixed(2)}</strong> (30% advance) online now and the remaining{' '}
+                  <strong>₹{remainingAmount.toFixed(2)}</strong> in cash at pickup.
+                </p>
+                <div className="space-y-2">
+                  <button
+                    onClick={() => handleRazorpayPayment('partial')}
+                    disabled={loading}
+                    className="w-full px-5 py-3 border-2 border-blue-400 text-blue-600 rounded-lg font-semibold hover:bg-blue-50 transition-smooth disabled:opacity-50 flex items-center justify-center gap-2 text-sm"
+                  >
+                    <span>💳</span>
+                    <span>{loading ? 'Processing...' : `Pay ₹${advanceAmount.toFixed(2)} to Prebook (30% advance)`}</span>
+                  </button>
+                  <button
+                    onClick={() => handleDemoPayment('partial')}
+                    disabled={loading}
+                    className="w-full px-5 py-3 border border-gray-200 text-gray-500 rounded-lg font-medium hover:bg-gray-50 transition-smooth disabled:opacity-50 text-sm"
+                  >
+                    {loading ? 'Processing...' : `Demo Prebook — ₹${advanceAmount.toFixed(2)} (Testing)`}
+                  </button>
+                </div>
               </div>
 
               {/* Security Info */}
@@ -400,18 +381,16 @@ function PaymentContent() {
                     <span>₹0</span>
                   </div>
                   <div className="border-t pt-4 flex justify-between text-lg font-bold">
-                    <span>You Pay</span>
-                    <span className="text-secondary-500">₹{paymentAmount.toFixed(2)}</span>
+                    <span>Total</span>
+                    <span className="text-secondary-500">₹{bookingData.totalPrice.toFixed(2)}</span>
                   </div>
                 </div>
 
-                {paymentMethod === 'partial' && remaining > 0 && (
-                  <div className="mt-4 bg-orange-50 border border-orange-200 rounded p-3">
-                    <p className="text-sm text-orange-900">
-                      <strong>Remaining: </strong>₹{remaining.toFixed(2)} to be paid in cash at airport
-                    </p>
-                  </div>
-                )}
+                <div className="mt-4 bg-blue-50 border border-blue-200 rounded p-3">
+                  <p className="text-xs text-blue-800">
+                    Or prebook for just <strong>₹{advanceAmount.toFixed(2)}</strong> — pay rest in cash at pickup.
+                  </p>
+                </div>
               </div>
             </div>
           </div>

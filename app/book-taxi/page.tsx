@@ -964,20 +964,12 @@ function PriceBox({
           <span className="font-semibold">{l} = Rs. {total.toFixed(2)}</span>
         </div>
       ))}
-      <div className="border-t pt-3 flex justify-between text-green-700 text-sm">
-        <span>Advance Payment (30%):</span>
-        <span className="font-semibold">Rs. {advance.toFixed(2)}</span>
-      </div>
-      <div className="flex justify-between text-orange-600 text-sm">
-        <span>Remaining (70%) – Cash at pickup:</span>
-        <span className="font-semibold">Rs. {remaining.toFixed(2)}</span>
-      </div>
       <div className="border-t pt-3 flex justify-between font-bold text-base">
         <span>Total Amount:</span>
         <span className="text-secondary-600">Rs. {total.toFixed(2)}</span>
       </div>
       <p className="text-xs text-blue-700 pt-1">
-        Pay 30% online now, remaining 70% in cash — or pay 100% online on the next screen.
+        Pay the full amount online, or choose to prebook with just 30% (Rs. {advance.toFixed(2)}) on the next screen.
       </p>
     </div>
   )
