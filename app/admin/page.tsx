@@ -226,6 +226,7 @@ export default function AdminDashboard() {
   const [submittingVehicleAssignment, setSubmittingVehicleAssignment] = useState(false)
   const [confirmBookedCarAssignment, setConfirmBookedCarAssignment] = useState<Car | null>(null)
   const [confirmLowCapacityCarAssignment, setConfirmLowCapacityCarAssignment] = useState<Car | null>(null)
+  const [updatingStatusId, setUpdatingStatusId] = useState<string | null>(null)
 
   // ── Clear cache and logout on admin page load ─────────────────────────────
   useEffect(() => {
@@ -1118,9 +1119,32 @@ export default function AdminDashboard() {
     }
   }
 
+  const handleUpdateBookingStatus = async (booking: Booking, newStatus: 'pending' | 'confirmed' | 'completed' | 'cancelled') => {
+    const bookingId = booking.booking_id || booking.id
+    const label = newStatus === 'completed' ? 'completed' : 'cancelled'
+    if (!window.confirm(`Mark this booking as ${label}?`)) return
+
+    setUpdatingStatusId(booking.id)
+    try {
+      const response = await fetch('/api/bookings/update-status', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ booking_id: bookingId, status: newStatus }),
+      })
+      const result = await response.json()
+      if (!response.ok || !result.success) throw new Error(result.error || 'Failed to update status')
+      toast.success(`Booking marked as ${label}!`)
+      await loadBookings()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to update booking status')
+    } finally {
+      setUpdatingStatusId(null)
+    }
+  }
+
   const renderOverview = () => (
-    <div className="space-y-8">
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+    <div className="space-y-4 md:space-y-8">
+      <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-6">
         {[
           { label: 'Total Bookings', value: stats.totalBookings },
           { label: 'Total Revenue', value: `Rs. ${stats.totalRevenue.toFixed(2)}` },
@@ -1129,15 +1153,15 @@ export default function AdminDashboard() {
           { label: 'Pending Bookings', value: bookings.filter((booking) => booking.booking_status === 'pending').length },
           { label: 'Cancelled Bookings', value: bookings.filter((booking) => booking.booking_status === 'cancelled').length },
         ].map((stat) => (
-          <div key={stat.label} className="card p-6">
-            <p className="text-gray-600 text-sm font-semibold mb-1">{stat.label}</p>
-            <p className="text-3xl font-bold">{stat.value}</p>
+          <div key={stat.label} className="card p-4 md:p-6">
+            <p className="text-gray-600 text-xs md:text-sm font-semibold mb-1">{stat.label}</p>
+            <p className="text-2xl md:text-3xl font-bold">{stat.value}</p>
           </div>
         ))}
       </div>
 
-      <div className="bg-white rounded-lg shadow-lg p-8">
-        <h3 className="text-2xl font-bold mb-6">Recent Bookings</h3>
+      <div className="bg-white rounded-lg shadow-lg p-4 md:p-8">
+        <h3 className="text-lg md:text-2xl font-bold mb-4 md:mb-6">Recent Bookings</h3>
 
         {loadingBookings ? (
           <p className="text-gray-600">Loading bookings...</p>
@@ -1217,14 +1241,14 @@ export default function AdminDashboard() {
   )
 
   const renderBookings = () => (
-    <div className="space-y-6">
-      <div className="bg-white rounded-lg shadow-lg p-8">
-        <div className="flex justify-between items-center mb-6 gap-3">
-          <h3 className="text-2xl font-bold">
-            All Bookings <span className="text-base text-gray-500 font-normal">({filteredBookings.length})</span>
+    <div className="space-y-4 md:space-y-6">
+      <div className="bg-white rounded-lg shadow-lg p-4 md:p-8">
+        <div className="flex justify-between items-center mb-4 md:mb-6 gap-3">
+          <h3 className="text-lg md:text-2xl font-bold">
+            Bookings <span className="text-sm text-gray-500 font-normal">({filteredBookings.length})</span>
           </h3>
           <select
-            className="input-field max-w-xs"
+            className="input-field max-w-[160px] md:max-w-xs text-sm"
             value={statusFilter}
             onChange={(event) => setStatusFilter(event.target.value)}
           >
@@ -1256,46 +1280,66 @@ export default function AdminDashboard() {
                   {/* Summary row — click to expand */}
                   <button
                     onClick={() => setExpandedBookingId(isExpanded ? null : booking.id)}
-                    className="w-full text-left p-4 hover:bg-gray-50 transition-colors flex items-center justify-between"
+                    className="w-full text-left p-3 md:p-4 hover:bg-gray-50 transition-colors flex items-center justify-between gap-2"
                   >
-                    <div className="flex-1 grid grid-cols-2 md:grid-cols-6 gap-3 items-center text-sm">
-                      <div>
-                        <p className="text-xs text-gray-500 font-semibold mb-0.5">Booking ID</p>
-                        <p className="font-mono text-xs text-blue-700">{displayId}…</p>
+                    <div className="flex-1 min-w-0 text-sm">
+                      {/* Mobile: stacked layout */}
+                      <div className="flex items-start justify-between gap-2 md:hidden">
+                        <div className="min-w-0">
+                          <p className="font-medium truncate">{booking.user_name || '-'}</p>
+                          <p className="text-xs text-gray-500">{booking.phone || '-'}</p>
+                          <p className="text-xs text-gray-400 font-mono mt-0.5">{displayId}…</p>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${getStatusClass(booking.booking_status)} inline-block mb-1`}>
+                            {booking.booking_status
+                              ? booking.booking_status.charAt(0).toUpperCase() + booking.booking_status.slice(1)
+                              : 'Pending'}
+                          </span>
+                          <p className="text-xs font-semibold text-green-700">Rs. {toNum(booking.amount_total).toFixed(0)}</p>
+                          <p className="text-xs text-gray-500">{booking.start_datetime ? formatDate(booking.start_datetime) : '-'}</p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="text-xs text-gray-500 font-semibold mb-0.5">Customer</p>
-                        <p className="font-medium">{booking.user_name || '-'}</p>
-                        <p className="text-xs text-gray-500">{booking.phone || '-'}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-500 font-semibold mb-0.5">Type</p>
-                        <p>{bookingTypeLabel(booking.booking_type)}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-500 font-semibold mb-0.5">Start Date</p>
-                        <p>{booking.start_datetime ? formatDate(booking.start_datetime) : '-'}</p>
-                        <p className="text-xs text-gray-500">
-                          {booking.start_datetime
-                            ? new Date(booking.start_datetime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
-                            : ''}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-500 font-semibold mb-0.5">Amount</p>
-                        <p className="font-semibold text-green-700">Rs. {toNum(booking.amount_total).toFixed(2)}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-500 font-semibold mb-0.5">Status</p>
-                        <span className={`px-2 py-1 rounded-full text-xs font-semibold ${getStatusClass(booking.booking_status)} inline-block`}>
-                          {booking.booking_status
-                            ? booking.booking_status.charAt(0).toUpperCase() + booking.booking_status.slice(1)
-                            : 'Pending'}
-                        </span>
+                      {/* Desktop: grid layout */}
+                      <div className="hidden md:grid grid-cols-6 gap-3 items-center">
+                        <div>
+                          <p className="text-xs text-gray-500 font-semibold mb-0.5">Booking ID</p>
+                          <p className="font-mono text-xs text-blue-700">{displayId}…</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500 font-semibold mb-0.5">Customer</p>
+                          <p className="font-medium">{booking.user_name || '-'}</p>
+                          <p className="text-xs text-gray-500">{booking.phone || '-'}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500 font-semibold mb-0.5">Type</p>
+                          <p>{bookingTypeLabel(booking.booking_type)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500 font-semibold mb-0.5">Start Date</p>
+                          <p>{booking.start_datetime ? formatDate(booking.start_datetime) : '-'}</p>
+                          <p className="text-xs text-gray-500">
+                            {booking.start_datetime
+                              ? new Date(booking.start_datetime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+                              : ''}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500 font-semibold mb-0.5">Amount</p>
+                          <p className="font-semibold text-green-700">Rs. {toNum(booking.amount_total).toFixed(2)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500 font-semibold mb-0.5">Status</p>
+                          <span className={`px-2 py-1 rounded-full text-xs font-semibold ${getStatusClass(booking.booking_status)} inline-block`}>
+                            {booking.booking_status
+                              ? booking.booking_status.charAt(0).toUpperCase() + booking.booking_status.slice(1)
+                              : 'Pending'}
+                          </span>
+                        </div>
                       </div>
                     </div>
                     <svg
-                      className={`ml-4 w-5 h-5 shrink-0 text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                      className={`ml-2 w-4 h-4 md:w-5 md:h-5 shrink-0 text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
                       fill="none" stroke="currentColor" viewBox="0 0 24 24"
                     >
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -1304,8 +1348,8 @@ export default function AdminDashboard() {
 
                   {/* Expanded detail panel */}
                   {isExpanded && (
-                    <div className="border-t bg-gray-50 p-5">
-                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div className="border-t bg-gray-50 p-3 md:p-5">
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
 
                         {/* ── Booking Details ── */}
                         <div className="bg-white rounded-lg border p-4">
@@ -1382,6 +1426,37 @@ export default function AdminDashboard() {
                               <dd className="text-xs text-right">{booking.created_at ? new Date(booking.created_at).toLocaleString('en-IN') : '-'}</dd>
                             </div>
                           </dl>
+
+                          {/* Status Actions */}
+                          {booking.booking_status !== 'completed' && booking.booking_status !== 'cancelled' && (
+                            <div className="flex gap-2 mt-4 pt-4 border-t">
+                              <button
+                                onClick={() => handleUpdateBookingStatus(booking, 'completed')}
+                                disabled={updatingStatusId === booking.id}
+                                className="flex-1 px-3 py-2 bg-green-600 text-white rounded-lg text-sm font-semibold hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                {updatingStatusId === booking.id ? 'Updating…' : '✓ Mark Completed'}
+                              </button>
+                              <button
+                                onClick={() => handleUpdateBookingStatus(booking, 'cancelled')}
+                                disabled={updatingStatusId === booking.id}
+                                className="flex-1 px-3 py-2 bg-red-600 text-white rounded-lg text-sm font-semibold hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                {updatingStatusId === booking.id ? 'Updating…' : '✕ Cancel Booking'}
+                              </button>
+                            </div>
+                          )}
+                          {(booking.booking_status === 'completed' || booking.booking_status === 'cancelled') && (
+                            <div className="mt-4 pt-4 border-t">
+                              <button
+                                onClick={() => handleUpdateBookingStatus(booking, 'pending')}
+                                disabled={updatingStatusId === booking.id}
+                                className="w-full px-3 py-2 border border-gray-300 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors disabled:opacity-50"
+                              >
+                                {updatingStatusId === booking.id ? 'Updating…' : '↩ Revert to Pending'}
+                              </button>
+                            </div>
+                          )}
                         </div>
 
                         {/* ── Vehicle Assignment Details ── */}
@@ -2354,20 +2429,21 @@ export default function AdminDashboard() {
         </div>
       </header>
 
-      <main className="flex-1 py-8 md:py-12 bg-gray-50">
-        <div className="container mx-auto px-4">
-          <div className="flex items-start justify-between mb-8 gap-3">
-            <h1 className="text-4xl font-bold">Management Dashboard</h1>
-            <button onClick={loadBookings} className="btn-secondary">
-              Refresh Data
+      <main className="flex-1 py-4 md:py-12 bg-gray-50">
+        <div className="container mx-auto px-3 md:px-4">
+          <div className="flex items-center justify-between mb-4 md:mb-8 gap-3">
+            <h1 className="text-xl md:text-4xl font-bold">Dashboard</h1>
+            <button onClick={loadBookings} className="btn-secondary text-sm px-3 py-2 md:px-4 md:py-2">
+              Refresh
             </button>
           </div>
 
-          <div className="flex flex-wrap gap-2 mb-8 bg-white rounded-lg shadow-lg p-4">
+          {/* Tab bar — scrollable on mobile */}
+          <div className="flex overflow-x-auto gap-2 mb-4 md:mb-8 bg-white rounded-lg shadow-lg p-3 md:p-4 scrollbar-hide">
             {[
               { id: 'overview', label: 'Overview' },
-              { id: 'bookings', label: 'All Bookings' },
-              { id: 'car-management', label: 'Car Management' },
+              { id: 'bookings', label: 'Bookings' },
+              { id: 'car-management', label: 'Cars' },
               { id: 'destinations', label: 'Destinations' },
               { id: 'tours', label: 'Tours' },
               { id: 'analytics', label: 'Analytics' },
@@ -2375,7 +2451,7 @@ export default function AdminDashboard() {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`px-6 py-3 rounded-lg font-semibold transition-smooth ${
+                className={`shrink-0 px-4 py-2 md:px-6 md:py-3 rounded-lg font-semibold transition-smooth text-sm md:text-base ${
                   activeTab === tab.id
                     ? 'bg-secondary-500 text-primary-950'
                     : 'text-gray-700 hover:bg-gray-100'
