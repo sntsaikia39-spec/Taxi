@@ -72,7 +72,7 @@ const ContactStepComponent = memo(({
   nameInputRef, phoneInputRef, emailInputRef,
   onNameChange, onPhoneChange, onEmailChange 
 }: ContactStepProps) => (
-  <div className="bg-white rounded-lg shadow-lg p-8">
+  <div className="bg-white rounded-lg shadow-lg p-4 md:p-8">
     <h2 className="text-2xl font-bold mb-6">Contact Details</h2>
     <div className="space-y-4">
       <div>
@@ -491,9 +491,9 @@ export default function BookTaxi() {
 
   // ── Passengers step (shared) ──────────────────────────────────────────────
   const PassengersStep = () => (
-    <div className="bg-white rounded-lg shadow-lg p-8">
-      <h2 className="text-2xl font-bold mb-6">Number of Passengers</h2>
-      <div className="grid grid-cols-3 gap-3">
+    <div className="bg-white rounded-lg shadow-lg p-4 md:p-8">
+      <h2 className="text-xl md:text-2xl font-bold mb-4 md:mb-6">Number of Passengers</h2>
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         {[1, 2, 3, 4, 5, 6].map((n) => (
           <button key={n} type="button" onClick={() => setPassengers(n.toString())}
             className={`p-4 border-2 rounded-lg font-semibold transition-smooth ${
@@ -511,7 +511,7 @@ export default function BookTaxi() {
 
   // ── Date step (shared) ────────────────────────────────────────────────────
   const DateStep = () => (
-    <div className="bg-white rounded-lg shadow-lg p-8">
+    <div className="bg-white rounded-lg shadow-lg p-4 md:p-8">
       <h2 className="text-2xl font-bold mb-6">Booking Date</h2>
       <label className="block text-sm font-semibold mb-2">Select Date *</label>
       <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
@@ -521,7 +521,7 @@ export default function BookTaxi() {
 
   // ── Time step (shared) ────────────────────────────────────────────────────
   const TimeStep = ({ hint }: { hint?: string }) => (
-    <div className="bg-white rounded-lg shadow-lg p-8">
+    <div className="bg-white rounded-lg shadow-lg p-4 md:p-8">
       <h2 className="text-2xl font-bold mb-6">Pickup Time</h2>
       <label className="block text-sm font-semibold mb-2">Select Pickup Time *</label>
       <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)}
@@ -536,7 +536,7 @@ export default function BookTaxi() {
 
   // ── Car selection (shared, shows different rate based on mode) ────────────
   const CarStep = () => (
-    <div className="bg-white rounded-lg shadow-lg p-8">
+    <div className="bg-white rounded-lg shadow-lg p-4 md:p-8">
       <h2 className="text-2xl font-bold mb-6">Select Your Car Model</h2>
       <p className="text-sm text-gray-600 mb-6">
         Choose your preferred car model. A specific car will be assigned by our team once your booking is confirmed.
@@ -621,7 +621,7 @@ export default function BookTaxi() {
 
         {/* Route: Destination + Passengers */}
         {airportStep === 'route' && (
-          <div className="bg-white rounded-lg shadow-lg p-8 space-y-8">
+          <div className="bg-white rounded-lg shadow-lg p-4 md:p-8 space-y-8">
             {/* Destination */}
             <div>
               <h2 className="text-2xl font-bold mb-6">Select Destination</h2>
@@ -680,9 +680,9 @@ export default function BookTaxi() {
             </div>
 
             {/* Passengers */}
-            <div className="border-t pt-8">
+            <div className="border-t pt-6 md:pt-8">
               <h3 className="text-xl font-bold mb-4">Number of Passengers</h3>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 {[1, 2, 3, 4, 5, 6].map((n) => (
                   <button key={n} type="button" onClick={() => setPassengers(n.toString())}
                     className={`p-4 border-2 rounded-lg font-semibold transition-smooth text-center ${
@@ -701,7 +701,7 @@ export default function BookTaxi() {
 
         {/* Schedule: Date + Time */}
         {airportStep === 'schedule' && (
-          <div className="bg-white rounded-lg shadow-lg p-8 space-y-8">
+          <div className="bg-white rounded-lg shadow-lg p-4 md:p-8 space-y-8">
             {/* Date */}
             <div>
               <h2 className="text-2xl font-bold mb-4">Booking Date</h2>
@@ -731,7 +731,7 @@ export default function BookTaxi() {
         {airportStep === 'car' && <CarStep />}
 
         {airportStep === 'confirm' && (
-          <div className="bg-white rounded-lg shadow-lg p-8 space-y-6">
+          <div className="bg-white rounded-lg shadow-lg p-4 md:p-8 space-y-6">
             <h2 className="text-2xl font-bold">Confirm Your Booking</h2>
             <div className="bg-gray-50 rounded-lg p-5 space-y-3 text-sm">
               <Row label="Name" value={name} />
@@ -783,11 +783,11 @@ export default function BookTaxi() {
 
         {/* Details: Passengers + Date */}
         {hourlyStep === 'details' && (
-          <div className="bg-white rounded-lg shadow-lg p-8 space-y-8">
+          <div className="bg-white rounded-lg shadow-lg p-4 md:p-8 space-y-8">
             {/* Passengers */}
             <div>
-              <h2 className="text-2xl font-bold mb-4">Number of Passengers</h2>
-              <div className="grid grid-cols-3 gap-3">
+              <h2 className="text-xl md:text-2xl font-bold mb-4">Number of Passengers</h2>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 {[1, 2, 3, 4, 5, 6].map((n) => (
                   <button key={n} type="button" onClick={() => setPassengers(n.toString())}
                     className={`p-4 border-2 rounded-lg font-semibold transition-smooth text-center ${
@@ -814,7 +814,7 @@ export default function BookTaxi() {
 
         {/* Schedule: Time + Hours */}
         {hourlyStep === 'schedule' && (
-          <div className="bg-white rounded-lg shadow-lg p-8 space-y-8">
+          <div className="bg-white rounded-lg shadow-lg p-4 md:p-8 space-y-8">
             {/* Time */}
             <div>
               <h2 className="text-2xl font-bold mb-4">Pickup Time</h2>
@@ -828,7 +828,7 @@ export default function BookTaxi() {
               <h3 className="text-xl font-bold mb-4">Select Duration</h3>
               <p className="text-gray-600 text-sm mb-6">How long do you need the taxi? Choose days and/or hours.</p>
 
-              <div className="grid grid-cols-2 gap-6">
+              <div className="grid grid-cols-2 gap-4 md:gap-6">
                 {/* Days */}
                 <div className="text-center">
                   <p className="text-sm font-semibold text-gray-600 mb-3">Days</p>
@@ -898,7 +898,7 @@ export default function BookTaxi() {
         {hourlyStep === 'car' && <CarStep />}
 
         {hourlyStep === 'confirm' && (
-          <div className="bg-white rounded-lg shadow-lg p-8 space-y-6">
+          <div className="bg-white rounded-lg shadow-lg p-4 md:p-8 space-y-6">
             <h2 className="text-2xl font-bold">Confirm Your Booking</h2>
             <div className="bg-gray-50 rounded-lg p-5 space-y-3 text-sm">
               <Row label="Name" value={name} />
@@ -938,7 +938,7 @@ export default function BookTaxi() {
 
       <main className="flex-1 py-12 md:py-16 bg-gray-50">
         <div className="container mx-auto px-4">
-          <h1 className="text-4xl font-bold text-center mb-8">Book Your Taxi</h1>
+          <h1 className="text-2xl md:text-4xl font-bold text-center mb-5 md:mb-8">Book Your Taxi</h1>
 
           {/* ── Mode tabs ── */}
           <div className="max-w-2xl mx-auto mb-8">

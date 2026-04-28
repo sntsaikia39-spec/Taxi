@@ -62,11 +62,11 @@ function LoginContent() {
 
       <main className="flex-1 flex items-center justify-center py-12 px-4">
         <div className="w-full max-w-md">
-          <div className="card p-8">
+          <div className="card p-5 md:p-8">
             {/* Header */}
-            <div className="text-center mb-8">
-              <div className="text-4xl mb-4">🚖</div>
-              <h1 className="text-3xl font-bold mb-2">Welcome Back</h1>
+            <div className="text-center mb-6 md:mb-8">
+              <div className="text-3xl md:text-4xl mb-3 md:mb-4">🚖</div>
+              <h1 className="text-2xl md:text-3xl font-bold mb-2">Welcome Back</h1>
               <p className="text-gray-600">Sign in to your TaxiHollongi account</p>
             </div>
 

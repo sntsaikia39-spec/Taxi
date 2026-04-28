@@ -237,11 +237,11 @@ function PaymentContent() {
 
       <main className="flex-1 py-12 md:py-16 bg-gray-50">
         <div className="container mx-auto px-4">
-          <h1 className="text-4xl font-bold text-center mb-12">Complete Your Payment</h1>
+          <h1 className="text-2xl md:text-4xl font-bold text-center mb-6 md:mb-12">Complete Your Payment</h1>
 
-          <div className="max-w-4xl mx-auto grid md:grid-cols-3 gap-8">
+          <div className="max-w-4xl mx-auto grid md:grid-cols-3 gap-4 md:gap-8">
             {/* Payment Form */}
-            <div className="md:col-span-2 bg-white rounded-lg shadow-lg p-8">
+            <div className="md:col-span-2 bg-white rounded-lg shadow-lg p-4 md:p-8">
               <h2 className="text-2xl font-bold mb-6">Payment</h2>
 
               {/* Payment Details */}
@@ -320,7 +320,7 @@ function PaymentContent() {
               <div className="rounded-lg border border-gray-200 p-5 mb-8">
                 <p className="text-sm text-gray-600 mb-4">
                   Want to just prebook? Pay <strong>₹{advanceAmount.toFixed(2)}</strong> (30% advance) online now and the remaining{' '}
-                  <strong>₹{remainingAmount.toFixed(2)}</strong> in cash at pickup.
+                  <strong>₹{remainingAmount.toFixed(2)}</strong> in cash at the airport office on arrival.
                 </p>
                 <div className="space-y-2">
                   <button
@@ -395,7 +395,7 @@ function PaymentContent() {
 
                 <div className="mt-4 bg-blue-50 border border-blue-200 rounded p-3">
                   <p className="text-xs text-blue-800">
-                    Or prebook for just <strong>₹{advanceAmount.toFixed(2)}</strong> — pay rest in cash at pickup.
+                    Or prebook for just <strong>₹{advanceAmount.toFixed(2)}</strong> — pay rest in cash at the airport office on arrival.
                   </p>
                 </div>
               </div>

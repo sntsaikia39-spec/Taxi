@@ -234,7 +234,7 @@ export default function BookTour() {
             <ArrowLeft size={18} /> Back to Tours
           </button>
 
-          <h1 className="text-3xl font-bold text-center mb-3">Book {tour.name}</h1>
+          <h1 className="text-xl md:text-3xl font-bold text-center mb-2 md:mb-3">Book {tour.name}</h1>
           <p className="text-center text-gray-500 mb-10">Complete the steps below to reserve your spot</p>
 
           {/* Progress Bar */}
@@ -259,10 +259,10 @@ export default function BookTour() {
             </div>
           </div>
 
-          <div className="max-w-5xl mx-auto grid md:grid-cols-3 gap-8">
+          <div className="max-w-5xl mx-auto grid md:grid-cols-3 gap-4 md:gap-8">
 
             {/* ── Form Panel ── */}
-            <div className="md:col-span-2 bg-white rounded-xl shadow-lg p-8">
+            <div className="md:col-span-2 bg-white rounded-xl shadow-lg p-4 md:p-8">
 
               {/* Step 0: Contact */}
               {step === 0 && (
@@ -476,7 +476,7 @@ export default function BookTour() {
 
             {/* ── Tour Summary Sidebar ── */}
             <div className="space-y-5">
-              <div className="bg-white rounded-xl shadow-lg overflow-hidden sticky top-20">
+              <div className="bg-white rounded-xl shadow-lg overflow-hidden sticky top-4 md:top-20">
                 <div className="bg-gradient-to-r from-yellow-500 to-yellow-400 h-32 flex items-center justify-center text-6xl">
                   🏞️
                 </div>

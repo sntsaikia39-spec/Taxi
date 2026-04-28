@@ -66,15 +66,15 @@ export default function Home() {
       {/* Featured Tours Section */}
       <section className="py-16 md:py-24 bg-gray-50">
         <div className="container mx-auto px-4">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl font-bold mb-4">Featured Tours</h2>
-            <p className="text-gray-600 text-lg max-w-2xl mx-auto">
+          <div className="text-center mb-8 md:mb-16">
+            <h2 className="text-2xl md:text-4xl font-bold mb-3 md:mb-4">Featured Tours</h2>
+            <p className="text-gray-600 text-base md:text-lg max-w-2xl mx-auto">
               Explore our top-rated tour packages. Each includes professional transportation and expert guidance.
             </p>
           </div>
 
           {loadingTours ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-8">
               {[1, 2, 3, 4].map((i) => (
                 <div key={i} className="card overflow-hidden animate-pulse">
                   <div className="bg-gray-200 h-40"></div>
@@ -92,7 +92,7 @@ export default function Home() {
               <Link href="/tours" className="btn-primary inline-block">View All Tours</Link>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-8">
               {featuredTours.map((tour, index) => (
                 <div
                   key={tour.id}
@@ -163,8 +163,8 @@ export default function Home() {
       {/* CTA Section */}
       <section className="py-16 md:py-24 bg-primary-950 text-white">
         <div className="container mx-auto px-4 text-center max-w-2xl">
-          <h2 className="text-4xl font-bold mb-6">Ready to Book Your Ride?</h2>
-          <p className="text-xl text-gray-300 mb-8">
+          <h2 className="text-2xl md:text-4xl font-bold mb-4 md:mb-6">Ready to Book Your Ride?</h2>
+          <p className="text-base md:text-xl text-gray-300 mb-6 md:mb-8">
             Don't wait in queues at the airport. Pre-book your taxi with transparent pricing and 24/7 support.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">

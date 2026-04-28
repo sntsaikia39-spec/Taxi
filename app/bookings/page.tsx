@@ -169,10 +169,10 @@ export default function MyBookings() {
 
       <main className="flex-1 py-12 md:py-16 bg-gray-50">
         <div className="container mx-auto px-4">
-          <h1 className="text-4xl font-bold text-center mb-12">My Bookings</h1>
+          <h1 className="text-2xl md:text-4xl font-bold text-center mb-6 md:mb-12">My Bookings</h1>
 
           {bookings.length === 0 ? (
-            <div className="max-w-2xl mx-auto text-center bg-white rounded-lg shadow-lg p-12">
+            <div className="max-w-2xl mx-auto text-center bg-white rounded-lg shadow-lg p-6 md:p-12">
               <p className="text-xl text-gray-600 mb-6">You don't have any bookings yet.</p>
               <a href="/book-taxi" className="btn-primary inline-block">
                 Make Your First Booking
@@ -219,19 +219,19 @@ export default function MyBookings() {
                       {/* Header */}
                       <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6 pb-6 border-b">
                         <div>
-                          <h3 className="text-2xl font-bold mb-2">{bookingTypeLabel}</h3>
-                          <p className="text-gray-600 font-mono text-sm">{booking.booking_id || booking.id}</p>
+                          <h3 className="text-lg md:text-2xl font-bold mb-1 md:mb-2">{bookingTypeLabel}</h3>
+                          <p className="text-gray-600 font-mono text-xs md:text-sm truncate max-w-[200px] md:max-w-none">{booking.booking_id || booking.id}</p>
                         </div>
-                        <div className="flex items-center gap-4 mt-4 md:mt-0">
-                          <span className={`px-4 py-2 rounded-full font-semibold text-sm ${statusBadge.className}`}>
+                        <div className="flex items-center gap-3 mt-3 md:mt-0">
+                          <span className={`px-3 py-1.5 rounded-full font-semibold text-xs md:text-sm ${statusBadge.className}`}>
                             {statusBadge.label}
                           </span>
-                          <span className="text-3xl font-bold text-yellow-500">₹{toNum(booking.amount_total).toFixed(2)}</span>
+                          <span className="text-xl md:text-3xl font-bold text-yellow-500">₹{toNum(booking.amount_total).toFixed(2)}</span>
                         </div>
                       </div>
 
                       {/* Details Grid */}
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-6">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-6 mb-4 md:mb-6">
                         <div>
                           <p className="text-gray-600 text-sm font-semibold">Date</p>
                           <p className="text-lg">{formatDate(booking.start_datetime)}</p>
@@ -274,23 +274,23 @@ export default function MyBookings() {
 
                       {/* Actions */}
                       <div className="flex flex-wrap gap-3">
-                        <button className="flex items-center gap-2 px-4 py-2 border border-primary-950 text-primary-950 rounded hover:bg-gray-50 transition-smooth">
-                          <Eye size={18} />
+                        <button className="flex items-center gap-2 px-4 py-3 border border-primary-950 text-primary-950 rounded hover:bg-gray-50 transition-smooth text-sm">
+                          <Eye size={16} />
                           View Details
                         </button>
                         <button
                           onClick={() => handleDownloadInvoice(booking.id)}
-                          className="flex items-center gap-2 px-4 py-2 border border-yellow-500 text-yellow-600 rounded hover:bg-yellow-50 transition-smooth"
+                          className="flex items-center gap-2 px-4 py-3 border border-yellow-500 text-yellow-600 rounded hover:bg-yellow-50 transition-smooth text-sm"
                         >
-                          <Download size={18} />
+                          <Download size={16} />
                           Invoice
                         </button>
                         {booking.booking_status === 'pending' || booking.booking_status === 'confirmed' ? (
                           <button
                             onClick={() => handleCancel(booking.id)}
-                            className="flex items-center gap-2 px-4 py-2 border border-red-500 text-red-500 rounded hover:bg-red-50 transition-smooth"
+                            className="flex items-center gap-2 px-4 py-3 border border-red-500 text-red-500 rounded hover:bg-red-50 transition-smooth text-sm"
                           >
-                            <Trash2 size={18} />
+                            <Trash2 size={16} />
                             Cancel
                           </button>
                         ) : null}

@@ -91,20 +91,20 @@ function BookingConfirmedContent() {
       <main className="flex-1 py-12 md:py-16 bg-gradient-to-b from-green-50 to-gray-50">
         <div className="container mx-auto px-4">
           {/* Success Icon and Message */}
-          <div className="max-w-2xl mx-auto text-center mb-12">
-            <div className="flex justify-center mb-6">
-              <CheckCircle size={80} className="text-green-500" />
+          <div className="max-w-2xl mx-auto text-center mb-6 md:mb-12">
+            <div className="flex justify-center mb-4 md:mb-6">
+              <CheckCircle size={64} className="text-green-500" />
             </div>
-            <h1 className="text-4xl font-bold text-green-600 mb-4">Booking Confirmed!</h1>
-            <p className="text-xl text-gray-600 mb-2">Your {booking.bookingType === 'tour' ? 'tour package' : 'taxi'} booking has been successfully confirmed.</p>
+            <h1 className="text-2xl md:text-4xl font-bold text-green-600 mb-3 md:mb-4">Booking Confirmed!</h1>
+            <p className="text-base md:text-xl text-gray-600 mb-2">Your {booking.bookingType === 'tour' ? 'tour package' : 'taxi'} booking has been successfully confirmed.</p>
             <p className="text-gray-600">A confirmation email has been sent to {booking.email}</p>
           </div>
 
           {/* Booking Details Card */}
-          <div className="max-w-2xl mx-auto grid md:grid-cols-2 gap-8 mb-12">
+          <div className="max-w-2xl mx-auto grid md:grid-cols-2 gap-4 md:gap-8 mb-6 md:mb-12">
             {/* Details */}
-            <div className="bg-white rounded-lg shadow-lg p-8">
-              <h2 className="text-2xl font-bold mb-6">Booking Details</h2>
+            <div className="bg-white rounded-lg shadow-lg p-4 md:p-8">
+              <h2 className="text-lg md:text-2xl font-bold mb-4 md:mb-6">Booking Details</h2>
 
               <div className="space-y-4">
                 <div>
@@ -166,8 +166,8 @@ function BookingConfirmedContent() {
             </div>
 
             {/* Payment Summary */}
-            <div className="bg-white rounded-lg shadow-lg p-8">
-              <h2 className="text-2xl font-bold mb-6">Payment Summary</h2>
+            <div className="bg-white rounded-lg shadow-lg p-4 md:p-8">
+              <h2 className="text-lg md:text-2xl font-bold mb-4 md:mb-6">Payment Summary</h2>
 
               <div className="space-y-4">
                 <div className="flex justify-between pb-4 border-b">
@@ -217,8 +217,8 @@ function BookingConfirmedContent() {
           </div>
 
           {/* Next Steps */}
-          <div className="max-w-2xl mx-auto bg-white rounded-lg shadow-lg p-8 mb-12">
-            <h2 className="text-2xl font-bold mb-6">What's Next?</h2>
+          <div className="max-w-2xl mx-auto bg-white rounded-lg shadow-lg p-4 md:p-8 mb-6 md:mb-12">
+            <h2 className="text-lg md:text-2xl font-bold mb-4 md:mb-6">What's Next?</h2>
 
             <div className="space-y-4">
               <div className="flex gap-4">
@@ -264,16 +264,16 @@ function BookingConfirmedContent() {
           </div>
 
           {/* Action Buttons */}
-          <div className="max-w-2xl mx-auto flex flex-col sm:flex-row gap-4">
+          <div className="max-w-2xl mx-auto flex flex-col sm:flex-row gap-3 md:gap-4">
             <Link
               href="/bookings"
-              className="flex-1 px-6 py-3 bg-primary-950 text-white rounded-lg font-semibold hover:bg-primary-900 transition-smooth text-center"
+              className="flex-1 px-6 py-4 bg-primary-950 text-white rounded-lg font-semibold hover:bg-primary-900 transition-smooth text-center"
             >
               View My Bookings
             </Link>
             <Link
               href="/"
-              className="flex-1 px-6 py-3 border-2 border-secondary-500 text-secondary-500 rounded-lg font-semibold hover:bg-secondary-50 transition-smooth text-center flex items-center justify-center gap-2"
+              className="flex-1 px-6 py-4 border-2 border-secondary-500 text-secondary-500 rounded-lg font-semibold hover:bg-secondary-50 transition-smooth text-center flex items-center justify-center gap-2"
             >
               <Home size={20} />
               Back to Home
