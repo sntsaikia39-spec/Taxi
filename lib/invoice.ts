@@ -208,7 +208,7 @@ export function generateInvoicePDF(invoiceData: InvoiceData): jsPDF {
   yPosition += 2
 
   // ============ PAYMENT STATUS BANNER ============
-  const statusColor = invoiceData.paymentStatus.toLowerCase() === 'paid' ? [76, 175, 80] : [255, 193, 7]
+  const statusColor: [number, number, number] = invoiceData.paymentStatus.toLowerCase() === 'paid' ? [76, 175, 80] : [255, 193, 7]
   doc.setFillColor(...statusColor)
   doc.rect(margin, yPosition, contentWidth, 10, 'F')
 

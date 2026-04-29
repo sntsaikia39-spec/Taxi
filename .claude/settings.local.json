@@ -8,7 +8,9 @@
       "Bash(grep -v \"^$\")",
       "Bash(git add *)",
       "Bash(git commit *)",
-      "Bash(xargs grep *)"
+      "Bash(xargs grep *)",
+      "Bash(vercel --version)",
+      "Bash(npx next *)"
     ]
   }
 }
