@@ -6,6 +6,7 @@ import Header from '@/components/Header'
 import Footer from '@/components/Footer'
 import toast from 'react-hot-toast'
 import { generateBookingId } from '@/lib/utils'
+import { validateFullName, validatePhoneNumber, validateEmail } from '@/lib/validation'
 import { useAuth } from '@/context/AuthContext'
 import { fetchTourById } from '@/lib/db'
 import type { TourPackage } from '@/lib/db'
@@ -107,7 +108,21 @@ export default function BookTour() {
   // ── Step validation ──────────────────────────────────────────────────────────
 
   const canAdvanceStep = (): boolean => {
-    if (step === 0) return name.trim().length > 0 && phone.trim().length >= 10 && email.trim().includes('@')
+    if (step === 0) {
+      // Validate name
+      const nameValidation = validateFullName(name)
+      if (!nameValidation.valid) return false
+      
+      // Validate phone
+      const phoneValidation = validatePhoneNumber(phone)
+      if (!phoneValidation.valid) return false
+      
+      // Validate email
+      const emailValidation = validateEmail(email)
+      if (!emailValidation.valid) return false
+      
+      return true
+    }
     if (step === 1) return passengers >= 1 && (tour ? passengers <= (tour.max_passengers ?? 999) : true)
     if (step === 2) return date.length > 0
     return true
@@ -115,7 +130,25 @@ export default function BookTour() {
 
   const nextStep = () => {
     if (!canAdvanceStep()) {
-      if (step === 0) toast.error('Please fill in your name, a valid phone number, and email.')
+      if (step === 0) {
+        const nameValidation = validateFullName(name)
+        if (!nameValidation.valid) {
+          toast.error(nameValidation.error || 'Invalid name')
+          return
+        }
+        
+        const phoneValidation = validatePhoneNumber(phone)
+        if (!phoneValidation.valid) {
+          toast.error(phoneValidation.error || 'Invalid phone number')
+          return
+        }
+        
+        const emailValidation = validateEmail(email)
+        if (!emailValidation.valid) {
+          toast.error(emailValidation.error || 'Invalid email')
+          return
+        }
+      }
       if (step === 2) toast.error('Please select a tour date.')
       return
     }
@@ -295,7 +328,8 @@ export default function BookTour() {
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       placeholder="your@email.com"
-                      className="input-field"
+                      className="input-field disabled:bg-gray-100 disabled:cursor-not-allowed"
+                      disabled
                     />
                   </div>
                 </div>

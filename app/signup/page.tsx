@@ -28,6 +28,25 @@ function SignupContent() {
   const handleEmailSignup = async (e: React.FormEvent) => {
     e.preventDefault()
 
+    // Strict type validation for all fields
+    const fullNameValidation = validateFullName(fullName)
+    if (!fullNameValidation.valid) {
+      toast.error(fullNameValidation.error || 'Invalid full name')
+      return
+    }
+
+    const emailValidation = validateEmail(email)
+    if (!emailValidation.valid) {
+      toast.error(emailValidation.error || 'Invalid email')
+      return
+    }
+
+    const passwordValidation = validatePassword(password)
+    if (!passwordValidation.valid) {
+      toast.error(passwordValidation.error || 'Invalid password')
+      return
+    }
+
     if (password !== confirmPassword) {
       toast.error('Passwords do not match')
       return

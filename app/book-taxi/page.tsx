@@ -7,6 +7,7 @@ import Footer from '@/components/Footer'
 import { MapPin, Users, Car, Clock, Search, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { generateBookingId } from '@/lib/utils'
+import { validateFullName, validatePhoneNumber, validateEmail } from '@/lib/validation'
 import { useAuth } from '@/context/AuthContext'
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -65,12 +66,14 @@ interface ContactStepProps {
   onNameChange: (value: string) => void
   onPhoneChange: (value: string) => void
   onEmailChange: (value: string) => void
+  isEmailLocked?: boolean
 }
 
 const ContactStepComponent = memo(({ 
   name, phone, email, 
   nameInputRef, phoneInputRef, emailInputRef,
-  onNameChange, onPhoneChange, onEmailChange 
+  onNameChange, onPhoneChange, onEmailChange,
+  isEmailLocked = false
 }: ContactStepProps) => (
   <div className="bg-white rounded-lg shadow-lg p-4 md:p-8">
     <h2 className="text-2xl font-bold mb-6">Contact Details</h2>
@@ -105,9 +108,10 @@ const ContactStepComponent = memo(({
           ref={emailInputRef}
           type="email" 
           value={email} 
-          onChange={(e) => onEmailChange(e.target.value)}
+          onChange={(e) => !isEmailLocked && onEmailChange(e.target.value)}
           placeholder="your@email.com" 
-          className="input-field" 
+          className="input-field disabled:bg-gray-100 disabled:cursor-not-allowed" 
+          disabled={isEmailLocked}
           required 
         />
       </div>
@@ -160,7 +164,7 @@ export default function BookTaxi() {
   useEffect(() => {
     if (!isLoading && !user) {
       toast.error('Please sign in to book a taxi')
-      router.push('/login?redirect=/book-taxi')
+      router.push('/login?redirect=/book-taxi&source=booking')
     }
   }, [user, isLoading, router])
 
@@ -280,7 +284,26 @@ export default function BookTaxi() {
     const idx = AIRPORT_STEPS.indexOf(airportStep)
 
     if (airportStep === 'contact') {
-      if (!name || !phone || !email) { toast.error('Please fill all contact details'); return }
+      // Validate name
+      const nameValidation = validateFullName(name)
+      if (!nameValidation.valid) {
+        toast.error(nameValidation.error || 'Invalid name')
+        return
+      }
+      
+      // Validate phone
+      const phoneValidation = validatePhoneNumber(phone)
+      if (!phoneValidation.valid) {
+        toast.error(phoneValidation.error || 'Invalid phone number')
+        return
+      }
+      
+      // Validate email
+      const emailValidation = validateEmail(email)
+      if (!emailValidation.valid) {
+        toast.error(emailValidation.error || 'Invalid email')
+        return
+      }
     }
     if (airportStep === 'route') {
       if (!destinationId || !passengers) { toast.error('Please select destination and passengers'); return }
@@ -307,7 +330,26 @@ export default function BookTaxi() {
     const idx = HOURLY_STEPS.indexOf(hourlyStep)
 
     if (hourlyStep === 'contact') {
-      if (!name || !phone || !email) { toast.error('Please fill all contact details'); return }
+      // Validate name
+      const nameValidation = validateFullName(name)
+      if (!nameValidation.valid) {
+        toast.error(nameValidation.error || 'Invalid name')
+        return
+      }
+      
+      // Validate phone
+      const phoneValidation = validatePhoneNumber(phone)
+      if (!phoneValidation.valid) {
+        toast.error(phoneValidation.error || 'Invalid phone number')
+        return
+      }
+      
+      // Validate email
+      const emailValidation = validateEmail(email)
+      if (!emailValidation.valid) {
+        toast.error(emailValidation.error || 'Invalid email')
+        return
+      }
     }
     if (hourlyStep === 'details') {
       if (!passengers || !date) { toast.error('Please select passengers and date'); return }
@@ -614,6 +656,7 @@ export default function BookTaxi() {
             onNameChange={setName}
             onPhoneChange={setPhone}
             onEmailChange={setEmail}
+            isEmailLocked={true}
           />
         )}
 
@@ -774,6 +817,7 @@ export default function BookTaxi() {
             onNameChange={setName}
             onPhoneChange={setPhone}
             onEmailChange={setEmail}
+            isEmailLocked={true}
           />
         )}
 

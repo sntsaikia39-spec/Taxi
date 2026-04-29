@@ -60,7 +60,7 @@ export default function Tours() {
   const handleBookTour = (tourId: string) => {
     if (!user) {
       toast.error('Please sign in to book a tour')
-      router.push('/login?redirect=/tours')
+      router.push('/login?redirect=/tours&source=booking')
       return
     }
     router.push(`/tours/${tourId}/book`)
