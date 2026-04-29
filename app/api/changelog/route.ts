@@ -45,8 +45,8 @@ function parseChangelog(content: string): ChangelogEntry[] {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]
 
-    // Match version/date headers like "## [2024-01-15] - Commit abc123"
-    const headerMatch = line.match(/^##\s+\[([\d\-]+)\]\s*(?:-\s*Commit\s+(\w+))?/)
+    // Match version/date headers like "## [2024-01-15]" or "## [Unreleased]"
+    const headerMatch = line.match(/^##\s+\[([\w\d\-]+)\]\s*(?:-\s*Commit\s+(\w+))?/)
     if (headerMatch) {
       if (currentEntry && currentEntry.changes.length > 0) {
         entries.push(currentEntry)
