@@ -9,9 +9,11 @@ All notable changes to TaxiHollongi will be documented in this file.
 **Author:** Yami
 
 ### Changes
-- fix: tour booking demo 30% advance payment failing due to stale sessionStorage key (taxi data shadowing tour data)
-- fix: TypeScript error in invoice.ts color tuple spread argument
-- fix: payment page now reads correct sessionStorage key based on booking type in URL
+- fix: changelog parser + populate entries, fix invoice TS error
+- fix: Invoice
+- update: Breakdowns and charges removed
+- update: Invoice
+- Changelog Added
 
 ## [2026-04-28]
 
@@ -19,15 +21,7 @@ All notable changes to TaxiHollongi will be documented in this file.
 
 ### Changes
 - fix: replace stale setNoOfHours with setDurationDays/setDurationHrs on mode reset
-- fix: mobile-first polish across all screens
-- fix: remaining payment copy updated to "airport office on arrival"
-- feat: admin complete and cancel booking feature
-- feat: hourly booking system update
-- feat: make full payment the primary CTA, demote 30% prebook to secondary option
-- feat: invoice generation with digital signatures
-- feat: enhanced booking system with real-time updates
-- feat: improved payment processing workflow
 
 ---
 
-> This changelog is automatically updated on every commit. Latest updates appear at the top.
+> This changelog is automatically updated on every build. Latest updates appear at the top.
