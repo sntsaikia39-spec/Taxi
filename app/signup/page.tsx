@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, Suspense } from 'react'
+import { useState, Suspense, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { useAuth } from '@/context/AuthContext'
@@ -14,15 +14,52 @@ function SignupContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const redirect = searchParams.get('redirect') || '/bookings'
-  const { signUpWithEmail, signInWithOAuth, resendVerificationEmail, user } = useAuth()
+  const { signUpWithEmail, signInWithEmail, signInWithOAuth, resendVerificationEmail, user } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [fullName, setFullName] = useState('')
   const [loading, setLoading] = useState(false)
   const [resending, setResending] = useState(false)
-  // After successful signup, show the "check your email" screen
   const [verificationSent, setVerificationSent] = useState(false)
+  const [smtpFailed, setSmtpFailed] = useState(false)
+
+  // Auto-login once email is verified — works same browser (BroadcastChannel)
+  // and cross-device (polling signInWithPassword every 10s)
+  useEffect(() => {
+    if (!verificationSent || !email || !password) return
+
+    // Same browser, any tab: verify tab broadcasts → navigate immediately
+    let bc: BroadcastChannel | null = null
+    try {
+      bc = new BroadcastChannel('rina:auth')
+      bc.onmessage = (e) => {
+        if (e.data?.event === 'EMAIL_VERIFIED') {
+          window.location.href = redirect
+        }
+      }
+    } catch (_) {}
+
+    // Cross-device: poll sign-in every 10s — succeeds once email is verified
+    let stopped = false
+    let attempts = 0
+    const poll = async () => {
+      if (stopped || attempts >= 36) return // stop after 6 minutes
+      attempts++
+      const { error } = await signInWithEmail(email, password)
+      if (!error) {
+        stopped = true
+        // onAuthStateChange fires in AuthContext → user state updates → if(user) redirects below
+      }
+    }
+    const interval = setInterval(poll, 10000)
+
+    return () => {
+      stopped = true
+      clearInterval(interval)
+      bc?.close()
+    }
+  }, [verificationSent]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (user) {
     router.push(redirect)
@@ -57,7 +94,7 @@ function SignupContent() {
 
     setLoading(true)
     try {
-      const { error, needsVerification } = await signUpWithEmail(email, password, fullName)
+      const { error, needsVerification, smtpError } = await signUpWithEmail(email, password, fullName)
       if (error) {
         if (error.message?.toLowerCase().includes('already registered') || error.message?.toLowerCase().includes('already been registered')) {
           toast.error('An account with this email already exists. Please sign in.')
@@ -68,9 +105,9 @@ function SignupContent() {
         return
       }
       if (needsVerification) {
+        setSmtpFailed(!!smtpError)
         setVerificationSent(true)
       } else {
-        // Email confirmation disabled in Supabase — log straight in
         toast.success('Account created! You are now signed in.')
         router.push(redirect)
       }
@@ -120,20 +157,31 @@ function SignupContent() {
                   <CheckCircle size={36} className="text-green-500" />
                 </div>
               </div>
-              <h1 className="text-2xl font-bold mb-2">Check your email</h1>
-              <p className="text-gray-600 mb-1">
-                We sent a verification link to
-              </p>
-              <p className="font-semibold text-gray-900 mb-6">{email}</p>
-              <p className="text-sm text-gray-500 mb-8">
-                Click the link in the email to verify your account. After verifying, you can sign in normally.
-                The link expires in 24 hours.
-              </p>
+              <h1 className="text-2xl font-bold mb-1">
+                {smtpFailed ? 'Account created' : 'Verify your email'}
+              </h1>
+              <p className="text-sm text-gray-500 mb-6">Almost there!</p>
+              
+              {smtpFailed ? (
+                <p className="text-gray-600 mb-6">
+                  Your account was created but we couldn&apos;t send the verification email right now.
+                  Use the button below to resend it.
+                </p>
+              ) : (
+                <>
+                  <p className="text-gray-600 mb-1">We sent a verification link to</p>
+                  <p className="font-semibold text-gray-900 mb-6 break-all">{email}</p>
+                  <p className="text-sm text-gray-500 mb-8">
+                    Click the link in the email — this page will log you in automatically.
+                    The link expires in 24 hours.
+                  </p>
+                </>
+              )}
 
               <button
                 onClick={handleResend}
                 disabled={resending}
-                className="w-full mb-4 px-4 py-3 border-2 border-secondary-500 rounded-lg font-semibold hover:bg-secondary-50 transition-smooth flex items-center justify-center gap-2 disabled:opacity-50"
+                className="w-full mb-3 px-4 py-3 border-2 border-secondary-500 rounded-lg font-semibold hover:bg-secondary-50 transition-smooth flex items-center justify-center gap-2 disabled:opacity-50"
               >
                 <RefreshCw size={16} className={resending ? 'animate-spin' : ''} />
                 {resending ? 'Sending...' : 'Resend verification email'}
@@ -146,10 +194,6 @@ function SignupContent() {
                 Already verified? Sign in
               </Link>
             </div>
-
-            <p className="text-center text-xs text-gray-400 mt-4">
-              Check your spam folder if you don&apos;t see it within a few minutes.
-            </p>
           </div>
         </main>
         <Footer />

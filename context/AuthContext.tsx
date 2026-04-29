@@ -8,7 +8,7 @@ interface AuthContextType {
   user: User | null
   isLoading: boolean
   signInWithEmail: (email: string, password: string) => Promise<{ error: any }>
-  signUpWithEmail: (email: string, password: string, fullName?: string) => Promise<{ error: any; needsVerification?: boolean }>
+  signUpWithEmail: (email: string, password: string, fullName?: string) => Promise<{ error: any; needsVerification?: boolean; smtpError?: boolean }>
   signInWithOAuth: (provider: 'google', redirectTo?: string) => Promise<{ error: any }>
   resendVerificationEmail: (email: string) => Promise<{ error: any }>
   signOut: () => Promise<void>
@@ -52,11 +52,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           emailRedirectTo: `${window.location.origin}/auth/callback`,
         },
       })
-      // needsVerification = signup succeeded but email not confirmed yet
-      const needsVerification = !error && !!data.user && !data.user.email_confirmed_at
-      return { error, needsVerification }
+
+      // SMTP failure: user was created but confirmation email couldn't be sent.
+      // Treat it as needsVerification so the user sees the "check your email"
+      // screen — they can use the resend button once SMTP is fixed.
+      if (error?.message?.toLowerCase().includes('sending confirmation email') ||
+          error?.message?.toLowerCase().includes('error sending') ||
+          error?.status === 500) {
+        return { error: null, needsVerification: true, smtpError: true }
+      }
+
+      const needsVerification = !error && !!data.user && data.session === null
+      return { error, needsVerification, smtpError: false }
     } catch (error) {
-      return { error, needsVerification: false }
+      return { error, needsVerification: false, smtpError: false }
     }
   }
 
