@@ -175,22 +175,10 @@ function BookingConfirmedContent() {
                   <span className="font-semibold text-lg">₹{(payment?.amount_total || booking.totalPrice).toFixed(2)}</span>
                 </div>
 
-                <div className="flex justify-between pb-4 border-b">
-                  <span className="text-gray-600">Online Payment (Paid):</span>
-                  <span className="font-semibold text-green-600">₹{(payment?.amount_online_paid || 0).toFixed(2)}</span>
-                </div>
-
-                {payment?.payment_type === 'partial' && (
-                  <div className="flex justify-between pb-4 border-b">
-                    <span className="text-gray-600">Remaining Payment (Cash at Airport):</span>
-                    <span className="font-semibold text-orange-600">₹{(payment?.amount_cash_paid || ((payment?.amount_total || 0) - (payment?.amount_online_paid || 0))).toFixed(2)}</span>
-                  </div>
-                )}
-
                 {payment?.payment_type === 'full' ? (
                   <div className="bg-green-50 border-l-4 border-green-500 p-4 mt-6">
                     <p className="text-sm text-green-900">
-                      <strong>Payment Status:</strong> ✅ Full payment completed online successfully.
+                      <strong>✅ Payment Status:</strong> Full payment completed online successfully.
                       <br />
                       No additional payment required.
                     </p>
@@ -198,9 +186,9 @@ function BookingConfirmedContent() {
                 ) : (
                   <div className="bg-blue-50 border-l-4 border-blue-500 p-4 mt-6">
                     <p className="text-sm text-blue-900">
-                      <strong>Payment Status:</strong> 30% advanced payment completed online.
+                      <strong>Payment Status:</strong> 30% advance payment completed online.
                       <br />
-                      Remaining 70% should be paid in cash at the airport office.
+                      Remaining 70% to be paid in cash at the airport office.
                     </p>
                   </div>
                 )}

@@ -549,11 +549,9 @@ export default function BookTaxi() {
       ) : (
         <div className="space-y-3">
           {availableCarModels.map((model) => {
-            const rate = mode === 'airport' ? model.per_km_charge : model.per_hr_charge
-            const rateLabel = mode === 'airport' ? '/km' : '/hr'
             const estimate = mode === 'airport'
-              ? selectedDest ? `Est. Rs. ${(selectedDest.distance_km * model.per_km_charge).toFixed(0)}` : ''
-              : `Est. Rs. ${(noOfHours * model.per_hr_charge).toFixed(0)} for ${noOfHours} hr${noOfHours > 1 ? 's' : ''}`
+              ? selectedDest ? `Rs. ${(selectedDest.distance_km * model.per_km_charge).toFixed(0)}` : 'Price on request'
+              : `Rs. ${(noOfHours * model.per_hr_charge).toFixed(0)}`
             return (
               <button key={model.model_name} type="button"
                 onClick={() => setSelectedCarModel(model)}
@@ -567,8 +565,7 @@ export default function BookTaxi() {
                     <p className="font-semibold text-lg">{model.model_name}</p>
                     <p className="text-sm text-gray-600">Class: {model.class} · Capacity: {model.capacity} pax · Available: {model.available_count}</p>
                     <p className="text-sm text-secondary-600 font-semibold mt-2">
-                      Rs. {rate}{rateLabel}
-                      {estimate && <span className="text-gray-500 font-normal ml-2">({estimate})</span>}
+                      Estimated: {estimate}
                     </p>
                   </div>
                   <Car className="w-6 h-6 text-secondary-500 shrink-0 ml-3" />
@@ -739,17 +736,15 @@ export default function BookTaxi() {
               <Row label="Phone" value={phone} />
               <Row label="Email" value={email} />
               <Row label="Destination" value={selectedDest?.name ?? '-'} />
-              <Row label="Distance" value={`${selectedDest?.distance_km} km`} />
               <Row label="Passengers" value={passengers} />
               <Row label="Date" value={new Date(date).toLocaleDateString('en-IN')} />
               <Row label="Pickup Time" value={startTime} />
               <div className="border-t pt-3">
                 <Row label="Car Model" value={selectedCarModel?.model_name ?? '-'} />
-                <Row label="Rate" value={`Rs. ${selectedCarModel?.per_km_charge}/km`} />
               </div>
             </div>
             <PriceBox
-              lines={[`${selectedDest?.distance_km} km × Rs. ${selectedCarModel?.per_km_charge}/km`]}
+              lines={[]}
               total={totalCost} advance={advance} remaining={remaining}
             />
           </div>
@@ -886,9 +881,7 @@ export default function BookTaxi() {
               {selectedCarModel && (
                 <div className="mt-4 p-4 bg-blue-50 rounded-lg">
                   <p className="text-sm text-blue-800">
-                    <strong>{formatDuration(noOfHours)}</strong> ({noOfHours} hrs) × Rs. {selectedCarModel.per_hr_charge}/hr
-                    {' = '}
-                    <strong>Rs. {hourlyTotal.toFixed(2)}</strong>
+                    <strong>Estimated Price:</strong> Rs. {hourlyTotal.toFixed(2)}
                   </p>
                 </div>
               )}
@@ -911,11 +904,10 @@ export default function BookTaxi() {
               <Row label="Duration" value={`${formatDuration(noOfHours)}${noOfHours >= 24 ? ` (${noOfHours} hrs)` : ''}`} />
               <div className="border-t pt-3">
                 <Row label="Car Model" value={selectedCarModel?.model_name ?? '-'} />
-                <Row label="Rate" value={`Rs. ${selectedCarModel?.per_hr_charge}/hr`} />
               </div>
             </div>
             <PriceBox
-              lines={[`${formatDuration(noOfHours)} (${noOfHours} hrs) × Rs. ${selectedCarModel?.per_hr_charge}/hr`]}
+              lines={[]}
               total={totalCost} advance={advance} remaining={remaining}
             />
           </div>
@@ -1008,15 +1000,8 @@ function PriceBox({
 }) {
   return (
     <div className="bg-blue-50 rounded-lg p-5 space-y-3">
-      <h3 className="font-bold text-lg">Price Breakdown</h3>
-      {lines.map((l) => (
-        <div key={l} className="flex justify-between text-sm">
-          <span className="text-gray-700">Calculation:</span>
-          <span className="font-semibold">{l} = Rs. {total.toFixed(2)}</span>
-        </div>
-      ))}
-      <div className="border-t pt-3 flex justify-between font-bold text-base">
-        <span>Total Amount:</span>
+      <div className="flex justify-between font-bold text-lg">
+        <span>Estimated Price:</span>
         <span className="text-secondary-600">Rs. {total.toFixed(2)}</span>
       </div>
       <p className="text-xs text-blue-700 pt-1">

@@ -246,16 +246,9 @@ function PaymentContent() {
 
               {/* Payment Details */}
               <div className="bg-gray-50 rounded-lg p-6 mb-8">
-                <h3 className="font-bold mb-4">Payment Details</h3>
-                <div className="space-y-2">
-                  <div className="flex justify-between">
-                    <span>Total Booking Amount:</span>
-                    <span>₹{bookingData.totalPrice.toFixed(2)}</span>
-                  </div>
-                  <div className="border-t pt-2 flex justify-between font-bold text-lg">
-                    <span>You pay now:</span>
-                    <span className="text-secondary-500">₹{bookingData.totalPrice.toFixed(2)}</span>
-                  </div>
+                <div className="flex justify-between font-bold text-lg">
+                  <span>Booking Amount:</span>
+                  <span className="text-secondary-500">₹{bookingData.totalPrice.toFixed(2)}</span>
                 </div>
               </div>
 
