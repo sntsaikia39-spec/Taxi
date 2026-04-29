@@ -9,6 +9,7 @@ All notable changes to TaxiHollongi will be documented in this file.
 **Author:** Yami
 
 ### Changes
+- feat: auto-generate changelog from git log on every build
 - fix: changelog parser + populate entries, fix invoice TS error
 - fix: Invoice
 - update: Breakdowns and charges removed
