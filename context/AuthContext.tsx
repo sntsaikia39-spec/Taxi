@@ -8,8 +8,9 @@ interface AuthContextType {
   user: User | null
   isLoading: boolean
   signInWithEmail: (email: string, password: string) => Promise<{ error: any }>
-  signUpWithEmail: (email: string, password: string) => Promise<{ error: any }>
+  signUpWithEmail: (email: string, password: string, fullName?: string) => Promise<{ error: any; needsVerification?: boolean }>
   signInWithOAuth: (provider: 'google', redirectTo?: string) => Promise<{ error: any }>
+  resendVerificationEmail: (email: string) => Promise<{ error: any }>
   signOut: () => Promise<void>
 }
 
@@ -41,24 +42,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => subscription?.unsubscribe()
   }, [])
 
-  const signUpWithEmail = async (email: string, password: string) => {
+  const signUpWithEmail = async (email: string, password: string, fullName?: string) => {
     try {
-      const { error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
+          data: { full_name: fullName || '' },
           emailRedirectTo: `${window.location.origin}/auth/callback`,
         },
       })
-      return { error }
+      // needsVerification = signup succeeded but email not confirmed yet
+      const needsVerification = !error && !!data.user && !data.user.email_confirmed_at
+      return { error, needsVerification }
     } catch (error) {
-      return { error }
+      return { error, needsVerification: false }
     }
   }
 
   const signInWithEmail = async (email: string, password: string) => {
     try {
       const { error } = await supabase.auth.signInWithPassword({ email, password })
+      return { error }
+    } catch (error) {
+      return { error }
+    }
+  }
+
+  const resendVerificationEmail = async (email: string) => {
+    try {
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email,
+        options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+      })
       return { error }
     } catch (error) {
       return { error }
@@ -91,7 +108,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, signInWithEmail, signUpWithEmail, signInWithOAuth, signOut }}>
+    <AuthContext.Provider value={{ user, isLoading, signInWithEmail, signUpWithEmail, signInWithOAuth, resendVerificationEmail, signOut }}>
       {children}
     </AuthContext.Provider>
   )

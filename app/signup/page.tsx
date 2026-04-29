@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { useAuth } from '@/context/AuthContext'
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
-import { Mail, Lock, User as UserIcon, UserPlus } from 'lucide-react'
+import { Mail, Lock, User as UserIcon, UserPlus, CheckCircle, RefreshCw } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { validateFullName, validateEmail, validatePassword } from '@/lib/validation'
 
@@ -14,12 +14,15 @@ function SignupContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const redirect = searchParams.get('redirect') || '/bookings'
-  const { signUpWithEmail, signInWithOAuth, user } = useAuth()
+  const { signUpWithEmail, signInWithOAuth, resendVerificationEmail, user } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [fullName, setFullName] = useState('')
   const [loading, setLoading] = useState(false)
+  const [resending, setResending] = useState(false)
+  // After successful signup, show the "check your email" screen
+  const [verificationSent, setVerificationSent] = useState(false)
 
   if (user) {
     router.push(redirect)
@@ -29,7 +32,6 @@ function SignupContent() {
   const handleEmailSignup = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    // Strict type validation for all fields
     const fullNameValidation = validateFullName(fullName)
     if (!fullNameValidation.valid) {
       toast.error(fullNameValidation.error || 'Invalid full name')
@@ -53,25 +55,43 @@ function SignupContent() {
       return
     }
 
-    if (password.length < 6) {
-      toast.error('Password must be at least 6 characters')
-      return
-    }
-
     setLoading(true)
-
     try {
-      const { error } = await signUpWithEmail(email, password)
+      const { error, needsVerification } = await signUpWithEmail(email, password, fullName)
       if (error) {
-        toast.error(error.message || 'Failed to create account')
+        if (error.message?.toLowerCase().includes('already registered') || error.message?.toLowerCase().includes('already been registered')) {
+          toast.error('An account with this email already exists. Please sign in.')
+          router.push(`/login?redirect=${encodeURIComponent(redirect)}`)
+        } else {
+          toast.error(error.message || 'Failed to create account')
+        }
+        return
+      }
+      if (needsVerification) {
+        setVerificationSent(true)
       } else {
-        toast.success('Account created successfully! You can now log in.')
-        router.push(`/login?redirect=${encodeURIComponent(redirect)}`)
+        // Email confirmation disabled in Supabase — log straight in
+        toast.success('Account created! You are now signed in.')
+        router.push(redirect)
       }
     } catch (err: any) {
       toast.error(err.message || 'An error occurred')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleResend = async () => {
+    setResending(true)
+    try {
+      const { error } = await resendVerificationEmail(email)
+      if (error) {
+        toast.error(error.message || 'Could not resend email')
+      } else {
+        toast.success('Verification email resent! Check your inbox.')
+      }
+    } finally {
+      setResending(false)
     }
   }
 
@@ -79,9 +99,7 @@ function SignupContent() {
     setLoading(true)
     try {
       const { error } = await signInWithOAuth('google', redirect)
-      if (error) {
-        toast.error(error.message || 'Failed to sign up with Google')
-      }
+      if (error) toast.error(error.message || 'Failed to sign up with Google')
     } catch (err: any) {
       toast.error(err.message || 'An error occurred')
     } finally {
@@ -89,6 +107,57 @@ function SignupContent() {
     }
   }
 
+  // ── Verification sent screen ────────────────────────────────────────────────
+  if (verificationSent) {
+    return (
+      <div className="flex flex-col min-h-screen bg-gray-50">
+        <Header />
+        <main className="flex-1 flex items-center justify-center py-12 px-4">
+          <div className="w-full max-w-md">
+            <div className="card p-8 text-center">
+              <div className="flex justify-center mb-4">
+                <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
+                  <CheckCircle size={36} className="text-green-500" />
+                </div>
+              </div>
+              <h1 className="text-2xl font-bold mb-2">Check your email</h1>
+              <p className="text-gray-600 mb-1">
+                We sent a verification link to
+              </p>
+              <p className="font-semibold text-gray-900 mb-6">{email}</p>
+              <p className="text-sm text-gray-500 mb-8">
+                Click the link in the email to verify your account. After verifying, you can sign in normally.
+                The link expires in 24 hours.
+              </p>
+
+              <button
+                onClick={handleResend}
+                disabled={resending}
+                className="w-full mb-4 px-4 py-3 border-2 border-secondary-500 rounded-lg font-semibold hover:bg-secondary-50 transition-smooth flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                <RefreshCw size={16} className={resending ? 'animate-spin' : ''} />
+                {resending ? 'Sending...' : 'Resend verification email'}
+              </button>
+
+              <Link
+                href={`/login?redirect=${encodeURIComponent(redirect)}`}
+                className="block text-sm text-secondary-600 hover:underline"
+              >
+                Already verified? Sign in
+              </Link>
+            </div>
+
+            <p className="text-center text-xs text-gray-400 mt-4">
+              Check your spam folder if you don&apos;t see it within a few minutes.
+            </p>
+          </div>
+        </main>
+        <Footer />
+      </div>
+    )
+  }
+
+  // ── Sign up form ────────────────────────────────────────────────────────────
   return (
     <div className="flex flex-col min-h-screen bg-gray-50">
       <Header />
@@ -112,10 +181,15 @@ function SignupContent() {
             <button
               onClick={handleGoogleSignup}
               disabled={loading}
-              className="w-full mb-6 px-4 py-3 bg-white border-2 border-gray-300 rounded-lg hover:border-secondary-500 transition-smooth flex items-center justify-center gap-2 font-semibold"
+              className="w-full mb-6 px-4 py-3 bg-white border-2 border-gray-300 rounded-lg hover:border-secondary-500 transition-smooth flex items-center justify-center gap-2 font-semibold disabled:opacity-50"
             >
-              <span className="text-xl">🔐</span>
-              Sign up with Google
+              <svg width="20" height="20" viewBox="0 0 24 24">
+                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/>
+                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+              </svg>
+              Continue with Google
             </button>
 
             {/* Divider */}
@@ -130,7 +204,6 @@ function SignupContent() {
 
             {/* Sign Up Form */}
             <form onSubmit={handleEmailSignup} className="space-y-4">
-              {/* Full Name */}
               <div>
                 <label className="block text-sm font-semibold mb-2">Full Name</label>
                 <div className="relative">
@@ -139,13 +212,13 @@ function SignupContent() {
                     type="text"
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
-                    placeholder="John Doe"
+                    placeholder="First Last"
                     className="input-field pl-10"
+                    required
                   />
                 </div>
               </div>
 
-              {/* Email */}
               <div>
                 <label className="block text-sm font-semibold mb-2">Email</label>
                 <div className="relative">
@@ -161,7 +234,6 @@ function SignupContent() {
                 </div>
               </div>
 
-              {/* Password */}
               <div>
                 <label className="block text-sm font-semibold mb-2">Password</label>
                 <div className="relative">
@@ -177,7 +249,6 @@ function SignupContent() {
                 </div>
               </div>
 
-              {/* Confirm Password */}
               <div>
                 <label className="block text-sm font-semibold mb-2">Confirm Password</label>
                 <div className="relative">
@@ -186,40 +257,31 @@ function SignupContent() {
                     type="password"
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
-                    placeholder="Confirm your password"
+                    placeholder="Repeat your password"
                     className="input-field pl-10"
                     required
                   />
                 </div>
               </div>
 
-              {/* Submit Button */}
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full btn-primary flex items-center justify-center gap-2"
+                className="w-full btn-primary flex items-center justify-center gap-2 disabled:opacity-50"
               >
                 <UserPlus size={20} />
                 {loading ? 'Creating Account...' : 'Create Account'}
               </button>
             </form>
 
-            {/* Sign In Link */}
             <div className="mt-6 pt-6 border-t border-gray-200 text-center">
               <p className="text-gray-600">
                 Already have an account?{' '}
-                <Link href="/login" className="text-secondary-500 font-semibold hover:underline">
+                <Link href={`/login?redirect=${encodeURIComponent(redirect)}`} className="text-secondary-500 font-semibold hover:underline">
                   Sign in
                 </Link>
               </p>
             </div>
-          </div>
-
-          {/* Info Box */}
-          <div className="mt-6 bg-blue-50 border-l-4 border-blue-500 p-4 rounded">
-            <p className="text-sm text-gray-700">
-              <span className="font-semibold">Demo Account:</span> Use any email. Password must be at least 6 characters. Your email will be autofilled on booking forms.
-            </p>
           </div>
         </div>
       </main>
