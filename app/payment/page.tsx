@@ -80,7 +80,7 @@ function PaymentContent() {
         key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
         amount: Math.round(paymentAmount * 100),
         currency: 'INR',
-        name: 'TaxiHollongi',
+        name: "Rina's Tours and Travels",
         description: `${bookingType === 'tour' ? 'Tour Package' : 'Taxi'} Booking`,
         order_id: orderData.orderId,
         handler: async (response: any) => {

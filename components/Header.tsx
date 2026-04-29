@@ -3,6 +3,7 @@ import { Menu, X, User, LogOut } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { useAuth } from '@/context/AuthContext'
 import { useRouter } from 'next/navigation'
+import Logo from '@/components/Logo'
 
 export default function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
@@ -24,9 +25,8 @@ export default function Header() {
       <div className="container mx-auto px-4">
         <div className="flex justify-between items-center py-4">
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-2 text-2xl font-bold">
-            <span className="text-3xl">🚖</span>
-            <span className="text-secondary-500">TaxiHollongi</span>
+          <Link href="/" className="flex items-center">
+            <Logo size="md" showName nameClass="text-secondary-500 text-lg" />
           </Link>
 
           {/* Desktop Navigation */}

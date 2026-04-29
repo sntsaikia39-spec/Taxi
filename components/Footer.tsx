@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { Mail, Phone, MapPin } from 'lucide-react'
+import Logo from '@/components/Logo'
 
 export default function Footer() {
   return (
@@ -8,10 +9,10 @@ export default function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
           {/* Brand */}
           <div>
-            <h3 className="text-2xl font-bold text-secondary-500 mb-4">
-              🚖 TaxiHollongi
-            </h3>
-            <p className="text-sm">
+            <div className="mb-4">
+              <Logo size="lg" showName nameClass="text-secondary-500 text-xl" />
+            </div>
+            <p className="text-sm mt-2">
               Your trusted airport taxi and tour booking platform. Safe, reliable, and transparent pricing.
             </p>
           </div>
@@ -76,8 +77,8 @@ export default function Footer() {
             <ul className="space-y-3 text-sm">
               <li className="flex items-center gap-2">
                 <Mail size={16} className="text-secondary-500" />
-                <a href="mailto:support@taxihollongi.com" className="hover:text-secondary-500 transition-smooth">
-                  support@taxihollongi.com
+                <a href="mailto:support@rinastoursandtravels.com" className="hover:text-secondary-500 transition-smooth">
+                  support@rinastoursandtravels.com
                 </a>
               </li>
               <li className="flex items-center gap-2">
@@ -114,7 +115,7 @@ export default function Footer() {
 
           {/* Copyright */}
           <div className="text-center text-xs text-gray-500">
-            <p>&copy; 2024 TaxiHollongi. All rights reserved.</p>
+            <p>&copy; 2026 Rina&apos;s Tours and Travels. All rights reserved.</p>
             <p className="mt-2">Made with ❤️ for safe and reliable airport transportation</p>
           </div>
         </div>

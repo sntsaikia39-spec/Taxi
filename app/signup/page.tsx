@@ -8,6 +8,7 @@ import Header from '@/components/Header'
 import Footer from '@/components/Footer'
 import { Mail, Lock, User as UserIcon, UserPlus } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { validateFullName, validateEmail, validatePassword } from '@/lib/validation'
 
 function SignupContent() {
   const router = useRouter()
@@ -97,9 +98,14 @@ function SignupContent() {
           <div className="card p-5 md:p-8">
             {/* Header */}
             <div className="text-center mb-6 md:mb-8">
-              <div className="text-3xl md:text-4xl mb-3 md:mb-4">🚖</div>
+              <div className="flex justify-center mb-3 md:mb-4">
+                <svg viewBox="0 0 100 100" width="56" height="56" xmlns="http://www.w3.org/2000/svg" className="rounded-full shadow">
+                  <circle cx="50" cy="50" r="50" fill="#ffda00"/>
+                  <text x="50" y="67" textAnchor="middle" fontFamily="Georgia,serif" fontWeight="bold" fontSize="52" fill="#1a1a2e">R</text>
+                </svg>
+              </div>
               <h1 className="text-2xl md:text-3xl font-bold mb-2">Create Account</h1>
-              <p className="text-gray-600">Join TaxiHollongi today</p>
+              <p className="text-gray-600">Join Rina&apos;s Tours and Travels today</p>
             </div>
 
             {/* Google Sign Up */}

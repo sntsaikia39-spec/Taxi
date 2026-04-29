@@ -274,7 +274,7 @@ function BookingConfirmedContent() {
             <p className="text-sm text-gray-700">
               If you have any questions or need to modify your booking, contact our support team at:
               <br />
-              <strong>📧 support@taxihollongi.com</strong> | <strong>📞 +91 98765 43210</strong>
+              <strong>📧 support@rinastoursandtravels.com</strong> | <strong>📞 +91 98765 43210</strong>
             </p>
           </div>
         </div>

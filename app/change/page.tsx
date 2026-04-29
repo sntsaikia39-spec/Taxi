@@ -45,7 +45,7 @@ export default function ChangelogPage() {
           <span>cat changelog.md</span>
         </div>
         <div className="text-gray-500 text-xs">
-          TaxiHollongi Changelog - {new Date().toLocaleString()}
+          Rina&apos;s Tours and Travels — Changelog - {new Date().toLocaleString()}
         </div>
       </div>
 

@@ -196,7 +196,7 @@ export default function Tours() {
                 <p className="text-gray-700">
                   Don't see what you're looking for? We can customize tours based on your preferences.
                   <br />
-                  <span className="text-sm">Contact us at support@taxihollongi.com for custom packages.</span>
+                  <span className="text-sm">Contact us at support@rinastoursandtravels.com for custom packages.</span>
                 </p>
               </div>
             </>
