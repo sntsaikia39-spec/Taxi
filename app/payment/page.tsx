@@ -25,10 +25,10 @@ function PaymentContent() {
   const [paymentData, setPaymentData] = useState<any>(null)
 
   useEffect(() => {
-    // Load booking data from session
-    const taxiData = sessionStorage.getItem('bookingData')
-    const tourData = sessionStorage.getItem('tourBookingData')
-    const data = taxiData ? JSON.parse(taxiData) : tourData ? JSON.parse(tourData) : null
+    // Use the bookingType from URL to load the correct session key
+    const storageKey = bookingType === 'tour' ? 'tourBookingData' : 'bookingData'
+    const raw = sessionStorage.getItem(storageKey)
+    const data = raw ? JSON.parse(raw) : null
 
     if (data) {
       setBookingData(data)

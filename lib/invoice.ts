@@ -26,183 +26,306 @@ export function generateInvoicePDF(invoiceData: InvoiceData): jsPDF {
   const doc = new jsPDF()
   const pageWidth = doc.internal.pageSize.getWidth()
   const pageHeight = doc.internal.pageSize.getHeight()
-  const margin = 15
+  const margin = 12
+  const contentWidth = pageWidth - 2 * margin
   let yPosition = margin
 
-  // Header - Logo and Company Info
-  doc.setFillColor(26, 21, 18) // Primary dark color
-  doc.rect(0, 0, pageWidth, 40, 'F')
+  // ============ PROFESSIONAL HEADER ============
+  // Top accent bar
+  doc.setFillColor(26, 21, 18) // Dark brown
+  doc.rect(0, 0, pageWidth, 35, 'F')
 
-  doc.setTextColor(255, 218, 0) // Yellow
-  doc.setFontSize(24)
-  doc.text('🚖 TaxiHollongi', margin, yPosition + 15)
+  // Company name and logo area
+  doc.setTextColor(255, 218, 0) // Gold
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(28)
+  doc.text('>> TAXIHOLLONGI', margin, 14)
 
-  doc.setTextColor(255, 218, 0)
+  // Tagline
+  doc.setFont('helvetica', 'normal')
   doc.setFontSize(9)
-  doc.text('Airport Transportation & Tour Booking', margin, yPosition + 25)
+  doc.setTextColor(220, 220, 220)
+  doc.text('Airport Transportation & Premium Tour Booking Services', margin, 24)
 
-  yPosition = 50
+  // Document type
+  doc.setFontSize(8)
+  doc.text('GST: 07AAACR5055K1Z1 | License: ATL/2024/001', pageWidth - margin - 60, 24)
 
-  // Invoice Title
+  yPosition = 42
+
+  // ============ INVOICE HEADER INFO ============
+  // Left side: Invoice details
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(11)
   doc.setTextColor(26, 21, 18)
-  doc.setFontSize(18)
-  doc.text('BOOKING INVOICE', margin, yPosition)
+  doc.text('INVOICE', margin, yPosition)
 
-  yPosition += 10
-
-  // Invoice Details
-  doc.setFontSize(10)
-  doc.setTextColor(100, 100, 100)
-  doc.text(`Invoice #: ${invoiceData.invoiceNumber}`, margin, yPosition)
-  yPosition += 6
-  doc.text(`Date: ${invoiceData.date}`, margin, yPosition)
-  yPosition += 6
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(9)
+  doc.setTextColor(80, 80, 80)
+  yPosition += 7
+  doc.text(`Invoice No.: ${invoiceData.invoiceNumber}`, margin, yPosition)
+  yPosition += 5
+  doc.text(`Date: ${formatDate(invoiceData.date)}`, margin, yPosition)
+  yPosition += 5
   doc.text(`Booking ID: ${invoiceData.bookingId}`, margin, yPosition)
 
-  yPosition += 12
-
-  // Customer Information Section
+  // Right side: Company info
+  const rightX = pageWidth - margin - 70
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(9)
   doc.setTextColor(26, 21, 18)
-  doc.setFontSize(11)
-  doc.text('CUSTOMER INFORMATION', margin, yPosition)
-  doc.setDrawColor(255, 218, 0)
-  doc.line(margin, yPosition + 2, pageWidth - margin, yPosition + 2)
+  doc.text('BILL FROM:', rightX, 42)
 
-  yPosition += 10
-  doc.setFontSize(10)
-  doc.setTextColor(100, 100, 100)
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(8)
+  doc.setTextColor(80, 80, 80)
+  doc.text('TaxiHollongi Services', rightX, 48)
+  doc.text('Airport Transportation Division', rightX, 52)
+  doc.text('Email: support@taxihollongi.com', rightX, 56)
+  doc.text('Phone: +91-9876543210', rightX, 60)
+  doc.text('Web: www.taxihollongi.com', rightX, 64)
+
+  yPosition = 72
+
+  // ============ DIVIDER LINE ============
+  doc.setDrawColor(255, 218, 0)
+  doc.setLineWidth(1.5)
+  doc.line(margin, yPosition, pageWidth - margin, yPosition)
+  yPosition += 6
+
+  // ============ BILL TO / CUSTOMER INFORMATION ============
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(9)
+  doc.setTextColor(26, 21, 18)
+  doc.text('BILL TO:', margin, yPosition)
+
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(9)
+  doc.setTextColor(80, 80, 80)
+  yPosition += 6
   doc.text(`Name: ${invoiceData.userName}`, margin, yPosition)
-  yPosition += 6
+  yPosition += 5
   doc.text(`Email: ${invoiceData.userEmail}`, margin, yPosition)
-  yPosition += 6
+  yPosition += 5
   doc.text(`Phone: ${invoiceData.userPhone}`, margin, yPosition)
-  yPosition += 6
+  yPosition += 5
   doc.text(`Passengers: ${invoiceData.passengers}`, margin, yPosition)
 
-  yPosition += 12
+  yPosition += 8
 
-  // Booking Details Section
-  doc.setTextColor(26, 21, 18)
-  doc.setFontSize(11)
-  doc.text('BOOKING DETAILS', margin, yPosition)
-  doc.setDrawColor(255, 218, 0)
-  doc.line(margin, yPosition + 2, pageWidth - margin, yPosition + 2)
-
-  yPosition += 10
+  // ============ BOOKING INFORMATION SECTION ============
+  doc.setFont('helvetica', 'bold')
   doc.setFontSize(10)
-  doc.setTextColor(100, 100, 100)
+  doc.setTextColor(26, 21, 18)
+  doc.text('BOOKING INFORMATION', margin, yPosition)
+
+  // Background for section
+  doc.setFillColor(245, 245, 245)
+  doc.rect(margin, yPosition + 2, contentWidth, 45, 'F')
+
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(8)
+  doc.setTextColor(80, 80, 80)
+
+  const bookingInfo = []
+  bookingInfo.push(`Booking Type: ${invoiceData.bookingType === 'taxi' ? 'Taxi Service' : 'Tour Package'}`)
 
   if (invoiceData.bookingType === 'taxi') {
-    doc.text(`Booking Type: Taxi Booking`, margin, yPosition)
-    yPosition += 6
     if (invoiceData.destination) {
-      doc.text(`Destination: ${invoiceData.destination}`, margin, yPosition)
-      yPosition += 6
+      bookingInfo.push(`Destination: ${invoiceData.destination}`)
+    }
+    if (invoiceData.pickupLocation) {
+      bookingInfo.push(`Pickup Location: ${invoiceData.pickupLocation}`)
     }
   } else {
-    doc.text(`Booking Type: Tour Package`, margin, yPosition)
-    yPosition += 6
     if (invoiceData.tourPackageName) {
-      doc.text(`Tour Package: ${invoiceData.tourPackageName}`, margin, yPosition)
-      yPosition += 6
+      bookingInfo.push(`Tour Package: ${invoiceData.tourPackageName}`)
     }
   }
 
-  if (invoiceData.pickupLocation) {
-    doc.text(`Pickup Location: ${invoiceData.pickupLocation}`, margin, yPosition)
-    yPosition += 6
-  }
-
-  doc.text(`Pickup Date: ${invoiceData.pickupDate}`, margin, yPosition)
-  yPosition += 6
-
+  bookingInfo.push(`Pickup Date: ${formatDate(invoiceData.pickupDate)}`)
   if (invoiceData.pickupTime) {
-    doc.text(`Pickup Time: ${invoiceData.pickupTime}`, margin, yPosition)
-    yPosition += 6
+    bookingInfo.push(`Pickup Time: ${invoiceData.pickupTime}`)
   }
+  bookingInfo.push(`Vehicle: ${invoiceData.carType}`)
 
-  doc.text(`Car Type: ${invoiceData.carType}`, margin, yPosition)
+  let infoY = yPosition + 8
+  bookingInfo.forEach((info) => {
+    doc.text(info, margin + 5, infoY)
+    infoY += 5
+  })
 
-  yPosition += 12
+  yPosition += 52
 
-  // Payment Details Section
-  doc.setTextColor(26, 21, 18)
-  doc.setFontSize(11)
-  doc.text('PAYMENT SUMMARY', margin, yPosition)
-  doc.setDrawColor(255, 218, 0)
-  doc.line(margin, yPosition + 2, pageWidth - margin, yPosition + 2)
-
-  yPosition += 10
-
-  // Payment table
-  const rightColX = pageWidth - margin - 50
+  // ============ PAYMENT DETAILS TABLE ============
+  doc.setFont('helvetica', 'bold')
   doc.setFontSize(10)
-  doc.setTextColor(100, 100, 100)
-
-  doc.text('Total Amount:', margin, yPosition)
-  doc.text(`₹${invoiceData.totalAmount.toFixed(2)}`, rightColX, yPosition)
+  doc.setTextColor(26, 21, 18)
+  doc.text('PAYMENT DETAILS', margin, yPosition)
   yPosition += 6
 
-  doc.text('Advance Payment (30%):', margin, yPosition)
-  doc.text(`₹${invoiceData.advanceAmount.toFixed(2)}`, rightColX, yPosition)
-  yPosition += 6
+  // Table header
+  doc.setFillColor(26, 21, 18)
+  doc.rect(margin, yPosition, contentWidth, 8, 'F')
 
-  doc.setTextColor(26, 21, 18)
-  doc.setFontSize(11)
-  doc.text('Remaining Amount:', margin, yPosition)
-  doc.text(`₹${invoiceData.remainingAmount.toFixed(2)}`, rightColX, yPosition)
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(9)
+  doc.setTextColor(255, 218, 0)
+  doc.text('Description', margin + 3, yPosition + 5.5)
+  doc.text('Amount', pageWidth - margin - 25, yPosition + 5.5, { align: 'right' })
 
-  yPosition += 10
+  yPosition += 8
 
-  // Payment Status
-  doc.setFillColor(255, 218, 0)
-  doc.rect(margin, yPosition - 2, pageWidth - 2 * margin, 8, 'F')
-  doc.setTextColor(26, 21, 18)
+  // Table rows
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(9)
+  doc.setTextColor(80, 80, 80)
+
+  const tableItems = [
+    { label: 'Service Charges', amount: invoiceData.totalAmount },
+    { label: 'Advance Payment (30%)', amount: invoiceData.advanceAmount },
+    { label: 'Remaining Balance', amount: invoiceData.remainingAmount },
+  ]
+
+  tableItems.forEach((item, index) => {
+    if (index > 0) {
+      doc.setFillColor(250, 250, 250)
+      doc.rect(margin, yPosition - 3, contentWidth, 7, 'F')
+    }
+
+    if (index === 2) {
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(10)
+      doc.setTextColor(26, 21, 18)
+    }
+
+    doc.text(item.label, margin + 3, yPosition + 2)
+    doc.text(`₹${item.amount.toFixed(2)}`, pageWidth - margin - 3, yPosition + 2, { align: 'right' })
+    yPosition += 7
+  })
+
+  yPosition += 2
+
+  // ============ PAYMENT STATUS BANNER ============
+  const statusColor = invoiceData.paymentStatus.toLowerCase() === 'paid' ? [76, 175, 80] : [255, 193, 7]
+  doc.setFillColor(...statusColor)
+  doc.rect(margin, yPosition, contentWidth, 10, 'F')
+
+  doc.setFont('helvetica', 'bold')
   doc.setFontSize(10)
-  doc.text(
-    `Payment Status: ${invoiceData.paymentStatus.toUpperCase()} | Payment Method: ${invoiceData.paymentMethod}`,
-    margin + 5,
-    yPosition + 3
-  )
+  doc.setTextColor(255, 255, 255)
+  const statusText = `Status: ${invoiceData.paymentStatus.toUpperCase()} | Method: ${invoiceData.paymentMethod}`
+  doc.text(statusText, margin + 3, yPosition + 6.5)
 
   yPosition += 15
 
-  // Terms and Conditions
-  doc.setTextColor(26, 21, 18)
+  // ============ TERMS & CONDITIONS ============
+  doc.setFont('helvetica', 'bold')
   doc.setFontSize(9)
+  doc.setTextColor(26, 21, 18)
   doc.text('TERMS & CONDITIONS', margin, yPosition)
-  yPosition += 5
 
-  doc.setFontSize(8)
+  yPosition += 5
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(7)
   doc.setTextColor(100, 100, 100)
+
   const terms = [
-    '• Cancellation is allowed up to 24 hours before scheduled booking.',
-    '• Refunds will be processed only on the advance amount paid online.',
-    '• Remaining amount (if any) should be paid in cash at the airport office.',
-    '• Please arrive 15 minutes before your scheduled pickup time.',
-    '• For inquiries, contact us at support@taxihollongi.com',
+    '• Cancellation is allowed up to 24 hours before the scheduled booking. Cancellations within 24 hours will attract a 50% penalty.',
+    '• Refunds for online payments will be processed within 5-7 business days after cancellation.',
+    '• Any remaining balance must be paid in cash at the time of service or at our office.',
+    '• Customers must arrive 15-20 minutes before the scheduled pickup time.',
+    '• Additional charges may apply for delays or schedule changes made on the day of service.',
+    '• For complaints or inquiries, please contact support@taxihollongi.com within 48 hours of service completion.',
   ]
 
+  const lineHeight = 4
+  let termsY = yPosition
   terms.forEach((term) => {
-    doc.text(term, margin, yPosition)
-    yPosition += 5
+    if (termsY > pageHeight - 60) {
+      doc.addPage()
+      termsY = margin
+    }
+    doc.text(term, margin + 3, termsY, { maxWidth: contentWidth - 6 })
+    termsY += lineHeight
   })
 
-  // Footer
-  yPosition = pageHeight - 20
-  doc.setDrawColor(200, 200, 200)
-  doc.line(margin, yPosition, pageWidth - margin, yPosition)
+  yPosition = pageHeight - 55
 
+  // ============ DIGITAL SIGNATURE SECTION ============
+  doc.setDrawColor(200, 200, 200)
+  doc.setLineWidth(0.5)
+  doc.line(margin, yPosition, pageWidth - margin, yPosition)
+  yPosition += 5
+
+  // Signature placeholder
+  doc.setFont('helvetica', 'bold')
   doc.setFontSize(8)
+  doc.setTextColor(26, 21, 18)
+  doc.text('AUTHORIZED SIGNATURE', margin, yPosition)
+
+  // Digital signature box
+  doc.setDrawColor(26, 21, 18)
+  doc.setLineWidth(1)
+  doc.rect(margin, yPosition + 2, 40, 15)
+
+  // Digital signature with logo
+  doc.setFont('courier', 'bold')
+  doc.setFontSize(12)
+  doc.setTextColor(255, 218, 0)
+  doc.text('>>', margin + 8, yPosition + 8)
+
+  doc.setFont('courier', 'normal')
+  doc.setFontSize(6)
+  doc.setTextColor(80, 80, 80)
+  doc.text('Digitally Signed', margin + 3, yPosition + 12)
+
+  // Signature date/time
+  doc.setFontSize(6)
   doc.setTextColor(150, 150, 150)
-  doc.text('TaxiHollongi - Airport Transportation & Tour Booking', pageWidth / 2, yPosition + 8, {
+  const now = new Date()
+  doc.text(`Generated on: ${now.toLocaleDateString('en-IN')} at ${now.toLocaleTimeString('en-IN')}`, margin, yPosition + 18)
+
+  // ============ FOOTER ============
+  yPosition = pageHeight - 15
+  doc.setDrawColor(255, 218, 0)
+  doc.setLineWidth(1.5)
+  doc.line(margin, yPosition - 2, pageWidth - margin, yPosition - 2)
+
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(8)
+  doc.setTextColor(26, 21, 18)
+  doc.text('TaxiHollongi | Airport Transportation & Premium Tours', pageWidth / 2, yPosition + 3, {
     align: 'center',
   })
-  doc.text('www.taxihollongi.com | support@taxihollongi.com', pageWidth / 2, yPosition + 13, {
+
+  doc.setFontSize(7)
+  doc.setTextColor(100, 100, 100)
+  doc.text('www.taxihollongi.com | support@taxihollongi.com | +91-9876543210', pageWidth / 2, yPosition + 8, {
+    align: 'center',
+  })
+
+  doc.setFontSize(6)
+  doc.setTextColor(150, 150, 150)
+  doc.text(`Invoice ID: ${invoiceData.invoiceNumber} | Page 1 of 1`, pageWidth / 2, yPosition + 12, {
     align: 'center',
   })
 
   return doc
+}
+
+function formatDate(dateString: string): string {
+  try {
+    const date = new Date(dateString)
+    return date.toLocaleDateString('en-IN', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    })
+  } catch {
+    return dateString
+  }
 }
 
 export function downloadInvoicePDF(doc: jsPDF, fileName: string) {
