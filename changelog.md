@@ -9,6 +9,7 @@ All notable changes to TaxiHollongi will be documented in this file.
 **Author:** Yami
 
 ### Changes
+- update: Car management updates, Driver notifications, destination_duration(bug) fixed
 - update: bookings confirmation email, driver assignment/reassignment email notifications
 - feat: email verification flow with cross-device auto-login
 

@@ -166,6 +166,33 @@ function bookingTypeLabel(type: string | null | undefined) {
   return type ?? '-'
 }
 
+function levenshtein(a: string, b: string): number {
+  const m = a.length, n = b.length
+  const dp: number[][] = Array.from({ length: m + 1 }, (_, i) => [i, ...Array(n).fill(0)])
+  for (let j = 0; j <= n; j++) dp[0][j] = j
+  for (let i = 1; i <= m; i++)
+    for (let j = 1; j <= n; j++)
+      dp[i][j] = a[i - 1] === b[j - 1]
+        ? dp[i - 1][j - 1]
+        : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1])
+  return dp[m][n]
+}
+
+function normalizeModel(s: string) {
+  return s.toLowerCase().replace(/\s+/g, ' ').trim()
+}
+
+function findSimilarModels(input: string, candidates: string[]): string[] {
+  const inputNorm = normalizeModel(input)
+  if (!inputNorm) return []
+  return candidates.filter(model => {
+    const modelNorm = normalizeModel(model)
+    if (modelNorm === inputNorm) return false
+    const threshold = Math.max(2, Math.floor(Math.min(inputNorm.length, modelNorm.length) * 0.3))
+    return levenshtein(inputNorm, modelNorm) <= threshold
+  })
+}
+
 export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState('overview')
   const [statusFilter, setStatusFilter] = useState('all')
@@ -193,6 +220,7 @@ export default function AdminDashboard() {
   const [scheduleFilterClass, setScheduleFilterClass] = useState('')
   const scheduleDateInputRef = useRef<HTMLInputElement>(null)
   const [showAddCar, setShowAddCar] = useState(false)
+  const [carModelWarning, setCarModelWarning] = useState<string[]>([])
   const [showAddDestination, setShowAddDestination] = useState(false)
   const [showAddTour, setShowAddTour] = useState(false)
   const [editingCar, setEditingCar] = useState<Car | null>(null)
@@ -832,6 +860,7 @@ export default function AdminDashboard() {
 
   const startEditCar = (car: Car) => {
     setEditingCar(car)
+    setCarModelWarning([])
     setFormData({
       model_name: car.model_name,
       class: car.class,
@@ -851,6 +880,7 @@ export default function AdminDashboard() {
 
   const cancelEdit = () => {
     setEditingCar(null)
+    setCarModelWarning([])
     setFormData({
       model_name: '',
       class: '',
@@ -1730,15 +1760,67 @@ export default function AdminDashboard() {
             {/* Car Details */}
             <div>
               <h4 className="text-lg font-semibold mb-4 text-gray-700">Car Details</h4>
+              {/* Datalist of existing model names for autocomplete */}
+              <datalist id="car-model-names">
+                {[...new Set(cars.map(c => c.model_name))].sort().map(name => (
+                  <option key={name} value={name} />
+                ))}
+              </datalist>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <input
-                  type="text"
-                  placeholder="Model Name (e.g., Toyota Innova)"
-                  className="input-field"
-                  value={formData.model_name}
-                  onChange={(e) => setFormData({ ...formData, model_name: e.target.value })}
-                  required
-                />
+                <div className="flex flex-col gap-1">
+                  <input
+                    type="text"
+                    list="car-model-names"
+                    placeholder="Model Name (e.g., Toyota Innova)"
+                    className="input-field"
+                    value={formData.model_name}
+                    onChange={(e) => {
+                      setFormData({ ...formData, model_name: e.target.value })
+                      setCarModelWarning([])
+                    }}
+                    onBlur={(e) => {
+                      const input = e.target.value.trim()
+                      if (!input) return
+                      const allModels = [...new Set(cars.map(c => c.model_name))]
+                      // When editing, exclude the car's own current model from warning
+                      const candidates = editingCar
+                        ? allModels.filter(m => normalizeModel(m) !== normalizeModel(editingCar.model_name))
+                        : allModels
+                      // No warning if the typed value exactly matches an existing model
+                      const exactMatch = allModels.some(m => normalizeModel(m) === normalizeModel(input))
+                      setCarModelWarning(exactMatch ? [] : findSimilarModels(input, candidates))
+                    }}
+                    required
+                  />
+                  {carModelWarning.length > 0 && (
+                    <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                      <p className="font-semibold mb-1">⚠ Similar model name{carModelWarning.length > 1 ? 's' : ''} already exist — did you mean:</p>
+                      <div className="flex flex-wrap gap-1.5 mt-1">
+                        {carModelWarning.map(name => (
+                          <button
+                            key={name}
+                            type="button"
+                            onClick={() => {
+                              setFormData(f => ({ ...f, model_name: name }))
+                              setCarModelWarning([])
+                            }}
+                            className="px-2 py-0.5 bg-amber-100 hover:bg-amber-200 border border-amber-400 rounded font-medium transition-colors"
+                          >
+                            {name}
+                          </button>
+                        ))}
+                        <button
+                          type="button"
+                          onClick={() => setCarModelWarning([])}
+                          className="px-2 py-0.5 text-amber-600 hover:text-amber-800 underline"
+                        >
+                          Keep what I typed
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
                 <input
                   type="text"
                   placeholder="Class (e.g., Premium, Economy, Luxury)"
