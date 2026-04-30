@@ -4,6 +4,14 @@ All notable changes to TaxiHollongi will be documented in this file.
 
 ---
 
+## [2026-04-30]
+
+**Author:** Yami
+
+### Changes
+- update: bookings confirmation email, driver assignment/reassignment email notifications
+- feat: email verification flow with cross-device auto-login
+
 ## [2026-04-29]
 
 **Author:** Yami

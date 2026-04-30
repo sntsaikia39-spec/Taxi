@@ -9,7 +9,7 @@ export async function GET() {
         id,
         name,
         distance_km,
-        estimated_duration,
+        estimated_duration_minutes,
         description,
         is_active,
         created_at
@@ -32,12 +32,19 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { name, distance_km, estimated_duration, description } = body
+    const { name, distance_km, estimated_duration_minutes, description } = body
 
-    // Validation
-    if (!name || !distance_km || !estimated_duration) {
+    if (!name || !distance_km || estimated_duration_minutes == null) {
       return NextResponse.json(
         { success: false, error: 'Missing required fields' },
+        { status: 400 }
+      )
+    }
+
+    const minutes = parseInt(String(estimated_duration_minutes))
+    if (isNaN(minutes) || minutes <= 0) {
+      return NextResponse.json(
+        { success: false, error: 'estimated_duration_minutes must be a positive integer' },
         { status: 400 }
       )
     }
@@ -46,7 +53,7 @@ export async function POST(request: NextRequest) {
       {
         name,
         distance_km: parseFloat(distance_km),
-        estimated_duration,
+        estimated_duration_minutes: minutes,
         description: description || null,
         is_active: true,
       },

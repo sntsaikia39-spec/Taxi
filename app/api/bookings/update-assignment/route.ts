@@ -1,5 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { sendVehicleAssignment } from '@/lib/resend-notifications'
+import { isValidEmail, sendAdminDriverEmailAlert, sendDriverAssignment, sendVehicleAssignment } from '@/lib/resend-notifications'
 
 export async function POST(request: Request) {
   try {
@@ -39,7 +39,7 @@ export async function POST(request: Request) {
     // Verify new car exists
     const { data: car, error: carError } = await supabaseAdmin
       .from('cars')
-      .select('id, model_name, number_plate, driver_name, driver_phone')
+      .select('id, model_name, number_plate, driver_name, driver_phone, driver_email')
       .eq('id', car_id)
       .single()
 
@@ -82,18 +82,20 @@ export async function POST(request: Request) {
 
     console.log('✅ Assignment updated successfully:', updatedAssignment)
 
+    // Fetch pickup details once — used by both customer and driver emails
+    const { data: bookingDetails } = await supabaseAdmin
+      .from('bookings')
+      .select('pickup_date, pickup_time, start_datetime, user_name, phone')
+      .eq('booking_id', booking_id)
+      .single()
+
+    const pickupDate = bookingDetails?.pickup_date
+      || (bookingDetails?.start_datetime ? bookingDetails.start_datetime.split('T')[0] : start_datetime?.split('T')[0])
+    const pickupTime = bookingDetails?.pickup_time
+      || (start_datetime ? new Date(start_datetime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : undefined)
+
+    // Send reassignment email to customer
     if (user_email) {
-      const { data: bookingDetails } = await supabaseAdmin
-        .from('bookings')
-        .select('pickup_date, pickup_time, start_datetime')
-        .eq('booking_id', booking_id)
-        .single()
-
-      const pickupDate = bookingDetails?.pickup_date
-        || (bookingDetails?.start_datetime ? bookingDetails.start_datetime.split('T')[0] : start_datetime?.split('T')[0])
-      const pickupTime = bookingDetails?.pickup_time
-        || (start_datetime ? new Date(start_datetime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : undefined)
-
       await sendVehicleAssignment({
         to: user_email,
         userName: user_name || 'Customer',
@@ -107,6 +109,53 @@ export async function POST(request: Request) {
         isReassignment: true,
       }).catch((err) => console.error('[EMAIL] Reassignment email error:', err))
     }
+
+    // Send reassignment notification to driver — gracefully handle bad email
+    ;(async () => {
+      const driverEmail = car.driver_email?.trim() || ''
+      if (!driverEmail) return
+
+      if (!isValidEmail(driverEmail)) {
+        console.warn(`[EMAIL] Driver email invalid format: "${driverEmail}" — notifying admin`)
+        await sendAdminDriverEmailAlert({
+          bookingId: booking_id,
+          driverName: car.driver_name,
+          driverEmail,
+          carModel: car.model_name,
+          numberPlate: car.number_plate,
+          reason: 'invalid_format',
+        }).catch((err) => console.error('[EMAIL] Admin driver alert error:', err))
+        return
+      }
+
+      const result = await sendDriverAssignment({
+        to: driverEmail,
+        driverName: car.driver_name,
+        bookingId: booking_id,
+        customerName: bookingDetails?.user_name || user_name || 'Customer',
+        customerPhone: bookingDetails?.phone || '',
+        pickupDate,
+        pickupTime,
+        vehicleModel: car.model_name,
+        numberPlate: car.number_plate,
+        isReassignment: true,
+      }).catch((err) => {
+        console.error('[EMAIL] Driver reassignment email error:', err)
+        return { success: false, error: err }
+      })
+
+      if (!result.success) {
+        console.warn(`[EMAIL] Driver email delivery failed for "${driverEmail}" — notifying admin`)
+        await sendAdminDriverEmailAlert({
+          bookingId: booking_id,
+          driverName: car.driver_name,
+          driverEmail,
+          carModel: car.model_name,
+          numberPlate: car.number_plate,
+          reason: 'send_failed',
+        }).catch((err) => console.error('[EMAIL] Admin driver alert error:', err))
+      }
+    })().catch((err) => console.error('[EMAIL] Driver email flow error:', err))
 
     return Response.json(
       {

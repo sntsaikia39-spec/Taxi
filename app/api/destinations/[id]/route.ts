@@ -23,12 +23,19 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
   try {
     const { id } = params
     const body = await request.json()
-    const { name, distance_km, estimated_duration, description } = body
+    const { name, distance_km, estimated_duration_minutes, description } = body
 
-    // Validation
-    if (!name || !distance_km || !estimated_duration) {
+    if (!name || !distance_km || estimated_duration_minutes == null) {
       return NextResponse.json(
         { success: false, error: 'Missing required fields' },
+        { status: 400 }
+      )
+    }
+
+    const minutes = parseInt(String(estimated_duration_minutes))
+    if (isNaN(minutes) || minutes <= 0) {
+      return NextResponse.json(
+        { success: false, error: 'estimated_duration_minutes must be a positive integer' },
         { status: 400 }
       )
     }
@@ -38,7 +45,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
       .update({
         name,
         distance_km: parseFloat(distance_km),
-        estimated_duration,
+        estimated_duration_minutes: minutes,
         description: description || null,
       })
       .eq('id', id)

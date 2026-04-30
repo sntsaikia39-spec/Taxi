@@ -261,6 +261,12 @@ export async function sendVehicleAssignment(data: VehicleAssignmentEmail) {
   return send(data.to, subject, shell(subject, preheader, body))
 }
 
+// ─── Email format validator ───────────────────────────────────────────────────
+
+export function isValidEmail(email: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim())
+}
+
 // ─── 4. Admin notification (new booking received) ────────────────────────────
 
 export async function sendAdminNotification(data: {
@@ -290,4 +296,95 @@ export async function sendAdminNotification(data: {
     </center>`
 
   return send(ADMIN_EMAIL, `New Booking: ${data.bookingId} — Action Required`, shell(`New Booking: ${data.bookingId}`, `New booking from ${data.userName} for ${inr(data.totalAmount)}.`, body))
+}
+
+// ─── 5. Driver assignment notification ───────────────────────────────────────
+
+export interface DriverAssignmentEmail {
+  to: string
+  driverName: string
+  bookingId: string
+  customerName: string
+  customerPhone: string
+  pickupDate: string
+  pickupTime?: string
+  vehicleModel: string
+  numberPlate: string
+  isReassignment?: boolean
+}
+
+export async function sendDriverAssignment(data: DriverAssignmentEmail) {
+  const title = data.isReassignment ? 'Trip Reassigned to You' : 'New Trip Assigned'
+  const body = `
+    <p style="margin:0 0 4px;font-size:22px;font-weight:700;color:#1a1a2e;">${title}</p>
+    <p style="margin:0 0 28px;font-size:15px;color:#6b7280;">Hi ${data.driverName}, you have been assigned a trip. Please review the details below.</p>
+
+    <p style="margin:0 0 12px;font-size:14px;font-weight:600;color:#1a1a2e;">Customer Details</p>
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
+      ${row('Name', data.customerName)}
+      ${row('Phone', `<a href="tel:${data.customerPhone}" style="color:#1a1a2e;">${data.customerPhone}</a>`)}
+    </table>
+
+    <p style="margin:0 0 12px;font-size:14px;font-weight:600;color:#1a1a2e;">Pickup Details</p>
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
+      ${row('Date', new Date(data.pickupDate).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' }))}
+      ${data.pickupTime ? row('Time', data.pickupTime) : ''}
+      ${row('Booking ID', `<span style="font-family:monospace;">${data.bookingId}</span>`)}
+    </table>
+
+    <p style="margin:0 0 12px;font-size:14px;font-weight:600;color:#1a1a2e;">Your Vehicle</p>
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
+      ${row('Model', data.vehicleModel)}
+      ${row('Registration', data.numberPlate)}
+    </table>
+
+    <p style="margin:0 0 0;padding:12px 16px;background:#eff6ff;border-left:4px solid #3b82f6;border-radius:4px;font-size:14px;color:#1e40af;">
+      Please be ready with the vehicle at least 15 minutes before the scheduled pickup time.
+    </p>`
+
+  const subject = data.isReassignment
+    ? `Trip Reassigned — ${data.bookingId} | ${BRAND_NAME}`
+    : `New Trip Assigned — ${data.bookingId} | ${BRAND_NAME}`
+
+  return send(data.to, subject, shell(subject, `Trip ${data.bookingId} assigned to you. Customer: ${data.customerName}.`, body))
+}
+
+// ─── 6. Admin alert — invalid driver email ────────────────────────────────────
+
+export async function sendAdminDriverEmailAlert(data: {
+  bookingId: string
+  driverName: string
+  driverEmail: string
+  carModel: string
+  numberPlate: string
+  reason: 'invalid_format' | 'send_failed'
+}) {
+  const reasonText = data.reason === 'invalid_format'
+    ? `The email address <strong>${data.driverEmail}</strong> is not a valid email format.`
+    : `An attempt to send to <strong>${data.driverEmail}</strong> failed (possibly undeliverable or rejected).`
+
+  const body = `
+    <p style="margin:0 0 4px;font-size:20px;font-weight:700;color:#1a1a2e;">⚠️ Driver Email Issue</p>
+    <p style="margin:0 0 24px;font-size:14px;color:#6b7280;">The driver notification for booking <strong>${data.bookingId}</strong> could not be delivered. The customer has already been notified.</p>
+
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
+      ${row('Booking ID', `<span style="font-family:monospace;">${data.bookingId}</span>`)}
+      ${row('Driver', data.driverName)}
+      ${row('Vehicle', `${data.carModel} (${data.numberPlate})`)}
+      ${row('Driver Email on File', `<span style="color:#dc2626;font-family:monospace;">${data.driverEmail || '(empty)'}</span>`)}
+    </table>
+
+    <p style="margin:0 0 24px;padding:12px 16px;background:#fef2f2;border-left:4px solid #dc2626;border-radius:4px;font-size:14px;color:#dc2626;">
+      ${reasonText} Please update the driver's email address in the admin panel.
+    </p>
+
+    <center>
+      <a href="${APP_URL}/admin" style="display:inline-block;background:#1a1a2e;color:#ffda00;font-size:14px;font-weight:700;text-decoration:none;padding:12px 32px;border-radius:8px;">Update Driver Email</a>
+    </center>`
+
+  return send(
+    ADMIN_EMAIL,
+    `Action Required: Invalid Driver Email — ${data.driverName} (${data.bookingId})`,
+    shell('Driver Email Issue', `Driver email for ${data.driverName} is invalid. Update needed.`, body)
+  )
 }

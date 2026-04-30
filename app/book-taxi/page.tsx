@@ -15,8 +15,16 @@ type Destination = {
   id: string
   name: string
   distance_km: number
-  estimated_duration: string
+  estimated_duration_minutes: number
   description: string | null
+}
+
+function formatDurationMinutes(minutes: number): string {
+  if (minutes < 60) return `${minutes} min${minutes !== 1 ? 's' : ''}`
+  const h = Math.floor(minutes / 60)
+  const m = minutes % 60
+  const hStr = `${h} hr${h !== 1 ? 's' : ''}`
+  return m === 0 ? hStr : `${hStr} ${m} mins`
 }
 
 // Represents a car model (not a specific car)
@@ -195,12 +203,9 @@ export default function BookTaxi() {
       let estimatedEndTime = startTime
       
       if (mode === 'airport' && selectedDest) {
-        // For airport bookings, add the destination's estimated duration
-        const durationStr = selectedDest.estimated_duration
-        const match = durationStr.match(/(\d+)\s*(?:hour|hr)s?/i)
-        const hours = match ? parseInt(match[1]) : 1
+        // For airport bookings, use the exact integer duration
         const [startHour, startMin] = startTime.split(':').map(Number)
-        const endMinutes = startHour * 60 + startMin + hours * 60
+        const endMinutes = startHour * 60 + startMin + selectedDest.estimated_duration_minutes
         const endHour = Math.floor(endMinutes / 60) % 24
         const endMin = endMinutes % 60
         estimatedEndTime = `${String(endHour).padStart(2, '0')}:${String(endMin).padStart(2, '0')}`
@@ -709,7 +714,7 @@ export default function BookTaxi() {
                       <div className="flex items-center justify-between">
                         <div>
                           <p className="font-semibold">{dest.name}</p>
-                          <p className="text-sm text-gray-600">{dest.distance_km} km · Est. {dest.estimated_duration}</p>
+                          <p className="text-sm text-gray-600">{dest.distance_km} km · Est. {formatDurationMinutes(dest.estimated_duration_minutes)}</p>
                           {dest.description && <p className="text-xs text-gray-500 mt-1">{dest.description}</p>}
                         </div>
                         <MapPin className="w-5 h-5 text-secondary-500 shrink-0 ml-3" />
@@ -761,7 +766,7 @@ export default function BookTaxi() {
                 <div className="mt-4 p-4 bg-blue-50 rounded-lg">
                   <p className="text-sm text-blue-800">
                     <strong>Destination:</strong> {selectedDest.name}<br/>
-                    <strong>Estimated trip duration:</strong> {selectedDest.estimated_duration}
+                    <strong>Estimated trip duration:</strong> {formatDurationMinutes(selectedDest.estimated_duration_minutes)}
                   </p>
                 </div>
               )}

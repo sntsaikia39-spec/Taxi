@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import Footer from '@/components/Footer'
 import toast from 'react-hot-toast'
 import type { Booking } from '@/lib/db'
@@ -39,10 +39,18 @@ type Destination = {
   id: string
   name: string
   distance_km: number
-  estimated_duration: string
+  estimated_duration_minutes: number
   description: string | null
   is_active: boolean
   created_at: string
+}
+
+function formatDurationMinutes(minutes: number): string {
+  if (minutes < 60) return `${minutes} min${minutes !== 1 ? 's' : ''}`
+  const h = Math.floor(minutes / 60)
+  const m = minutes % 60
+  const hStr = `${h} hr${h !== 1 ? 's' : ''}`
+  return m === 0 ? hStr : `${hStr} ${m} mins`
 }
 
 type DestinationsResponse = {
@@ -173,6 +181,17 @@ export default function AdminDashboard() {
   const [loadingDestinations, setLoadingDestinations] = useState(true)
   const [loadingTours, setLoadingTours] = useState(true)
   const [expandedBookingId, setExpandedBookingId] = useState<string | null>(null)
+  const [expandedCarId, setExpandedCarId] = useState<string | null>(null)
+  const [scheduleWeekOffset, setScheduleWeekOffset] = useState(0)
+  const [scheduleFocusDate, setScheduleFocusDate] = useState<string>('')
+  const [selectedScheduleAssignment, setSelectedScheduleAssignment] = useState<{ assignment: VehicleAssignment; booking: Booking | undefined; car: Car } | null>(null)
+  const [carSearchQuery, setCarSearchQuery] = useState('')
+  const [carFilterStatus, setCarFilterStatus] = useState<'all' | 'active' | 'inactive'>('all')
+  const [carFilterClass, setCarFilterClass] = useState('')
+  const [scheduleSearchQuery, setScheduleSearchQuery] = useState('')
+  const [scheduleFilterStatus, setScheduleFilterStatus] = useState<'all' | 'active' | 'inactive'>('all')
+  const [scheduleFilterClass, setScheduleFilterClass] = useState('')
+  const scheduleDateInputRef = useRef<HTMLInputElement>(null)
   const [showAddCar, setShowAddCar] = useState(false)
   const [showAddDestination, setShowAddDestination] = useState(false)
   const [showAddTour, setShowAddTour] = useState(false)
@@ -196,7 +215,8 @@ export default function AdminDashboard() {
   const [destinationData, setDestinationData] = useState({
     name: '',
     distance_km: '',
-    estimated_duration: '',
+    duration_hours: '',
+    duration_mins: '0',
     description: '',
   })
   const [tourData, setTourData] = useState({
@@ -562,8 +582,9 @@ export default function AdminDashboard() {
   const handleAddDestination = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!destinationData.name || !destinationData.distance_km || !destinationData.estimated_duration) {
-      toast.error('Please fill all required fields')
+    const durationMins = parseInt(destinationData.duration_hours || '0') * 60 + parseInt(destinationData.duration_mins || '0')
+    if (!destinationData.name || !destinationData.distance_km || durationMins <= 0) {
+      toast.error('Please fill all required fields including a valid duration')
       return
     }
 
@@ -571,7 +592,12 @@ export default function AdminDashboard() {
       const response = await fetch('/api/destinations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(destinationData),
+        body: JSON.stringify({
+          name: destinationData.name,
+          distance_km: destinationData.distance_km,
+          estimated_duration_minutes: durationMins,
+          description: destinationData.description,
+        }),
       })
 
       const result = await response.json()
@@ -581,7 +607,7 @@ export default function AdminDashboard() {
       }
 
       toast.success('Destination added successfully!')
-      setDestinationData({ name: '', distance_km: '', estimated_duration: '', description: '' })
+      setDestinationData({ name: '', distance_km: '', duration_hours: '', duration_mins: '0', description: '' })
       setShowAddDestination(false)
       loadDestinations()
     } catch (error) {
@@ -595,8 +621,9 @@ export default function AdminDashboard() {
 
     if (!editingDestination) return
 
-    if (!destinationData.name || !destinationData.distance_km || !destinationData.estimated_duration) {
-      toast.error('Please fill all required fields')
+    const durationMins = parseInt(destinationData.duration_hours || '0') * 60 + parseInt(destinationData.duration_mins || '0')
+    if (!destinationData.name || !destinationData.distance_km || durationMins <= 0) {
+      toast.error('Please fill all required fields including a valid duration')
       return
     }
 
@@ -604,7 +631,12 @@ export default function AdminDashboard() {
       const response = await fetch(`/api/destinations/${editingDestination.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(destinationData),
+        body: JSON.stringify({
+          name: destinationData.name,
+          distance_km: destinationData.distance_km,
+          estimated_duration_minutes: durationMins,
+          description: destinationData.description,
+        }),
       })
 
       const result = await response.json()
@@ -614,7 +646,7 @@ export default function AdminDashboard() {
       }
 
       toast.success('Destination updated successfully!')
-      setDestinationData({ name: '', distance_km: '', estimated_duration: '', description: '' })
+      setDestinationData({ name: '', distance_km: '', duration_hours: '', duration_mins: '0', description: '' })
       setEditingDestination(null)
       loadDestinations()
     } catch (error) {
@@ -650,7 +682,8 @@ export default function AdminDashboard() {
     setDestinationData({
       name: destination.name,
       distance_km: destination.distance_km.toString(),
-      estimated_duration: destination.estimated_duration,
+      duration_hours: String(Math.floor(destination.estimated_duration_minutes / 60)),
+      duration_mins: String(destination.estimated_duration_minutes % 60),
       description: destination.description || '',
     })
     setShowAddDestination(false)
@@ -658,7 +691,7 @@ export default function AdminDashboard() {
 
   const cancelEditDestination = () => {
     setEditingDestination(null)
-    setDestinationData({ name: '', distance_km: '', estimated_duration: '', description: '' })
+    setDestinationData({ name: '', distance_km: '', duration_hours: '', duration_mins: '0', description: '' })
     setShowAddDestination(false)
   }
 
@@ -1621,7 +1654,73 @@ export default function AdminDashboard() {
     </div>
   )
 
-  const renderCarManagement = () => (
+  const renderCarManagement = () => {
+    const scheduleWeekStart = (() => {
+      const d = new Date()
+      const day = d.getDay()
+      d.setDate(d.getDate() + (day === 0 ? -6 : 1 - day) + scheduleWeekOffset * 7)
+      d.setHours(0, 0, 0, 0)
+      return d
+    })()
+    const scheduleWeekEnd = new Date(scheduleWeekStart.getTime() + 7 * 24 * 60 * 60 * 1000)
+    const scheduleWeekDurationMs = scheduleWeekEnd.getTime() - scheduleWeekStart.getTime()
+    const scheduleDays = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(scheduleWeekStart)
+      d.setDate(d.getDate() + i)
+      return d
+    })
+
+    const handleScheduleDatePick = (dateStr: string) => {
+      if (!dateStr) { setScheduleFocusDate(''); return }
+      const picked = new Date(dateStr)
+      const todayMonday = new Date()
+      const dow = todayMonday.getDay()
+      todayMonday.setDate(todayMonday.getDate() + (dow === 0 ? -6 : 1 - dow))
+      todayMonday.setHours(0, 0, 0, 0)
+      const pickedMonday = new Date(picked)
+      const pdow = pickedMonday.getDay()
+      pickedMonday.setDate(pickedMonday.getDate() + (pdow === 0 ? -6 : 1 - pdow))
+      pickedMonday.setHours(0, 0, 0, 0)
+      const weeksDiff = Math.round((pickedMonday.getTime() - todayMonday.getTime()) / (7 * 24 * 60 * 60 * 1000))
+      setScheduleWeekOffset(weeksDiff)
+      setScheduleFocusDate(dateStr)
+    }
+
+    const carClasses = [...new Set(cars.map(c => c.class))].filter(Boolean).sort()
+    const filteredCars = cars.filter(car => {
+      if (carFilterStatus === 'active' && !car.is_active) return false
+      if (carFilterStatus === 'inactive' && car.is_active) return false
+      if (carFilterClass && car.class !== carFilterClass) return false
+      if (carSearchQuery.trim()) {
+        const q = carSearchQuery.toLowerCase()
+        return (
+          car.model_name.toLowerCase().includes(q) ||
+          car.driver_name.toLowerCase().includes(q) ||
+          car.number_plate.toLowerCase().includes(q) ||
+          car.driver_phone.includes(q)
+        )
+      }
+      return true
+    })
+    const hasActiveFilters = carSearchQuery.trim() || carFilterStatus !== 'all' || carFilterClass
+
+    const filteredScheduleCars = cars.filter(car => {
+      if (scheduleFilterStatus === 'active' && !car.is_active) return false
+      if (scheduleFilterStatus === 'inactive' && car.is_active) return false
+      if (scheduleFilterClass && car.class !== scheduleFilterClass) return false
+      if (scheduleSearchQuery.trim()) {
+        const q = scheduleSearchQuery.toLowerCase()
+        return (
+          car.model_name.toLowerCase().includes(q) ||
+          car.driver_name.toLowerCase().includes(q) ||
+          car.number_plate.toLowerCase().includes(q)
+        )
+      }
+      return true
+    })
+    const hasActiveScheduleFilters = scheduleSearchQuery.trim() || scheduleFilterStatus !== 'all' || scheduleFilterClass
+
+    return (
     <div className="space-y-8">
       {/* Add/Edit Car Form */}
       {(showAddCar || editingCar) && (
@@ -1767,15 +1866,61 @@ export default function AdminDashboard() {
           )}
         </div>
 
+        {/* Filters */}
+        {!loadingCars && cars.length > 0 && (
+          <div className="flex flex-wrap gap-3 mb-5 pb-5 border-b">
+            <input
+              type="text"
+              placeholder="Search model, driver, plate…"
+              value={carSearchQuery}
+              onChange={e => setCarSearchQuery(e.target.value)}
+              className="input-field !py-2 !text-sm flex-1 min-w-[180px]"
+            />
+            <select
+              value={carFilterClass}
+              onChange={e => setCarFilterClass(e.target.value)}
+              className="input-field !py-2 !text-sm w-auto"
+            >
+              <option value="">All Classes</option>
+              {carClasses.map(cls => (
+                <option key={cls} value={cls}>{cls}</option>
+              ))}
+            </select>
+            <select
+              value={carFilterStatus}
+              onChange={e => setCarFilterStatus(e.target.value as 'all' | 'active' | 'inactive')}
+              className="input-field !py-2 !text-sm w-auto"
+            >
+              <option value="all">All Status</option>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+            </select>
+            {hasActiveFilters && (
+              <button
+                onClick={() => { setCarSearchQuery(''); setCarFilterStatus('all'); setCarFilterClass('') }}
+                className="px-3 py-2 text-sm text-gray-500 hover:text-gray-700 border rounded-lg hover:bg-gray-50"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+        )}
+
         {loadingCars ? (
           <p className="text-gray-600">Loading cars...</p>
         ) : cars.length === 0 ? (
           <p className="text-gray-600">No cars available. Add a new car to get started.</p>
+        ) : filteredCars.length === 0 ? (
+          <p className="text-gray-500 text-sm py-4">No cars match the current filters.</p>
         ) : (
           <div className="overflow-x-auto">
+            <p className="text-xs text-gray-400 mb-3">
+              Showing {filteredCars.length} of {cars.length} car{cars.length !== 1 ? 's' : ''}
+            </p>
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b">
+                  <th className="text-left py-3 px-4 font-semibold w-8"></th>
                   <th className="text-left py-3 px-4 font-semibold">Model</th>
                   <th className="text-left py-3 px-4 font-semibold">Class</th>
                   <th className="text-left py-3 px-4 font-semibold">Number Plate</th>
@@ -1789,56 +1934,412 @@ export default function AdminDashboard() {
                 </tr>
               </thead>
               <tbody>
-                {cars.map((car) => (
-                  <tr key={car.id} className={`border-b hover:bg-gray-50 ${!car.is_active ? 'bg-gray-100 opacity-70' : ''}`}>
-                    <td className="py-3 px-4">{car.model_name}</td>
-                    <td className="py-3 px-4">{car.class}</td>
-                    <td className="py-3 px-4 font-mono">{car.number_plate}</td>
-                    <td className="py-3 px-4">{car.capacity} seats</td>
-                    <td className="py-3 px-4">Rs. {car.per_km_charge}</td>
-                    <td className="py-3 px-4">Rs. {car.per_hr_charge}</td>
-                    <td className="py-3 px-4">{car.driver_name}</td>
-                    <td className="py-3 px-4">{car.driver_phone}</td>
-                    <td className="py-3 px-4">
-                      <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                        car.is_active 
-                          ? 'bg-green-100 text-green-800' 
-                          : 'bg-red-100 text-red-800'
-                      }`}>
-                        {car.is_active ? 'Active' : 'Inactive'}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4">
-                      <div className="flex gap-2 flex-wrap">
-                        <button
-                          onClick={() => startEditCar(car)}
-                          className="text-sm text-secondary-500 hover:text-secondary-600"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => handleToggleCarActive(car)}
-                          className={`text-sm ${car.is_active ? 'text-orange-500 hover:text-orange-600' : 'text-green-500 hover:text-green-600'}`}
-                        >
-                          {car.is_active ? 'Deactivate' : 'Activate'}
-                        </button>
-                        <button
-                          onClick={() => handleDeleteCar(car.id)}
-                          className="text-sm text-red-500 hover:text-red-600"
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                {filteredCars.map((car) => {
+                  const isExpanded = expandedCarId === car.id
+                  return (
+                    <Fragment key={car.id}>
+                      <tr
+                        className={`border-b hover:bg-gray-50 cursor-pointer ${!car.is_active ? 'bg-gray-100 opacity-70' : ''}`}
+                        onClick={() => setExpandedCarId(isExpanded ? null : car.id)}
+                      >
+                        <td className="py-3 px-4 text-gray-400">
+                          <span className="text-xs">{isExpanded ? '▲' : '▼'}</span>
+                        </td>
+                        <td className="py-3 px-4 font-medium">{car.model_name}</td>
+                        <td className="py-3 px-4">{car.class}</td>
+                        <td className="py-3 px-4 font-mono">{car.number_plate}</td>
+                        <td className="py-3 px-4">{car.capacity} seats</td>
+                        <td className="py-3 px-4">Rs. {car.per_km_charge}</td>
+                        <td className="py-3 px-4">Rs. {car.per_hr_charge}</td>
+                        <td className="py-3 px-4">{car.driver_name}</td>
+                        <td className="py-3 px-4">{car.driver_phone}</td>
+                        <td className="py-3 px-4">
+                          <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                            car.is_active
+                              ? 'bg-green-100 text-green-800'
+                              : 'bg-red-100 text-red-800'
+                          }`}>
+                            {car.is_active ? 'Active' : 'Inactive'}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex gap-2 flex-wrap">
+                            <button
+                              onClick={() => startEditCar(car)}
+                              className="text-sm text-secondary-500 hover:text-secondary-600"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => handleToggleCarActive(car)}
+                              className={`text-sm ${car.is_active ? 'text-orange-500 hover:text-orange-600' : 'text-green-500 hover:text-green-600'}`}
+                            >
+                              {car.is_active ? 'Deactivate' : 'Activate'}
+                            </button>
+                            <button
+                              onClick={() => handleDeleteCar(car.id)}
+                              className="text-sm text-red-500 hover:text-red-600"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                      {isExpanded && (
+                        <tr key={`${car.id}-details`} className={`border-b ${!car.is_active ? 'bg-gray-100 opacity-70' : 'bg-gray-50'}`}>
+                          <td colSpan={11} className="px-6 py-4">
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                              <div>
+                                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Driver Email</p>
+                                <p className="text-gray-800">{car.driver_email || '—'}</p>
+                              </div>
+                              <div>
+                                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">License Number</p>
+                                <p className="text-gray-800 font-mono">{car.driver_license_number || '—'}</p>
+                              </div>
+                              <div>
+                                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">License Expiry</p>
+                                <p className="text-gray-800">
+                                  {car.driver_license_expiry
+                                    ? new Date(car.driver_license_expiry).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+                                    : '—'}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Driver Verified</p>
+                                <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                                  car.driver_verified ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                                }`}>
+                                  {car.driver_verified ? 'Verified' : 'Unverified'}
+                                </span>
+                              </div>
+                              <div>
+                                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Car ID</p>
+                                <p className="text-gray-500 font-mono text-xs">{car.id}</p>
+                              </div>
+                              <div>
+                                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Added On</p>
+                                <p className="text-gray-800">
+                                  {new Date(car.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                </p>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  )
+                })}
               </tbody>
             </table>
           </div>
         )}
       </div>
+
+      {/* Fleet Schedule Visualizer */}
+      <div className="bg-white rounded-lg shadow-lg p-8">
+        <div className="flex flex-wrap items-center justify-between gap-4 mb-5">
+          <div>
+            <h3 className="text-2xl font-bold">Fleet Schedule</h3>
+            <p className="text-sm text-gray-500 mt-0.5 font-medium">
+              {scheduleWeekStart.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+              {' – '}
+              {new Date(scheduleWeekEnd.getTime() - 1).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => { setScheduleWeekOffset(o => o - 1); setScheduleFocusDate('') }}
+              className="px-3 py-1.5 border rounded-lg text-sm hover:bg-gray-50"
+            >
+              ← Prev
+            </button>
+            <button
+              onClick={() => { setScheduleWeekOffset(0); setScheduleFocusDate('') }}
+              className="px-3 py-1.5 border rounded-lg text-sm hover:bg-gray-50 font-medium"
+            >
+              Today
+            </button>
+            <button
+              onClick={() => { setScheduleWeekOffset(o => o + 1); setScheduleFocusDate('') }}
+              className="px-3 py-1.5 border rounded-lg text-sm hover:bg-gray-50"
+            >
+              Next →
+            </button>
+            <div className="w-px h-6 bg-gray-200 mx-1" />
+            <button
+              type="button"
+              onClick={() => scheduleDateInputRef.current?.showPicker()}
+              className="flex items-center gap-1.5 text-sm text-gray-500 border rounded-lg px-3 py-1.5 hover:bg-gray-50"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+              {scheduleFocusDate
+                ? new Date(scheduleFocusDate + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+                : 'Jump to date'}
+            </button>
+            <input
+              ref={scheduleDateInputRef}
+              type="date"
+              value={scheduleFocusDate}
+              onChange={e => handleScheduleDatePick(e.target.value)}
+              className="sr-only"
+            />
+            {scheduleFocusDate && (
+              <button
+                onClick={() => setScheduleFocusDate('')}
+                className="text-xs text-gray-400 hover:text-gray-600 px-2 py-1.5 border rounded-lg hover:bg-gray-50"
+                title="Clear focus date"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <div style={{ minWidth: '700px' }}>
+            {/* Day headers */}
+            <div className="flex border-b pb-2 mb-1">
+              <div className="w-44 shrink-0" />
+              {scheduleDays.map((day, i) => {
+                const isToday = day.toDateString() === new Date().toDateString()
+                const isFocused = scheduleFocusDate
+                  ? day.toDateString() === new Date(scheduleFocusDate).toDateString()
+                  : false
+                return (
+                  <div
+                    key={i}
+                    className={`flex-1 text-center text-xs font-semibold py-1 rounded-t ${
+                      isFocused ? 'text-amber-700 bg-amber-50' :
+                      isToday   ? 'text-secondary-600' : 'text-gray-500'
+                    }`}
+                  >
+                    <div>{day.toLocaleDateString('en-IN', { weekday: 'short' })}</div>
+                    <div className={`text-base font-bold ${
+                      isFocused ? 'text-amber-700' :
+                      isToday   ? 'text-secondary-600' : 'text-gray-800'
+                    }`}>
+                      {day.getDate()}
+                    </div>
+                    {isFocused && <div className="text-xs font-medium mt-0.5">◀ selected</div>}
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Schedule filters */}
+            {cars.length > 0 && (
+              <div className="flex flex-wrap gap-2 py-3 border-b mb-1">
+                <input
+                  type="text"
+                  placeholder="Filter by model, driver, plate…"
+                  value={scheduleSearchQuery}
+                  onChange={e => setScheduleSearchQuery(e.target.value)}
+                  className="input-field !py-1.5 !text-xs flex-1 min-w-[160px]"
+                />
+                <select
+                  value={scheduleFilterClass}
+                  onChange={e => setScheduleFilterClass(e.target.value)}
+                  className="input-field !py-1.5 !text-xs w-auto"
+                >
+                  <option value="">All Classes</option>
+                  {carClasses.map(cls => (
+                    <option key={cls} value={cls}>{cls}</option>
+                  ))}
+                </select>
+                <select
+                  value={scheduleFilterStatus}
+                  onChange={e => setScheduleFilterStatus(e.target.value as 'all' | 'active' | 'inactive')}
+                  className="input-field !py-1.5 !text-xs w-auto"
+                >
+                  <option value="all">All</option>
+                  <option value="active">Active only</option>
+                  <option value="inactive">Inactive only</option>
+                </select>
+                {hasActiveScheduleFilters && (
+                  <button
+                    onClick={() => { setScheduleSearchQuery(''); setScheduleFilterStatus('all'); setScheduleFilterClass('') }}
+                    className="px-2 py-1.5 text-xs text-gray-400 hover:text-gray-600 border rounded-lg hover:bg-gray-50"
+                  >
+                    Clear
+                  </button>
+                )}
+                {hasActiveScheduleFilters && (
+                  <span className="self-center text-xs text-gray-400 ml-1">
+                    {filteredScheduleCars.length} of {cars.length} shown
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* Car rows */}
+            {cars.length === 0 ? (
+              <p className="text-gray-500 text-sm py-4">No cars to display.</p>
+            ) : filteredScheduleCars.length === 0 ? (
+              <p className="text-gray-500 text-sm py-4">No cars match the schedule filters.</p>
+            ) : filteredScheduleCars.map((car) => {
+              const carAssignments = vehicleAssignments.filter(a => a.car_id === car.id)
+              return (
+                <div key={car.id} className="flex items-stretch border-b last:border-0" style={{ minHeight: '60px' }}>
+                  {/* Car label */}
+                  <div className="w-44 shrink-0 py-3 pr-3 flex flex-col justify-center">
+                    <p className="font-semibold text-sm text-gray-900 leading-tight">{car.model_name}</p>
+                    <p className="text-xs text-gray-500 leading-tight">{car.driver_name}</p>
+                    <p className="text-xs font-mono text-gray-400 leading-tight">{car.number_plate}</p>
+                    {!car.is_active && (
+                      <span className="text-xs text-red-400 font-medium mt-0.5">Inactive</span>
+                    )}
+                  </div>
+                  {/* Timeline */}
+                  <div className="flex-1 relative" style={{ minHeight: '60px' }}>
+                    {/* Day grid columns */}
+                    {scheduleDays.map((day, i) => {
+                      const isToday = day.toDateString() === new Date().toDateString()
+                      const isFocused = scheduleFocusDate
+                        ? day.toDateString() === new Date(scheduleFocusDate).toDateString()
+                        : false
+                      return (
+                        <div
+                          key={i}
+                          className={`absolute top-0 bottom-0 border-l ${
+                            isFocused ? 'border-amber-300 bg-amber-50/50' :
+                            isToday   ? 'border-secondary-200 bg-secondary-50/40' : 'border-gray-100'
+                          }`}
+                          style={{ left: `${(i / 7) * 100}%`, width: `${(1 / 7) * 100}%` }}
+                        />
+                      )
+                    })}
+                    {/* Assignment blocks */}
+                    {carAssignments.map((assignment) => {
+                      const aStart = new Date(assignment.start_datetime)
+                      const aEnd = new Date(assignment.end_datetime)
+                      if (aEnd <= scheduleWeekStart || aStart >= scheduleWeekEnd) return null
+                      const clampedStart = Math.max(aStart.getTime(), scheduleWeekStart.getTime())
+                      const clampedEnd = Math.min(aEnd.getTime(), scheduleWeekEnd.getTime())
+                      const leftPct = (clampedStart - scheduleWeekStart.getTime()) / scheduleWeekDurationMs * 100
+                      const widthPct = (clampedEnd - clampedStart) / scheduleWeekDurationMs * 100
+                      if (widthPct < 0.3) return null
+                      const booking = bookings.find(b => b.booking_id === assignment.booking_id)
+                      const typeColor =
+                        booking?.booking_type === 'airport' ? 'bg-blue-500 hover:bg-blue-600' :
+                        booking?.booking_type === 'tour'    ? 'bg-emerald-500 hover:bg-emerald-600' :
+                                                             'bg-purple-500 hover:bg-purple-600'
+                      return (
+                        <button
+                          key={assignment.id}
+                          className={`absolute top-2 bottom-2 rounded text-white text-xs px-1.5 overflow-hidden text-left transition-colors shadow-sm ${typeColor}`}
+                          style={{ left: `calc(${leftPct}% + 1px)`, width: `calc(${widthPct}% - 2px)` }}
+                          onClick={() => setSelectedScheduleAssignment({ assignment, booking, car })}
+                          title={booking ? `${booking.user_name} · ${booking.booking_type}` : assignment.booking_id}
+                        >
+                          <span className="truncate block font-medium leading-tight">
+                            {booking?.user_name || assignment.booking_id}
+                          </span>
+                          <span className="truncate block opacity-80 leading-tight capitalize">
+                            {booking?.booking_type || ''}
+                          </span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )
+            })}
+
+            {/* Legend */}
+            <div className="flex gap-5 mt-5 pt-4 border-t text-xs text-gray-500">
+              <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-blue-500 inline-block" /> Airport</span>
+              <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-emerald-500 inline-block" /> Tour</span>
+              <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-purple-500 inline-block" /> Hourly</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Assignment detail popup */}
+      {selectedScheduleAssignment && (
+        <div
+          className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
+          onClick={() => setSelectedScheduleAssignment(null)}
+        >
+          <div
+            className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-sm"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between mb-4">
+              <h4 className="text-lg font-bold">Assignment Details</h4>
+              <button
+                onClick={() => setSelectedScheduleAssignment(null)}
+                className="text-gray-400 hover:text-gray-600 text-2xl leading-none"
+              >
+                &times;
+              </button>
+            </div>
+            <div className="space-y-3 text-sm">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-0.5">Vehicle</p>
+                  <p className="font-medium">{selectedScheduleAssignment.car.model_name}</p>
+                  <p className="text-gray-400 font-mono text-xs">{selectedScheduleAssignment.car.number_plate}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-0.5">Driver</p>
+                  <p className="font-medium">{selectedScheduleAssignment.car.driver_name}</p>
+                  <p className="text-gray-400 text-xs">{selectedScheduleAssignment.car.driver_phone}</p>
+                </div>
+              </div>
+              {selectedScheduleAssignment.booking ? (
+                <>
+                  <div>
+                    <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-0.5">Customer</p>
+                    <p className="font-medium">{selectedScheduleAssignment.booking.user_name}</p>
+                    <p className="text-gray-400 text-xs">{selectedScheduleAssignment.booking.phone}</p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-0.5">Type</p>
+                      <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${
+                        selectedScheduleAssignment.booking.booking_type === 'airport' ? 'bg-blue-100 text-blue-800' :
+                        selectedScheduleAssignment.booking.booking_type === 'tour'    ? 'bg-emerald-100 text-emerald-800' :
+                                                                                        'bg-purple-100 text-purple-800'
+                      }`}>
+                        {selectedScheduleAssignment.booking.booking_type}
+                      </span>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-0.5">Passengers</p>
+                      <p className="font-medium">{selectedScheduleAssignment.booking.passenger_count}</p>
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-0.5">Booking ID</p>
+                    <p className="font-mono text-xs text-gray-600">{selectedScheduleAssignment.booking.booking_id}</p>
+                  </div>
+                </>
+              ) : (
+                <div>
+                  <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-0.5">Booking Ref</p>
+                  <p className="font-mono text-xs text-gray-600">{selectedScheduleAssignment.assignment.booking_id}</p>
+                </div>
+              )}
+              <div className="pt-2 border-t">
+                <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-1">Scheduled Window</p>
+                <p className="text-gray-700">
+                  {new Date(selectedScheduleAssignment.assignment.start_datetime).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                </p>
+                <p className="text-gray-400 text-xs">
+                  to {new Date(selectedScheduleAssignment.assignment.end_datetime).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
-  )
+    )
+  }
 
   const renderDestinations = () => (
     <div className="space-y-8">
@@ -1865,14 +2366,34 @@ export default function AdminDashboard() {
                 onChange={(e) => setDestinationData({ ...destinationData, distance_km: e.target.value })}
                 required
               />
-              <input
-                type="text"
-                placeholder="Estimated Duration (e.g., 1 hour 30 minutes)"
-                className="input-field"
-                value={destinationData.estimated_duration}
-                onChange={(e) => setDestinationData({ ...destinationData, estimated_duration: e.target.value })}
-                required
-              />
+              <div className="flex gap-2 items-center">
+                <div className="flex-1">
+                  <label className="block text-xs text-gray-500 mb-1">Duration — Hours *</label>
+                  <input
+                    type="number"
+                    placeholder="e.g. 4"
+                    className="input-field w-full"
+                    min="0"
+                    max="99"
+                    value={destinationData.duration_hours}
+                    onChange={(e) => setDestinationData({ ...destinationData, duration_hours: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="flex-1">
+                  <label className="block text-xs text-gray-500 mb-1">Minutes</label>
+                  <select
+                    className="input-field w-full"
+                    value={destinationData.duration_mins}
+                    onChange={(e) => setDestinationData({ ...destinationData, duration_mins: e.target.value })}
+                  >
+                    <option value="0">0 mins</option>
+                    <option value="15">15 mins</option>
+                    <option value="30">30 mins</option>
+                    <option value="45">45 mins</option>
+                  </select>
+                </div>
+              </div>
               <input
                 type="text"
                 placeholder="Description (optional)"
@@ -1930,7 +2451,7 @@ export default function AdminDashboard() {
                   <tr key={destination.id} className="border-b hover:bg-gray-50">
                     <td className="py-3 px-4 font-semibold">{destination.name}</td>
                     <td className="py-3 px-4">{destination.distance_km}</td>
-                    <td className="py-3 px-4">{destination.estimated_duration}</td>
+                    <td className="py-3 px-4">{formatDurationMinutes(destination.estimated_duration_minutes)}</td>
                     <td className="py-3 px-4">{destination.description || '-'}</td>
                     <td className="py-3 px-4">
                       <div className="flex gap-2">

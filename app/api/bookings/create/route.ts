@@ -1,33 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { NextRequest } from 'next/server'
 
-// Helper function to parse duration string or number
-// Formats: "12 hours", "12 hrs", "12", "30 mins", "30 min"
-// If no unit specified, assumes hours
-function parseDurationToMinutes(durationStr: string | number): number {
-  const strValue = String(durationStr).trim()
-  
-  // Try to match: number with optional unit (hours/hrs/hour/hr or mins/min)
-  const hourMatch = strValue.match(/^(\d+)\s*(hours?|hrs?|hr)?$/i)
-  if (hourMatch) {
-    const hours = parseInt(hourMatch[1])
-    return hours * 60 // Convert to minutes
-  }
-  
-  const minMatch = strValue.match(/^(\d+)\s*(mins?|min)$/i)
-  if (minMatch) {
-    return parseInt(minMatch[1])
-  }
-  
-  // If it's just a number with no unit, assume hours
-  const justNumber = parseInt(strValue)
-  if (!isNaN(justNumber)) {
-    return justNumber * 60 // Convert hours to minutes
-  }
-  
-  return 60 // Default to 60 minutes if parsing fails
-}
-
 // Helper function to create ISO datetime string in IST (without timezone conversion)
 // User enters time in IST, so we preserve it as-is without converting to UTC
 function createDateTimeIST(dateStr: string, timeStr: string): string {
@@ -161,19 +134,19 @@ export async function POST(request: NextRequest) {
         durationMinutes = 240
       }
     } else if (bookingData.destination_id) {
-      // For airport bookings: fetch estimated_duration from the destination
+      // For airport bookings: use estimated_duration_minutes directly from the destination
       try {
         const { data: destination, error: destError } = await supabaseAdmin
           .from('destinations')
-          .select('estimated_duration')
+          .select('estimated_duration_minutes')
           .eq('id', bookingData.destination_id)
           .single()
 
-        if (!destError && destination) {
-          durationMinutes = parseDurationToMinutes(destination.estimated_duration)
-          console.log(`Destination duration: ${destination.estimated_duration} (${durationMinutes} minutes)`)
+        if (!destError && destination?.estimated_duration_minutes) {
+          durationMinutes = destination.estimated_duration_minutes
+          console.log(`Destination duration: ${durationMinutes} minutes`)
         } else {
-          console.warn('Could not fetch destination, using default duration of 60 minutes')
+          console.warn('Could not fetch destination duration, using default of 60 minutes')
           durationMinutes = 60
         }
       } catch (e) {
