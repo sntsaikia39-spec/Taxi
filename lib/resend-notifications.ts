@@ -2,6 +2,99 @@ import { Resend } from 'resend'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 
+const FROM_EMAIL = process.env.RESEND_FROM_EMAIL || 'noreply@rinastoursandtravels.in'
+const BRAND_NAME = "Rina's Tours and Travels"
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@rinastoursandtravels.com'
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://rinastoursandtravels.in'
+
+// ─── Shared helpers ──────────────────────────────────────────────────────────
+
+function inr(amount: number) {
+  return `&#8377;${amount.toLocaleString('en-IN')}`
+}
+
+function shell(title: string, preheader: string, body: string) {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>${title}</title>
+</head>
+<body style="margin:0;padding:0;background:#f4f4f5;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;">
+<span style="display:none;max-height:0;overflow:hidden;">${preheader}</span>
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;padding:32px 16px;">
+  <tr><td align="center">
+    <table width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;">
+
+      <!-- Logo -->
+      <tr><td align="center" style="padding-bottom:20px;">
+        <div style="width:56px;height:56px;background:#ffda00;border-radius:50%;text-align:center;line-height:56px;font-family:Georgia,serif;font-weight:bold;font-size:32px;color:#1a1a2e;display:inline-block;">R</div>
+        <div style="font-size:14px;font-weight:700;color:#1a1a2e;margin-top:8px;">${BRAND_NAME}</div>
+      </td></tr>
+
+      <!-- Card -->
+      <tr><td style="background:#fff;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,0.08);overflow:hidden;">
+        <table width="100%" cellpadding="0" cellspacing="0">
+          <tr><td style="height:5px;background:#ffda00;"></td></tr>
+          <tr><td style="padding:36px 40px 40px;">
+            ${body}
+          </td></tr>
+        </table>
+      </td></tr>
+
+      <!-- Footer -->
+      <tr><td style="padding:24px 8px 8px;text-align:center;">
+        <p style="margin:0 0 4px;font-size:12px;color:#9ca3af;">&copy; 2026 ${BRAND_NAME} &nbsp;&middot;&nbsp; All rights reserved</p>
+        <p style="margin:0;font-size:11px;color:#d1d5db;">Hollongi Airport, Itanagar, Arunachal Pradesh</p>
+      </td></tr>
+
+    </table>
+  </td></tr>
+</table>
+</body>
+</html>`
+}
+
+function row(label: string, value: string) {
+  return `<tr>
+    <td style="padding:7px 0;font-size:14px;color:#6b7280;border-bottom:1px solid #f3f4f6;">${label}</td>
+    <td style="padding:7px 0;font-size:14px;color:#111827;font-weight:600;text-align:right;border-bottom:1px solid #f3f4f6;">${value}</td>
+  </tr>`
+}
+
+async function send(to: string | string[], subject: string, html: string) {
+  console.log(`[EMAIL] Attempting: "${subject}" → ${to}`)
+  console.log(`[EMAIL] From: ${BRAND_NAME} <${FROM_EMAIL}>`)
+  console.log(`[EMAIL] API key set: ${!!process.env.RESEND_API_KEY}`)
+
+  if (!process.env.RESEND_API_KEY) {
+    console.error('[EMAIL] ❌ RESEND_API_KEY is not set — email not sent')
+    return { success: false, error: 'RESEND_API_KEY not configured' }
+  }
+
+  try {
+    const result = await resend.emails.send({
+      from: `${BRAND_NAME} <${FROM_EMAIL}>`,
+      to,
+      subject,
+      html,
+    })
+    console.log(`[EMAIL] Resend raw response:`, JSON.stringify(result))
+    if (result.error) {
+      console.error(`[EMAIL] ❌ Resend returned error:`, result.error)
+      return { success: false, error: result.error }
+    }
+    console.log(`[EMAIL] ✅ Sent successfully. ID: ${result.data?.id}`)
+    return { success: true, data: result }
+  } catch (error: any) {
+    console.error(`[EMAIL] ❌ Exception thrown:`, error?.message, error)
+    return { success: false, error }
+  }
+}
+
+// ─── 1. Booking confirmation (after Razorpay payment) ────────────────────────
+
 export interface BookingConfirmationEmail {
   to: string
   bookingId: string
@@ -13,151 +106,162 @@ export interface BookingConfirmationEmail {
   pickupTime?: string
   carType: string
   totalAmount: number
-  paymentStatus: string
+  amountPaid: number
+  amountDue: number
+  paymentMethod: string // 'full' | 'partial' | 'cash'
 }
 
 export async function sendBookingConfirmation(data: BookingConfirmationEmail) {
-  try {
-    if (!process.env.RESEND_API_KEY) {
-      console.log('📧 [DEMO] Resend API key not configured. Email not sent:', {
-        to: data.to,
-        bookingId: data.bookingId,
-      })
-      return { success: true, message: 'Email disabled - Resend not configured' }
-    }
+  const isPaid = data.amountDue === 0
+  const statusColor = isPaid ? '#16a34a' : '#d97706'
+  const statusLabel = isPaid ? 'Fully Paid' : `Partially Paid — ${inr(data.amountDue)} due on arrival`
+  const tripLabel = data.bookingType === 'tour'
+    ? (data.tourPackageName || 'Tour Package')
+    : (data.destination || 'Taxi Booking')
 
-    const htmlContent = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <style>
-            body { font-family: Arial, sans-serif; color: #1a1512; margin: 0; padding: 0; }
-            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-            .header { background-color: #1a1512; color: #ffda00; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
-            .header h1 { margin: 0; font-size: 28px; }
-            .header p { margin: 5px 0 0 0; font-size: 14px; }
-            .content { background-color: #f5f5f5; padding: 30px 20px; }
-            .section { margin: 20px 0; background: white; padding: 15px; border-radius: 5px; }
-            .section-title { color: #1a1512; font-weight: bold; font-size: 16px; margin-bottom: 15px; border-bottom: 2px solid #ffda00; padding-bottom: 5px; }
-            .info-row { display: flex; justify-content: space-between; margin: 8px 0; padding: 5px 0; }
-            .label { font-weight: bold; color: #1a1512; }
-            .value { color: #666; text-align: right; }
-            .footer { background-color: #1a1512; color: #ffda00; padding: 20px; text-align: center; border-radius: 0 0 8px 8px; font-size: 12px; }
-            .footer p { margin: 5px 0; }
-            .cta-button { display: inline-block; padding: 12px 30px; background-color: #ffda00; color: #1a1512; text-decoration: none; border-radius: 5px; font-weight: bold; margin-top: 15px; }
-            .payment-status { padding: 10px; border-radius: 5px; margin: 10px 0; }
-            .status-pending { background-color: #fef08a; color: #7c2d12; }
-            .status-complete { background-color: #dcfce7; color: #15803d; }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <div class="header">
-              <h1>🚖 Booking Confirmed!</h1>
-              <p>Your TaxiHollongi booking is confirmed</p>
-            </div>
-            
-            <div class="content">
-              <p>Hi ${data.userName},</p>
-              <p>Thank you for booking with TaxiHollongi. Your booking has been confirmed and we're excited to serve you!</p>
-              
-              <div class="section">
-                <div class="section-title">Booking Details</div>
-                <div class="info-row">
-                  <span class="label">Booking ID:</span>
-                  <span class="value"><strong>${data.bookingId}</strong></span>
-                </div>
-                <div class="info-row">
-                  <span class="label">Booking Type:</span>
-                  <span class="value">${data.bookingType === 'taxi' ? 'Taxi Booking' : 'Tour Package'}</span>
-                </div>
-                ${
-                  data.destination
-                    ? `
-                <div class="info-row">
-                  <span class="label">Destination:</span>
-                  <span class="value">${data.destination}</span>
-                </div>
-                `
-                    : ''
-                }
-                ${
-                  data.tourPackageName
-                    ? `
-                <div class="info-row">
-                  <span class="label">Tour Package:</span>
-                  <span class="value">${data.tourPackageName}</span>
-                </div>
-                `
-                    : ''
-                }
-                <div class="info-row">
-                  <span class="label">Pickup Date:</span>
-                  <span class="value">${new Date(data.pickupDate).toLocaleDateString()}</span>
-                </div>
-                ${data.pickupTime ? `<div class="info-row"><span class="label">Pickup Time:</span><span class="value">${data.pickupTime}</span></div>` : ''}
-                <div class="info-row">
-                  <span class="label">Vehicle Type:</span>
-                  <span class="value">${data.carType.charAt(0).toUpperCase() + data.carType.slice(1)}</span>
-                </div>
-              </div>
+  const body = `
+    <p style="margin:0 0 4px;font-size:22px;font-weight:700;color:#1a1a2e;">Booking Confirmed!</p>
+    <p style="margin:0 0 28px;font-size:15px;color:#6b7280;">Hi ${data.userName}, your booking is all set.</p>
 
-              <div class="section">
-                <div class="section-title">Payment Information</div>
-                <div class="info-row">
-                  <span class="label">Total Amount:</span>
-                  <span class="value"><strong>₹${data.totalAmount.toLocaleString('en-IN')}</strong></span>
-                </div>
-                <div class="payment-status ${data.paymentStatus === 'completed' ? 'status-complete' : 'status-pending'}">
-                  <strong>Status: ${data.paymentStatus === 'completed' ? '✓ Payment Received' : '⏳ Payment Pending'}</strong>
-                </div>
-                <p style="margin-top: 10px; color: #666; font-size: 14px;">
-                  ${data.paymentStatus === 'completed' ? 'Your payment has been successfully processed.' : 'Please complete your payment to confirm the booking.'}
-                </p>
-              </div>
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
+      ${row('Booking ID', `<span style="font-family:monospace;">${data.bookingId}</span>`)}
+      ${row('Type', data.bookingType === 'tour' ? 'Tour Package' : 'Taxi Booking')}
+      ${row(data.bookingType === 'tour' ? 'Package' : 'Destination', tripLabel)}
+      ${row('Pickup Date', new Date(data.pickupDate).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' }))}
+      ${data.pickupTime ? row('Pickup Time', data.pickupTime) : ''}
+      ${row('Vehicle', data.carType.charAt(0).toUpperCase() + data.carType.slice(1))}
+    </table>
 
-              <div class="section">
-                <div class="section-title">What's Next?</div>
-                <ol style="color: #666; margin: 10px 0;">
-                  <li>Our team will review your booking and confirm the vehicle assignment</li>
-                  <li>You'll receive driver details via email/SMS 24 hours before pickup</li>
-                  <li>Arrive at the pickup location 10 minutes early</li>
-                  <li>Enjoy your journey with TaxiHollongi!</li>
-                </ol>
-              </div>
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
+      ${row('Total Fare', inr(data.totalAmount))}
+      ${row('Paid Online', inr(data.amountPaid))}
+      ${data.amountDue > 0 ? row('Due on Arrival', inr(data.amountDue)) : ''}
+    </table>
 
-              <center>
-                <a href="https://taxihollongi.com/bookings" class="cta-button">View My Booking</a>
-              </center>
-            </div>
+    <p style="margin:0 0 20px;padding:12px 16px;background:${isPaid ? '#f0fdf4' : '#fffbeb'};border-left:4px solid ${statusColor};border-radius:4px;font-size:14px;color:${statusColor};font-weight:600;">${statusLabel}</p>
 
-            <div class="footer">
-              <p><strong>TaxiHollongi</strong></p>
-              <p>📍 Hollongi Airport, Itanagar, Arunachal Pradesh</p>
-              <p>📞 +91 (0) 98765-43210 | 📧 support@taxihollongi.com</p>
-              <p style="margin-top: 10px; border-top: 1px solid #ffda00; padding-top: 10px;">
-                © 2026 TaxiHollongi. All rights reserved.
-              </p>
-            </div>
-          </div>
-        </body>
-      </html>
-    `
+    <p style="margin:0 0 8px;font-size:14px;color:#374151;font-weight:600;">What happens next</p>
+    <ol style="margin:0 0 28px;padding-left:20px;color:#6b7280;font-size:14px;line-height:1.8;">
+      <li>We'll review your booking and assign a vehicle</li>
+      <li>You'll receive driver details before your pickup</li>
+      <li>Arrive 10 minutes early at the pickup point</li>
+      ${data.amountDue > 0 ? '<li>Pay the remaining amount in cash to the driver</li>' : ''}
+    </ol>
 
-    const result = await resend.emails.send({
-      from: 'TaxiHollongi <onboarding@resend.dev>',
-      to: data.to,
-      subject: `Booking Confirmed - ${data.bookingId} | TaxiHollongi`,
-      html: htmlContent,
-    })
+    <center>
+      <a href="${APP_URL}/bookings" style="display:inline-block;background:#ffda00;color:#1a1a2e;font-size:14px;font-weight:700;text-decoration:none;padding:12px 32px;border-radius:8px;">View My Booking</a>
+    </center>
 
-    console.log('✅ Email sent successfully:', result)
-    return { success: true, data: result }
-  } catch (error) {
-    console.error('❌ Error sending email:', error)
-    return { success: false, error }
-  }
+    <p style="margin:24px 0 0;font-size:12px;color:#9ca3af;text-align:center;">
+      Questions? Reply to this email or contact <a href="mailto:support@rinastoursandtravels.com" style="color:#6b7280;">support@rinastoursandtravels.com</a>
+    </p>`
+
+  return send(data.to, `Booking Confirmed — ${data.bookingId} | ${BRAND_NAME}`, shell(`Booking Confirmed — ${data.bookingId}`, `Your booking ${data.bookingId} is confirmed. ${isPaid ? 'Payment complete.' : `${inr(data.amountDue)} due on arrival.`}`, body))
 }
+
+// ─── 2. Cash payment invoice (after admin confirms cash collection) ───────────
+
+export interface CashPaymentInvoiceEmail {
+  to: string
+  userName: string
+  bookingId: string
+  totalAmount: number
+  amountOnlinePaid: number
+  amountCashPaid: number
+  cashCollectedBy: string
+  paidAt: string
+}
+
+export async function sendCashPaymentInvoice(data: CashPaymentInvoiceEmail) {
+  const totalCollected = data.amountOnlinePaid + data.amountCashPaid
+  const isFullyPaid = totalCollected >= data.totalAmount
+
+  const body = `
+    <p style="margin:0 0 4px;font-size:22px;font-weight:700;color:#1a1a2e;">Payment Receipt</p>
+    <p style="margin:0 0 28px;font-size:15px;color:#6b7280;">Hi ${data.userName}, here's your payment summary for booking <strong>${data.bookingId}</strong>.</p>
+
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
+      ${row('Booking ID', `<span style="font-family:monospace;">${data.bookingId}</span>`)}
+      ${row('Total Fare', inr(data.totalAmount))}
+      ${data.amountOnlinePaid > 0 ? row('Online Payment', inr(data.amountOnlinePaid)) : ''}
+      ${row('Cash Payment', inr(data.amountCashPaid))}
+      ${row('Collected By', data.cashCollectedBy)}
+      ${row('Date', new Date(data.paidAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }))}
+    </table>
+
+    <p style="margin:0 0 24px;padding:12px 16px;background:${isFullyPaid ? '#f0fdf4' : '#fffbeb'};border-left:4px solid ${isFullyPaid ? '#16a34a' : '#d97706'};border-radius:4px;font-size:14px;color:${isFullyPaid ? '#16a34a' : '#d97706'};font-weight:600;">
+      ${isFullyPaid ? `Payment complete — ${inr(totalCollected)} received in full.` : `Partial payment received. Balance: ${inr(data.totalAmount - totalCollected)}`}
+    </p>
+
+    <center>
+      <a href="${APP_URL}/bookings" style="display:inline-block;background:#ffda00;color:#1a1a2e;font-size:14px;font-weight:700;text-decoration:none;padding:12px 32px;border-radius:8px;">View My Booking</a>
+    </center>
+
+    <p style="margin:24px 0 0;font-size:12px;color:#9ca3af;text-align:center;">
+      Thank you for travelling with ${BRAND_NAME}. We hope to see you again!
+    </p>`
+
+  return send(data.to, `Payment Receipt — ${data.bookingId} | ${BRAND_NAME}`, shell(`Payment Receipt — ${data.bookingId}`, `Payment confirmed for booking ${data.bookingId}.`, body))
+}
+
+// ─── 3. Vehicle assignment (when admin assigns a vehicle) ────────────────────
+
+export interface VehicleAssignmentEmail {
+  to: string
+  userName: string
+  bookingId: string
+  pickupDate: string
+  pickupTime?: string
+  vehicleModel: string
+  numberPlate: string
+  driverName: string
+  driverPhone: string
+  isReassignment?: boolean
+}
+
+export async function sendVehicleAssignment(data: VehicleAssignmentEmail) {
+  const title = data.isReassignment ? 'Vehicle Reassigned' : 'Driver Assigned!'
+  const subtitle = data.isReassignment
+    ? `Hi ${data.userName}, your vehicle for booking <strong>${data.bookingId}</strong> has been <strong>changed</strong>. Here are your updated driver and vehicle details.`
+    : `Hi ${data.userName}, your vehicle has been assigned for booking <strong>${data.bookingId}</strong>.`
+
+  const body = `
+    <p style="margin:0 0 4px;font-size:22px;font-weight:700;color:#1a1a2e;">${title}</p>
+    <p style="margin:0 0 28px;font-size:15px;color:#6b7280;">${subtitle}</p>
+
+    <p style="margin:0 0 12px;font-size:14px;font-weight:600;color:#1a1a2e;">Driver & Vehicle Details</p>
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
+      ${row('Driver', data.driverName)}
+      ${row('Contact', `<a href="tel:${data.driverPhone}" style="color:#1a1a2e;">${data.driverPhone}</a>`)}
+      ${row('Vehicle', data.vehicleModel)}
+      ${row('Registration', data.numberPlate)}
+    </table>
+
+    <p style="margin:0 0 12px;font-size:14px;font-weight:600;color:#1a1a2e;">Pickup Details</p>
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
+      ${row('Date', new Date(data.pickupDate).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' }))}
+      ${data.pickupTime ? row('Time', data.pickupTime) : ''}
+    </table>
+
+    <p style="margin:0 0 24px;padding:12px 16px;background:#eff6ff;border-left:4px solid #3b82f6;border-radius:4px;font-size:14px;color:#1e40af;">
+      Please be ready 10 minutes before pickup time. Save your driver's number in case you need to contact them.
+    </p>
+
+    <center>
+      <a href="${APP_URL}/bookings" style="display:inline-block;background:#ffda00;color:#1a1a2e;font-size:14px;font-weight:700;text-decoration:none;padding:12px 32px;border-radius:8px;">View My Booking</a>
+    </center>`
+
+  const subject = data.isReassignment
+    ? `Vehicle Reassigned — ${data.bookingId} | ${BRAND_NAME}`
+    : `Driver Assigned — ${data.bookingId} | ${BRAND_NAME}`
+  const preheader = data.isReassignment
+    ? `Your vehicle for booking ${data.bookingId} has been changed. New driver: ${data.driverName}.`
+    : `Your driver ${data.driverName} has been assigned for booking ${data.bookingId}.`
+
+  return send(data.to, subject, shell(subject, preheader, body))
+}
+
+// ─── 4. Admin notification (new booking received) ────────────────────────────
 
 export async function sendAdminNotification(data: {
   bookingId: string
@@ -166,110 +270,24 @@ export async function sendAdminNotification(data: {
   totalAmount: number
   bookingType: string
   destination?: string
+  pickupDate?: string
 }) {
-  try {
-    if (!process.env.RESEND_API_KEY) {
-      console.log('📧 [DEMO] Admin notification - Resend not configured')
-      return { success: true }
-    }
+  const body = `
+    <p style="margin:0 0 4px;font-size:20px;font-weight:700;color:#1a1a2e;">New Booking Received</p>
+    <p style="margin:0 0 24px;font-size:14px;color:#6b7280;">A new booking has just been confirmed and needs vehicle assignment.</p>
 
-    const htmlContent = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <style>
-            body { font-family: Arial, sans-serif; color: #1a1512; }
-            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-            .header { background-color: #1a1512; color: #ffda00; padding: 15px; text-align: center; border-radius: 5px; }
-            .content { background-color: #f5f5f5; padding: 20px; margin-top: 10px; border-radius: 5px; }
-            .info { margin: 10px 0; }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <div class="header">
-              <h2>New Booking Alert</h2>
-            </div>
-            <div class="content">
-              <p><strong>A new booking has been received:</strong></p>
-              <div class="info">
-                <strong>Booking ID:</strong> ${data.bookingId}<br>
-                <strong>Customer:</strong> ${data.userName} (${data.userEmail})<br>
-                <strong>Type:</strong> ${data.bookingType}<br>
-                ${data.destination ? `<strong>Destination:</strong> ${data.destination}<br>` : ''}
-                <strong>Amount:</strong> ₹${data.totalAmount.toLocaleString('en-IN')}
-              </p>
-              <p>Please log in to the admin panel to view full details and take action.</p>
-            </div>
-          </div>
-        </body>
-      </html>
-    `
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
+      ${row('Booking ID', `<span style="font-family:monospace;">${data.bookingId}</span>`)}
+      ${row('Customer', `${data.userName} &lt;${data.userEmail}&gt;`)}
+      ${row('Type', data.bookingType === 'tour' ? 'Tour Package' : 'Taxi Booking')}
+      ${data.destination ? row('Destination', data.destination) : ''}
+      ${data.pickupDate ? row('Pickup Date', new Date(data.pickupDate).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' })) : ''}
+      ${row('Amount', inr(data.totalAmount))}
+    </table>
 
-    const result = await resend.emails.send({
-      from: 'TaxiHollongi Admin <onboarding@resend.dev>',
-      to: process.env.ADMIN_EMAIL || 'admin@taxihollongi.com',
-      subject: `New Booking: ${data.bookingId}`,
-      html: htmlContent,
-    })
+    <center>
+      <a href="${APP_URL}/admin" style="display:inline-block;background:#1a1a2e;color:#ffda00;font-size:14px;font-weight:700;text-decoration:none;padding:12px 32px;border-radius:8px;">Open Admin Panel</a>
+    </center>`
 
-    return { success: true, data: result }
-  } catch (error) {
-    console.error('Error sending admin notification:', error)
-    return { success: false, error }
-  }
-}
-
-export async function sendDriverNotification(data: {
-  driverEmail: string
-  driverPhone: string
-  bookingId: string
-  pickupLocation: string
-  pickupTime: string
-  passenger: string
-  phoneNumber: string
-}) {
-  try {
-    // SMS/WhatsApp notifications are demo mode
-    console.log('📱 [DEMO] SMS/WhatsApp notification would be sent to:', data.driverPhone)
-    console.log('Message: New booking assigned -', data.bookingId)
-
-    if (!process.env.RESEND_API_KEY) {
-      return { success: true, message: 'Demo mode - email not sent' }
-    }
-
-    const htmlContent = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <style>
-            body { font-family: Arial, sans-serif; }
-            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <h2>New Booking Assignment</h2>
-            <p><strong>Booking ID:</strong> ${data.bookingId}</p>
-            <p><strong>Pickup Location:</strong> ${data.pickupLocation}</p>
-            <p><strong>Pickup Time:</strong> ${data.pickupTime}</p>
-            <p><strong>Passenger:</strong> ${data.passenger}</p>
-            <p><strong>Contact:</strong> ${data.phoneNumber}</p>
-          </div>
-        </body>
-      </html>
-    `
-
-    const result = await resend.emails.send({
-      from: 'TaxiHollongi <onboarding@resend.dev>',
-      to: data.driverEmail,
-      subject: `New Booking: ${data.bookingId}`,
-      html: htmlContent,
-    })
-
-    return { success: true, data: result }
-  } catch (error) {
-    console.error('Error sending driver notification:', error)
-    return { success: false, error }
-  }
+  return send(ADMIN_EMAIL, `New Booking: ${data.bookingId} — Action Required`, shell(`New Booking: ${data.bookingId}`, `New booking from ${data.userName} for ${inr(data.totalAmount)}.`, body))
 }

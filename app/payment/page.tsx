@@ -99,6 +99,14 @@ function PaymentContent() {
                 bookingType,
                 paymentMethod: method,
                 amount: paymentAmount,
+                // User & booking details for confirmation email
+                userEmail: bookingData.email,
+                userName: bookingData.name,
+                destination: bookingData.destination,
+                tourPackageName: bookingData.tourName,
+                pickupDate: bookingData.date,
+                pickupTime: bookingData.time,
+                carType: bookingData.carType,
               }),
             })
 

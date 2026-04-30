@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { sendVehicleAssignment } from '@/lib/resend-notifications'
 
 export async function POST(request: Request) {
   try {
@@ -76,18 +77,27 @@ export async function POST(request: Request) {
 
     console.log('✅ Vehicle assignment created successfully:', assignment)
 
-    // TODO: Send assignment confirmation email when email system is implemented
-    // For now, just log the email details
-    console.log('📧 Assignment Confirmation Email would be sent to:', user_email)
-    console.log('Assignment Details:')
-    console.log('  - Customer:', user_name)
-    console.log('  - Booking ID:', booking_id)
-    console.log('  - Vehicle:', car.model_name)
-    console.log('  - Registration:', car.number_plate)
-    console.log('  - Driver:', car.driver_name)
-    console.log('  - Driver Phone:', car.driver_phone)
-    console.log('  - Start:', new Date(start_datetime).toLocaleString('en-IN'))
-    console.log('  - End:', new Date(end_datetime).toLocaleString('en-IN'))
+    // Send vehicle assignment email to customer
+    if (user_email) {
+      // Fetch pickup details from booking for the email
+      const { data: bookingDetails } = await supabaseAdmin
+        .from('bookings')
+        .select('pickup_date, pickup_time')
+        .eq('booking_id', booking_id)
+        .single()
+
+      await sendVehicleAssignment({
+        to: user_email,
+        userName: user_name || 'Customer',
+        bookingId: booking_id,
+        pickupDate: bookingDetails?.pickup_date || start_datetime,
+        pickupTime: bookingDetails?.pickup_time,
+        vehicleModel: car.model_name,
+        numberPlate: car.number_plate,
+        driverName: car.driver_name,
+        driverPhone: car.driver_phone,
+      }).catch((err) => console.error('Assignment email error (non-critical):', err))
+    }
 
     return Response.json(
       {

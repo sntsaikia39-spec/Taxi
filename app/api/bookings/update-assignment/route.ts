@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { sendVehicleAssignment } from '@/lib/resend-notifications'
 
 export async function POST(request: Request) {
   try {
@@ -81,20 +82,31 @@ export async function POST(request: Request) {
 
     console.log('✅ Assignment updated successfully:', updatedAssignment)
 
-    // TODO: Send reassignment confirmation email when email system is implemented
-    // For now, just log the email details
-    console.log('📧 Reassignment Confirmation Email would be sent to:', user_email)
-    console.log('Reassignment Details:')
-    console.log('  - Customer:', user_name)
-    console.log('  - Booking ID:', booking_id)
-    console.log('  - Previous Vehicle:', oldCar?.model_name, `(${oldCar?.number_plate})`)
-    console.log('  - Previous Driver:', oldCar?.driver_name, `-`, oldCar?.driver_phone)
-    console.log('  - New Vehicle:', car.model_name)
-    console.log('  - New Registration:', car.number_plate)
-    console.log('  - New Driver:', car.driver_name)
-    console.log('  - New Driver Phone:', car.driver_phone)
-    console.log('  - Start:', new Date(start_datetime).toLocaleString('en-IN'))
-    console.log('  - End:', new Date(end_datetime).toLocaleString('en-IN'))
+    if (user_email) {
+      const { data: bookingDetails } = await supabaseAdmin
+        .from('bookings')
+        .select('pickup_date, pickup_time, start_datetime')
+        .eq('booking_id', booking_id)
+        .single()
+
+      const pickupDate = bookingDetails?.pickup_date
+        || (bookingDetails?.start_datetime ? bookingDetails.start_datetime.split('T')[0] : start_datetime?.split('T')[0])
+      const pickupTime = bookingDetails?.pickup_time
+        || (start_datetime ? new Date(start_datetime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : undefined)
+
+      await sendVehicleAssignment({
+        to: user_email,
+        userName: user_name || 'Customer',
+        bookingId: booking_id,
+        pickupDate,
+        pickupTime,
+        vehicleModel: car.model_name,
+        numberPlate: car.number_plate,
+        driverName: car.driver_name,
+        driverPhone: car.driver_phone,
+        isReassignment: true,
+      }).catch((err) => console.error('[EMAIL] Reassignment email error:', err))
+    }
 
     return Response.json(
       {

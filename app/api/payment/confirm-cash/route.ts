@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { sendCashPaymentInvoice } from '@/lib/resend-notifications'
 
 export async function POST(request: Request) {
   try {
@@ -92,17 +93,19 @@ export async function POST(request: Request) {
 
     console.log('✅ Payment updated successfully:', updatedPayment)
 
-    // TODO: Send invoice email when email system is implemented
-    // For now, just log the email details
-    console.log('📧 Invoice would be sent to:', user_email)
-    console.log('Customer Name:', user_name)
-    console.log('Invoice Details:')
-    console.log('  - Booking ID:', booking_id)
-    console.log('  - Total Amount: Rs.', totalAmount)
-    console.log('  - Online Payment: Rs.', payment.amount_online_paid)
-    console.log('  - Cash Payment: Rs.', cashAmount)
-    console.log('  - Collected By:', cash_collected_by)
-    console.log('  - Date:', new Date().toLocaleString('en-IN'))
+    // Send invoice email to customer (awaited — Vercel kills fire-and-forget after response)
+    if (user_email) {
+      await sendCashPaymentInvoice({
+        to: user_email,
+        userName: user_name || 'Customer',
+        bookingId: booking_id,
+        totalAmount,
+        amountOnlinePaid: parseFloat(payment.amount_online_paid || 0),
+        amountCashPaid: cashAmount,
+        cashCollectedBy: cash_collected_by,
+        paidAt: new Date().toISOString(),
+      }).catch((err) => console.error('Invoice email error:', err))
+    }
 
     return Response.json(
       {

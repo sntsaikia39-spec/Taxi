@@ -9,6 +9,10 @@ All notable changes to TaxiHollongi will be documented in this file.
 **Author:** Yami
 
 ### Changes
+- fix: email/password auth — verification flow, proper error handling
+- update: rebrand to Rina's Tours and Travels with circular logo
+- update: Strict form validation, lock email
+- chore: start v2-unstable from v1.0.0 stable point
 - feat: auto-generate changelog from git log on every build
 - fix: changelog parser + populate entries, fix invoice TS error
 - fix: Invoice

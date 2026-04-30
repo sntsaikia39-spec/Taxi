@@ -1,6 +1,7 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { calculatePaymentAmounts, validatePaymentAmounts } from '@/lib/payment-utils'
 import { createPaymentInDB, getPaymentByBookingId } from '@/lib/payment-db'
+import { sendBookingConfirmation, sendAdminNotification } from '@/lib/resend-notifications'
 import { NextRequest } from 'next/server'
 
 export async function POST(request: NextRequest) {
@@ -87,7 +88,7 @@ export async function POST(request: NextRequest) {
     // Check if booking exists (bookingId is the database UUID 'id' field)
     const { data: booking, error: bookingError } = await supabaseAdmin
       .from('bookings')
-      .select('id, booking_id, booking_status, amount_total')
+      .select('id, booking_id, booking_status, amount_total, booking_type, user_name, user_email, start_datetime, car_model, destination_id, tour_package_id')
       .eq('id', bookingId)
       .single()
 
@@ -188,8 +189,74 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // ===== SEND CONFIRMATION EMAILS =====
+
+    if (txnStatus === 'success' && booking.user_email) {
+      console.log('[EMAIL] Sending confirmation to:', booking.user_email)
+
+      // Resolve destination / tour name from DB
+      let destinationName = ''
+      if (booking.destination_id) {
+        const { data: dest } = await supabaseAdmin
+          .from('destinations')
+          .select('name')
+          .eq('id', booking.destination_id)
+          .single()
+        destinationName = dest?.name || ''
+      } else if (booking.tour_package_id) {
+        const { data: tour } = await supabaseAdmin
+          .from('tours')
+          .select('name')
+          .eq('id', booking.tour_package_id)
+          .single()
+        destinationName = tour?.name || ''
+      }
+
+      const amountPaid = paymentType === 'full' ? parsedAmountTotal : finalOnlineAmount
+      const amountDue = parsedAmountTotal - amountPaid
+      const pickupDate = booking.start_datetime ? booking.start_datetime.split('T')[0] : ''
+      const pickupTime = booking.start_datetime
+        ? new Date(booking.start_datetime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+        : ''
+
+      const emailResults = await Promise.allSettled([
+        sendBookingConfirmation({
+          to: booking.user_email,
+          bookingId: booking.booking_id,
+          userName: booking.user_name || 'Customer',
+          bookingType: booking.booking_type || 'taxi',
+          destination: booking.booking_type !== 'tour' ? destinationName : undefined,
+          tourPackageName: booking.booking_type === 'tour' ? destinationName : undefined,
+          pickupDate,
+          pickupTime,
+          carType: booking.car_model || 'Economy',
+          totalAmount: parsedAmountTotal,
+          amountPaid,
+          amountDue,
+          paymentMethod: paymentType,
+        }),
+        sendAdminNotification({
+          bookingId: booking.booking_id,
+          userEmail: booking.user_email,
+          userName: booking.user_name || 'Customer',
+          totalAmount: parsedAmountTotal,
+          bookingType: booking.booking_type || 'taxi',
+          destination: destinationName,
+          pickupDate,
+        }),
+      ])
+
+      emailResults.forEach((r, i) => {
+        const label = i === 0 ? 'Customer confirmation' : 'Admin notification'
+        if (r.status === 'rejected') console.error(`[EMAIL] ❌ ${label} failed:`, r.reason)
+        else console.log(`[EMAIL] ✅ ${label}:`, JSON.stringify(r.value))
+      })
+    } else if (txnStatus === 'success' && !booking.user_email) {
+      console.warn('[EMAIL] ⚠️ No user_email on booking — skipping confirmation email')
+    }
+
     // ===== SUCCESS RESPONSE =====
-    
+
     return Response.json(
       {
         success: true,
