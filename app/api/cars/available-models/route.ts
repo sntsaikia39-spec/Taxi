@@ -5,33 +5,37 @@ export const dynamic = 'force-dynamic'
 
 /**
  * GET /api/cars/available-models
- * 
- * Fetches unique car models available for booking in a given timeslot.
- * 
- * Query parameters:
- * - booking_date: Date in YYYY-MM-DD format
- * - start_time: Time in HH:mm format
- * - end_time: Time in HH:mm format (estimated trip end time)
- * 
- * Returns only model names (not specific cars) that:
- * 1. Have at least one active car in the database
- * 2. Have at least one car available (not booked) for the given timeslot
- * 3. Are not already shown (deduplicated by model_name)
- * 
- * Logic:
- * 1. Get all active cars grouped by model_name
- * 2. For each model_name, check if ANY car of that model is free during the timeslot
- * 3. A car is FREE if it has no overlapping assignment for that date/time
- * 4. Return only unique model_names with their basic info (no number_plate, no specific car details)
+ *
+ * Availability algorithm (in order of precedence):
+ *
+ * 1. booking_status is the PRIMARY signal.
+ *    - 'pending' | 'confirmed'  → booking is active, car/model is busy
+ *    - 'completed' | 'cancelled' → booking is done, car is free immediately
+ *    - End-datetime is only used to check whether a booking's time window
+ *      overlaps with the requested window — NOT to decide if a car is free.
+ *
+ * 2. Two-tier conflict detection per model:
+ *    a. ASSIGNED cars: a specific car.id is blocked when it has a
+ *       vehicle_assignment linked to an active (pending/confirmed) booking
+ *       whose time window overlaps the requested window.
+ *    b. UNASSIGNED slots: an active booking with no vehicle_assignment yet
+ *       still reserves one physical car of the booked model_name. Each such
+ *       booking blocks one slot until it gets assigned or cancelled/completed.
+ *
+ * 3. available_count = total physical cars of model
+ *                    − cars blocked by assignments (tier a)
+ *                    − slots blocked by unassigned bookings (tier b)
+ *    Models with available_count ≤ 0 are excluded from the response.
+ *
+ * Query params: booking_date (YYYY-MM-DD), start_time (HH:mm), end_time (HH:mm)
  */
 export async function GET(request: NextRequest) {
   try {
-    const searchParams = request.nextUrl.searchParams
-    const bookingDate = searchParams.get('booking_date')
-    const startTime = searchParams.get('start_time')
-    const endTime = searchParams.get('end_time')
+    const sp = request.nextUrl.searchParams
+    const bookingDate = sp.get('booking_date')
+    const startTime   = sp.get('start_time')
+    const endTime     = sp.get('end_time')
 
-    // Validation
     if (!bookingDate || !startTime || !endTime) {
       return NextResponse.json(
         { success: false, error: 'Missing required query parameters: booking_date, start_time, end_time' },
@@ -39,142 +43,125 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    console.log('🔍 Fetching available car models for timeslot:', {
-      booking_date: bookingDate,
-      start_time: startTime,
-      end_time: endTime,
-    })
+    const requestStart = new Date(`${bookingDate}T${startTime}`)
+    const requestEnd   = new Date(`${bookingDate}T${endTime}`)
 
-    // Step 1: Get all active cars with their details
+    if (isNaN(requestStart.getTime()) || isNaN(requestEnd.getTime())) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid date or time format' },
+        { status: 400 }
+      )
+    }
+
+    // ── 1. All active physical cars ─────────────────────────────────────────
     const { data: activeCars, error: carsError } = await supabaseAdmin
       .from('cars')
-      .select('id, model_name, class, capacity, per_km_charge, per_hr_charge, is_active')
+      .select('id, model_name, class, capacity, per_km_charge, per_hr_charge')
       .eq('is_active', true)
       .order('model_name', { ascending: true })
 
-    if (carsError) {
-      console.error('Error fetching cars:', carsError)
-      return NextResponse.json({ success: false, error: 'Failed to fetch cars' }, { status: 500 })
-    }
-
+    if (carsError) throw new Error('Failed to fetch cars')
     if (!activeCars || activeCars.length === 0) {
-      console.log('⚠️ No active cars found in system')
       return NextResponse.json({ success: true, models: [] })
     }
 
-    // Step 2: Get all assignments for the booking date to check for conflicts
-    // Create datetime range for the booking
-    const bookingStartDateTime = `${bookingDate}T${startTime}`
-    const bookingEndDateTime = `${bookingDate}T${endTime}`
+    // ── 2. All active bookings (pending/confirmed) ──────────────────────────
+    // We fetch all active bookings and filter for time overlap in JS to avoid
+    // timezone ambiguity between query-param times and IST-suffixed DB values.
+    const { data: allActiveBookings, error: bookingsError } = await supabaseAdmin
+      .from('bookings')
+      .select('booking_id, car_model, start_datetime, end_datetime, booking_status')
+      .in('booking_status', ['pending', 'confirmed'])
 
-    console.log('📅 Checking assignments for date:', bookingDate)
+    if (bookingsError) throw new Error('Failed to fetch active bookings')
 
-    const { data: assignments, error: assignmentsError } = await supabaseAdmin
-      .from('vehicle_assignments')
-      .select('car_id, start_datetime, end_datetime')
-
-    if (assignmentsError) {
-      console.error('Error fetching assignments:', assignmentsError)
-      return NextResponse.json({ success: false, error: 'Failed to fetch assignments' }, { status: 500 })
-    }
-
-    return processAvailableModels(activeCars, assignments || [], bookingStartDateTime, bookingEndDateTime)
-  } catch (error) {
-    console.error('Unexpected error fetching available car models:', error)
-    return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
-  }
-}
-
-/**
- * Helper function to process available car models
- * Deduplicates by model_name and checks availability against assignments
- */
-function processAvailableModels(
-  cars: any[],
-  assignments: any[],
-  bookingStartDateTime: string,
-  bookingEndDateTime: string
-) {
-  // Parse booking datetime
-  const bookingStart = new Date(bookingStartDateTime)
-  const bookingEnd = new Date(bookingEndDateTime)
-
-  if (isNaN(bookingStart.getTime()) || isNaN(bookingEnd.getTime())) {
-    return NextResponse.json(
-      { success: false, error: 'Invalid datetime format. Use YYYY-MM-DD for date and HH:mm for time.' },
-      { status: 400 }
-    )
-  }
-
-  console.log('⏰ Booking time range:', {
-    start: bookingStart.toISOString(),
-    end: bookingEnd.toISOString(),
-  })
-
-  // Group cars by model_name
-  const modelGroups = new Map<string, typeof cars>()
-  cars.forEach((car) => {
-    if (!modelGroups.has(car.model_name)) {
-      modelGroups.set(car.model_name, [])
-    }
-    modelGroups.get(car.model_name)!.push(car)
-  })
-
-  console.log(`📦 Found ${modelGroups.size} unique car models`)
-
-  // For each model, check if ANY car is available
-  const availableModels: any[] = []
-
-  modelGroups.forEach((carsOfModel, modelName) => {
-    const isModelAvailable = carsOfModel.some((car) => {
-      // Check if this specific car has any overlapping assignment
-      const hasConflict = assignments.some((assignment) => {
-        if (assignment.car_id !== car.id) return false
-
-        const assignmentStart = new Date(assignment.start_datetime)
-        const assignmentEnd = new Date(assignment.end_datetime)
-
-        // Check for time overlap
-        // Times overlap if: booking_start < assignment_end AND booking_end > assignment_start
-        const isOverlapping = bookingStart < assignmentEnd && bookingEnd > assignmentStart
-
-        if (isOverlapping) {
-          console.log(`  ⚠️ Car ${car.id} (${modelName}) has conflict:`, {
-            assignment: {
-              start: assignmentStart.toISOString(),
-              end: assignmentEnd.toISOString(),
-            },
-            booking: {
-              start: bookingStart.toISOString(),
-              end: bookingEnd.toISOString(),
-            },
-          })
-        }
-
-        return isOverlapping
-      })
-
-      return !hasConflict
+    // Keep only bookings whose time window overlaps the requested window
+    const overlappingActiveBookings = (allActiveBookings || []).filter(b => {
+      if (!b.start_datetime || !b.end_datetime) return false
+      const bStart = new Date(b.start_datetime)
+      const bEnd   = new Date(b.end_datetime)
+      // Standard interval overlap: A.start < B.end && A.end > B.start
+      return requestStart < bEnd && requestEnd > bStart
     })
 
-    if (isModelAvailable) {
-      // Get representative data from first car of this model
-      const representative = carsOfModel[0]
-      availableModels.push({
-        model_name: modelName,
-        class: representative.class,
-        capacity: representative.capacity,
-        per_km_charge: representative.per_km_charge,
-        per_hr_charge: representative.per_hr_charge,
-        available_count: carsOfModel.length, // Total cars of this model (for admin info)
+    // ── 3. Assignments that belong to those active overlapping bookings ──────
+    const activeBookingIds = overlappingActiveBookings.map(b => b.booking_id)
+
+    const assignedCarIds     = new Set<string>()
+    const assignedBookingIds = new Set<string>()
+
+    if (activeBookingIds.length > 0) {
+      const { data: assignments, error: assignmentsError } = await supabaseAdmin
+        .from('vehicle_assignments')
+        .select('booking_id, car_id')
+        .in('booking_id', activeBookingIds)
+
+      if (assignmentsError) throw new Error('Failed to fetch assignments')
+
+      ;(assignments || []).forEach(a => {
+        assignedCarIds.add(a.car_id)
+        assignedBookingIds.add(a.booking_id)
       })
-      console.log(`✅ Model '${modelName}' is available (${carsOfModel.length} car${carsOfModel.length > 1 ? 's' : ''})`)
-    } else {
-      console.log(`❌ Model '${modelName}' is fully booked for this timeslot`)
     }
-  })
 
-  console.log(`📊 Result: ${availableModels.length} models available out of ${modelGroups.size}`)
+    // ── 4. Unassigned active bookings → block one slot per model ───────────
+    // A booking that is active but has no assignment yet still reserves a
+    // physical car. Count how many such bookings exist per model_name.
+    const unassignedBlocksByModel = new Map<string, number>()
+    overlappingActiveBookings
+      .filter(b => b.car_model && !assignedBookingIds.has(b.booking_id))
+      .forEach(b => {
+        const prev = unassignedBlocksByModel.get(b.car_model!) || 0
+        unassignedBlocksByModel.set(b.car_model!, prev + 1)
+      })
 
-  return NextResponse.json({ success: true, models: availableModels })
+    // ── 5. Group physical cars by model_name ────────────────────────────────
+    const modelGroups = new Map<string, typeof activeCars>()
+    activeCars.forEach(car => {
+      if (!modelGroups.has(car.model_name)) modelGroups.set(car.model_name, [])
+      modelGroups.get(car.model_name)!.push(car)
+    })
+
+    // ── 6. Compute available count per model and build response ─────────────
+    const availableModels: {
+      model_name: string
+      class: string
+      capacity: number
+      per_km_charge: number
+      per_hr_charge: number
+      available_count: number
+    }[] = []
+
+    modelGroups.forEach((carsOfModel, modelName) => {
+      // Tier (a): specific car IDs blocked by assignment to an active booking
+      const blockedByAssignment = carsOfModel.filter(c => assignedCarIds.has(c.id)).length
+
+      // Tier (b): generic slots blocked by unassigned active bookings
+      const blockedByUnassigned = unassignedBlocksByModel.get(modelName) || 0
+
+      const totalBlocked  = Math.min(blockedByAssignment + blockedByUnassigned, carsOfModel.length)
+      const availableCount = carsOfModel.length - totalBlocked
+
+      if (availableCount > 0) {
+        const rep = carsOfModel[0]
+        availableModels.push({
+          model_name:    modelName,
+          class:         rep.class,
+          capacity:      rep.capacity,
+          per_km_charge: rep.per_km_charge,
+          per_hr_charge: rep.per_hr_charge,
+          available_count: availableCount,
+        })
+      }
+    })
+
+    return NextResponse.json({ success: true, models: availableModels })
+
+  } catch (error) {
+    console.error('Error in available-models:', error)
+    return NextResponse.json(
+      { success: false, error: error instanceof Error ? error.message : 'Internal server error' },
+      { status: 500 }
+    )
+  }
 }
