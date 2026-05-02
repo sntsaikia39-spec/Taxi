@@ -1,11 +1,10 @@
 'use client'
 
-import { useState, Suspense } from 'react'
+import { useEffect, useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { useAuth } from '@/context/AuthContext'
 import Header from '@/components/Header'
-import Footer from '@/components/Footer'
 import { Mail, Lock, LogIn, RefreshCw, AlertCircle } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -20,6 +19,18 @@ function LoginContent() {
   const [resending, setResending] = useState(false)
   // Show the "verify your email" nudge when Supabase blocks login due to unverified email
   const [showVerifyNudge, setShowVerifyNudge] = useState(false)
+
+  useEffect(() => {
+    document.documentElement.style.overflowY = 'auto'
+    document.body.style.overflowY = 'auto'
+    document.documentElement.style.overflowX = 'hidden'
+    document.body.style.overflowX = 'hidden'
+
+    return () => {
+      document.documentElement.style.overflow = ''
+      document.body.style.overflow = ''
+    }
+  }, [])
 
   if (user) {
     router.push(redirect)
@@ -93,29 +104,29 @@ function LoginContent() {
   }
 
   return (
-    <div className="flex flex-col min-h-screen bg-gray-50">
+    <div className="flex min-h-screen flex-col bg-primary-950">
       <Header />
 
-      <main className="flex-1 flex items-center justify-center py-12 px-4">
-        <div className="w-full max-w-md">
-          <div className="card p-5 md:p-8">
+      <main className="relative flex flex-1 items-start justify-center overflow-hidden px-4 pt-[105px] pb-12 md:pt-[105px] md:pb-16">
+        <div className="absolute top-0 right-0 h-[420px] w-[420px] rounded-full bg-secondary-500/10 blur-[120px] pointer-events-none" />
+        <div className="absolute bottom-0 left-0 h-[320px] w-[320px] rounded-full bg-secondary-500/10 blur-[110px] pointer-events-none" />
+        <div
+          className="absolute inset-0 opacity-[0.04] pointer-events-none"
+          style={{ backgroundImage: 'radial-gradient(circle, rgba(255,218,0,0.7) 1px, transparent 1px)', backgroundSize: '34px 34px' }}
+        />
+        <div className="relative z-10 w-full max-w-md">
+          <div className="rounded-3xl border border-secondary-500/25 bg-primary-900/80 p-3 md:p-4 shadow-[0_24px_64px_rgba(0,0,0,0.45)] backdrop-blur-sm">
             {/* Header */}
-            <div className="text-center mb-6 md:mb-8">
-              <div className="flex justify-center mb-3 md:mb-4">
-                <svg viewBox="0 0 100 100" width="56" height="56" xmlns="http://www.w3.org/2000/svg" className="rounded-full shadow">
-                  <circle cx="50" cy="50" r="50" fill="#ffda00"/>
-                  <text x="50" y="67" textAnchor="middle" fontFamily="Georgia,serif" fontWeight="bold" fontSize="52" fill="#1a1a2e">R</text>
-                </svg>
-              </div>
-              <h1 className="text-2xl md:text-3xl font-bold mb-2">Welcome Back</h1>
-              <p className="text-gray-600">Sign in to your Rina&apos;s Tours and Travels account</p>
+            <div className="text-center mb-4 md:mb-5">
+              <h1 className="text-2xl md:text-3xl font-bold text-white mb-1">Welcome Back</h1>
+              <p className="text-gray-300">Sign in to your Rina&apos;s Tours and Travels account</p>
             </div>
 
             {/* Google Sign In */}
             <button
               onClick={handleGoogleLogin}
               disabled={loading}
-              className="w-full mb-6 px-4 py-3 bg-white border-2 border-gray-300 rounded-lg hover:border-secondary-500 transition-smooth flex items-center justify-center gap-2 font-semibold disabled:opacity-50"
+              className="w-full mb-4 px-4 py-2.5 bg-white border border-white/20 rounded-xl hover:border-secondary-500 transition-smooth flex items-center justify-center gap-2 font-semibold disabled:opacity-50"
             >
               <svg width="20" height="20" viewBox="0 0 24 24">
                 <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -127,29 +138,29 @@ function LoginContent() {
             </button>
 
             {/* Divider */}
-            <div className="relative mb-6">
+            <div className="relative mb-4">
               <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-gray-300"></div>
+                 <div className="w-full border-t border-primary-700"></div>
               </div>
               <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-white text-gray-500">or continue with email</span>
+                 <span className="px-2 bg-primary-900 text-gray-400">or continue with email</span>
               </div>
             </div>
 
             {/* Email not confirmed nudge */}
             {showVerifyNudge && (
-              <div className="mb-5 p-4 bg-amber-50 border border-amber-300 rounded-lg flex gap-3">
+              <div className="mb-4 p-3 bg-amber-500/10 border border-amber-400/40 rounded-xl flex gap-3">
                 <AlertCircle size={20} className="text-amber-500 flex-shrink-0 mt-0.5" />
                 <div className="text-sm">
-                  <p className="font-semibold text-amber-900 mb-1">Please verify your email first</p>
-                  <p className="text-amber-800 mb-3">
+                  <p className="font-semibold text-amber-300 mb-1">Please verify your email first</p>
+                  <p className="text-amber-200 mb-3">
                     Check your inbox for the verification link we sent to <strong>{email}</strong>.
                     You must verify your email before signing in.
                   </p>
                   <button
                     onClick={handleResendVerification}
                     disabled={resending}
-                    className="flex items-center gap-1.5 text-amber-700 font-semibold hover:text-amber-900 disabled:opacity-50"
+                    className="flex items-center gap-1.5 text-amber-300 font-semibold hover:text-amber-200 disabled:opacity-50"
                   >
                     <RefreshCw size={14} className={resending ? 'animate-spin' : ''} />
                     {resending ? 'Sending...' : 'Resend verification email'}
@@ -159,32 +170,32 @@ function LoginContent() {
             )}
 
             {/* Email Sign In Form */}
-            <form onSubmit={handleEmailLogin} className="space-y-4">
+            <form onSubmit={handleEmailLogin} className="space-y-3">
               <div>
-                <label className="block text-sm font-semibold mb-2">Email</label>
+                <label className="block text-sm font-semibold text-gray-200 mb-1">Email</label>
                 <div className="relative">
-                  <Mail className="absolute left-3 top-3 text-gray-400" size={20} />
+                   <Mail className="absolute left-3 top-2.5 text-gray-500" size={18} />
                   <input
                     type="email"
                     value={email}
                     onChange={(e) => { setEmail(e.target.value); setShowVerifyNudge(false) }}
                     placeholder="your@email.com"
-                    className="input-field pl-10"
+                    className="w-full rounded-xl border border-primary-700 bg-primary-950/70 px-3 py-2.5 pl-9 text-white placeholder:text-gray-500 outline-none focus:border-secondary-500"
                     required
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm font-semibold mb-2">Password</label>
+                <label className="block text-sm font-semibold text-gray-200 mb-1">Password</label>
                 <div className="relative">
-                  <Lock className="absolute left-3 top-3 text-gray-400" size={20} />
+                   <Lock className="absolute left-3 top-2.5 text-gray-500" size={18} />
                   <input
                     type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••"
-                    className="input-field pl-10"
+                    className="w-full rounded-xl border border-primary-700 bg-primary-950/70 px-3 py-2.5 pl-9 text-white placeholder:text-gray-500 outline-none focus:border-secondary-500"
                     required
                   />
                 </div>
@@ -193,7 +204,7 @@ function LoginContent() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full btn-primary flex items-center justify-center gap-2 disabled:opacity-50"
+                className="w-full flex items-center justify-center gap-2 rounded-xl bg-secondary-500 px-4 py-2.5 font-black text-primary-950 hover:bg-secondary-400 transition-colors disabled:opacity-50"
               >
                 <LogIn size={20} />
                 {loading ? 'Signing In...' : 'Sign In'}
@@ -201,15 +212,15 @@ function LoginContent() {
             </form>
 
             {/* Forgot Password */}
-            <div className="mt-4 text-center">
+            <div className="mt-3 text-center">
               <Link href="/forgot-password" className="text-secondary-500 hover:underline text-sm">
                 Forgot password?
               </Link>
             </div>
 
             {/* Sign Up Link */}
-            <div className="mt-6 pt-6 border-t border-gray-200 text-center">
-              <p className="text-gray-600">
+            <div className="mt-4 pt-4 border-t border-primary-700 text-center">
+              <p className="text-gray-300">
                 Don&apos;t have an account?{' '}
                 <Link href={`/signup?redirect=${encodeURIComponent(redirect)}`} className="text-secondary-500 font-semibold hover:underline">
                   Sign up
@@ -219,8 +230,6 @@ function LoginContent() {
           </div>
         </div>
       </main>
-
-      <Footer />
     </div>
   )
 }
@@ -228,3 +237,4 @@ function LoginContent() {
 export default function Login() {
   return <Suspense><LoginContent /></Suspense>
 }
+

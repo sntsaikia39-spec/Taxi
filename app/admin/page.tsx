@@ -1,7 +1,6 @@
 'use client'
 
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
-import Footer from '@/components/Footer'
 import toast from 'react-hot-toast'
 import type { Booking } from '@/lib/db'
 
@@ -275,12 +274,26 @@ export default function AdminDashboard() {
   const [confirmBookedCarAssignment, setConfirmBookedCarAssignment] = useState<Car | null>(null)
   const [confirmLowCapacityCarAssignment, setConfirmLowCapacityCarAssignment] = useState<Car | null>(null)
   const [updatingStatusId, setUpdatingStatusId] = useState<string | null>(null)
+  const [darkMode, setDarkMode] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false
+    return localStorage.getItem('adminDarkMode') === '1'
+  })
+
+  useEffect(() => {
+    document.documentElement.style.overflowY = 'auto'
+    document.body.style.overflowY = 'auto'
+    document.documentElement.style.overflowX = 'hidden'
+    document.body.style.overflowX = 'hidden'
+  }, [])
 
   // ── Clear cache and logout on admin page load ─────────────────────────────
   useEffect(() => {
     // Clear all browser storage (cache, session, local data)
+    // Preserve admin UI preferences before clearing
+    const adminDarkMode = localStorage.getItem('adminDarkMode')
     localStorage.clear()
     sessionStorage.clear()
+    if (adminDarkMode !== null) localStorage.setItem('adminDarkMode', adminDarkMode)
     
     // Clear IndexedDB
     if (window.indexedDB) {
@@ -2822,6 +2835,44 @@ export default function AdminDashboard() {
     }
   }, [bookings, payments, tours, cars, destinations])
 
+  const toggleDarkMode = () => {
+    const next = !darkMode
+    setDarkMode(next)
+    localStorage.setItem('adminDarkMode', next ? '1' : '0')
+  }
+
+  const renderMisc = () => (
+    <div className="space-y-6">
+      <div className="bg-white rounded-lg shadow-lg p-6">
+        <h2 className="text-xl font-bold mb-1">Settings</h2>
+        <p className="text-sm text-gray-500 mb-6">Admin panel configuration and utilities</p>
+
+        <div className="space-y-3">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-widest">Appearance</p>
+
+          <div className="flex items-center justify-between px-4 py-4 rounded-lg border border-gray-200 hover:bg-gray-50 transition-smooth cursor-default">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-lg bg-gray-100 flex items-center justify-center text-lg select-none">
+                {darkMode ? '🌙' : '☀️'}
+              </div>
+              <div>
+                <p className="font-semibold">Dark Mode</p>
+                <p className="text-sm text-gray-500">Switch admin panel to {darkMode ? 'light' : 'dark'} theme</p>
+              </div>
+            </div>
+            <button
+              onClick={toggleDarkMode}
+              aria-label={darkMode ? 'Disable dark mode' : 'Enable dark mode'}
+              className={`relative inline-flex items-center w-12 h-6 rounded-full transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-secondary-500 focus:ring-offset-2 shrink-0 ${darkMode ? 'bg-secondary-500' : 'bg-gray-300'}`}
+            >
+              <span className={`inline-block w-5 h-5 bg-white rounded-full shadow transform transition-transform duration-300 ${darkMode ? 'translate-x-6' : 'translate-x-0.5'}`} />
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+
   const renderAnalytics = () => (
     <div className="space-y-8">
       {/* Key Metrics */}
@@ -3016,7 +3067,7 @@ export default function AdminDashboard() {
   )
 
   return (
-    <div className="flex flex-col min-h-screen">
+    <div className="scrollbar-thin-modern flex h-[100dvh] flex-col overflow-y-auto overflow-x-hidden" data-admin-theme={darkMode ? 'dark' : 'light'}>
       {/* Admin Panel Header */}
       <header className="sticky top-0 z-50 bg-primary-950 text-white shadow-lg">
         <div className="container mx-auto px-4">
@@ -3042,7 +3093,11 @@ export default function AdminDashboard() {
           </div>
 
           {/* Tab bar — scrollable on mobile */}
-          <div className="flex overflow-x-auto gap-2 mb-4 md:mb-8 bg-white rounded-lg shadow-lg p-3 md:p-4 scrollbar-hide">
+          <div className={`sticky top-[72px] md:top-[88px] z-40 flex overflow-x-auto gap-2 mb-4 md:mb-8 rounded-lg border backdrop-blur-sm shadow-[0_12px_30px_rgba(15,23,42,0.14)] p-3 md:p-4 scrollbar-hide ${
+            darkMode
+              ? 'border-primary-700/70 bg-primary-900/92'
+              : 'border-gray-200/80 bg-white/95'
+          }`}>
             {[
               { id: 'overview', label: 'Overview' },
               { id: 'bookings', label: 'Bookings' },
@@ -3050,6 +3105,7 @@ export default function AdminDashboard() {
               { id: 'destinations', label: 'Destinations' },
               { id: 'tours', label: 'Tours' },
               { id: 'analytics', label: 'Analytics' },
+              { id: 'misc', label: 'Misc' },
             ].map((tab) => (
               <button
                 key={tab.id}
@@ -3071,6 +3127,7 @@ export default function AdminDashboard() {
           {activeTab === 'destinations' && renderDestinations()}
           {activeTab === 'tours' && renderTours()}
           {activeTab === 'analytics' && renderAnalytics()}
+          {activeTab === 'misc' && renderMisc()}
         </div>
       </main>
 
@@ -3699,7 +3756,6 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      <Footer />
     </div>
   )
 }

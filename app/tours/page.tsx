@@ -1,12 +1,12 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import Header from '@/components/Header'
-import Footer from '@/components/Footer'
-import { Clock, Users, Car, Calendar } from 'lucide-react'
+import { Clock, Users, Car, Calendar, ArrowRight, Star } from 'lucide-react'
 import toast from 'react-hot-toast'
+import gsap from 'gsap'
 import { useAuth } from '@/context/AuthContext'
 import { fetchAllTours } from '@/lib/db'
 import type { TourPackage } from '@/lib/db'
@@ -39,9 +39,126 @@ export default function Tours() {
   const { user } = useAuth()
   const [tours, setTours] = useState<TourPackage[]>([])
   const [loadingTours, setLoadingTours] = useState(true)
+  const scrollRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    document.documentElement.style.overflowY = 'auto'
+    document.body.style.overflowY = 'auto'
+    document.documentElement.style.overflowX = 'hidden'
+    document.body.style.overflowX = 'hidden'
+  }, [])
 
   useEffect(() => {
     loadTours()
+  }, [])
+
+  useEffect(() => {
+    const scroller = scrollRef.current
+    if (!scroller) return
+
+    let targetTop = scroller.scrollTop
+
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault()
+      const max = Math.max(0, scroller.scrollHeight - scroller.clientHeight)
+      targetTop = Math.min(max, Math.max(0, targetTop + e.deltaY))
+      gsap.to(scroller, {
+        scrollTop: targetTop,
+        duration: 0.75,
+        ease: 'power3.out',
+        overwrite: true,
+      })
+    }
+
+    scroller.addEventListener('wheel', onWheel, { passive: false })
+    return () => {
+      scroller.removeEventListener('wheel', onWheel)
+    }
+  }, [])
+
+  useEffect(() => {
+    const scroller = scrollRef.current
+    const header = document.querySelector('header') as HTMLElement | null
+    if (!scroller || !header) return
+
+    let autoHideTimer: ReturnType<typeof setTimeout> | null = null
+    let hideAfterScrollTimer: ReturnType<typeof setTimeout> | null = null
+    let headerHovered = false
+
+    const clearTimer = (timer: ReturnType<typeof setTimeout> | null) => {
+      if (timer) clearTimeout(timer)
+      return null
+    }
+
+    const isInteractiveTarget = (target: EventTarget | null) => {
+      const el = target as HTMLElement | null
+      if (!el) return false
+      return Boolean(el.closest('a, button, input, textarea, select, label, summary, [role="button"], [data-no-header-peek]'))
+    }
+
+    const hideHeader = () => {
+      gsap.killTweensOf(header)
+      gsap.to(header, { yPercent: -110, opacity: 1, duration: 0.46, ease: 'power3.inOut' })
+    }
+
+    const showHeaderTemporarily = () => {
+      autoHideTimer = clearTimer(autoHideTimer)
+      gsap.killTweensOf(header)
+      gsap.to(header, { yPercent: 0, opacity: 1, duration: 0.55, ease: 'power2.out' })
+      autoHideTimer = setTimeout(() => {
+        if (!headerHovered) hideHeader()
+        autoHideTimer = null
+      }, 6500)
+    }
+
+    const scheduleHideAfterScroll = () => {
+      hideAfterScrollTimer = clearTimer(hideAfterScrollTimer)
+      hideAfterScrollTimer = setTimeout(() => {
+        if (!headerHovered) hideHeader()
+        hideAfterScrollTimer = null
+      }, 250)
+    }
+
+    const onScroll = () => scheduleHideAfterScroll()
+    const onClick = (e: MouseEvent) => {
+      if (!isInteractiveTarget(e.target)) showHeaderTemporarily()
+    }
+    const onTouchEnd = (e: TouchEvent) => {
+      if (!isInteractiveTarget(e.target)) showHeaderTemporarily()
+    }
+    const onHeaderMouseEnter = () => {
+      headerHovered = true
+      autoHideTimer = clearTimer(autoHideTimer)
+      hideAfterScrollTimer = clearTimer(hideAfterScrollTimer)
+    }
+    const onHeaderMouseLeave = () => {
+      headerHovered = false
+      scheduleHideAfterScroll()
+    }
+
+    // Start visible, then apply the same delayed auto-hide window on first entry.
+    gsap.set(header, { yPercent: 0, opacity: 1 })
+    autoHideTimer = setTimeout(() => {
+      if (!headerHovered) hideHeader()
+      autoHideTimer = null
+    }, 6500)
+
+    scroller.addEventListener('scroll', onScroll, { passive: true })
+    scroller.addEventListener('click', onClick, { passive: true })
+    scroller.addEventListener('touchend', onTouchEnd, { passive: true })
+    header.addEventListener('mouseenter', onHeaderMouseEnter)
+    header.addEventListener('mouseleave', onHeaderMouseLeave)
+
+    return () => {
+      scroller.removeEventListener('scroll', onScroll)
+      scroller.removeEventListener('click', onClick)
+      scroller.removeEventListener('touchend', onTouchEnd)
+      header.removeEventListener('mouseenter', onHeaderMouseEnter)
+      header.removeEventListener('mouseleave', onHeaderMouseLeave)
+      autoHideTimer = clearTimer(autoHideTimer)
+      hideAfterScrollTimer = clearTimer(hideAfterScrollTimer)
+      gsap.set(header, { yPercent: 0, opacity: 1 })
+    }
   }, [])
 
   const loadTours = async () => {
@@ -68,143 +185,210 @@ export default function Tours() {
 
   if (loadingTours) {
     return (
-      <div className="flex flex-col min-h-screen">
+      <div ref={scrollRef} className="scrollbar-thin-modern flex h-[100dvh] flex-col overflow-y-auto overflow-x-hidden bg-primary-950">
         <Header />
-        <main className="flex-1 py-12 md:py-16 bg-gray-50">
-          <div className="container mx-auto px-4 text-center">
-            <p className="text-gray-600">Loading tours...</p>
+        <main className="flex-1 flex items-center justify-center">
+          <div className="flex flex-col items-center gap-4">
+            <div className="w-10 h-10 border-2 border-secondary-500 border-t-transparent rounded-full animate-spin" />
+            <p className="text-gray-400 text-sm">Loading tours...</p>
           </div>
         </main>
-        <Footer />
       </div>
     )
   }
 
   return (
-    <div className="flex flex-col min-h-screen">
+    <div ref={scrollRef} className="scrollbar-thin-modern h-[100dvh] overflow-y-auto overflow-x-hidden bg-primary-950">
       <Header />
 
-      <main className="flex-1 py-12 md:py-16 bg-gray-50">
-        <div className="container mx-auto px-4">
-          <h1 className="text-2xl md:text-4xl font-bold text-center mb-3 md:mb-4">Tour Packages</h1>
-          <p className="text-center text-gray-600 mb-6 md:mb-12 max-w-2xl mx-auto">
-            Explore amazing tour packages with our experienced drivers. Each package includes transportation and tour guidance.
-          </p>
+      <main className="relative overflow-x-hidden">
+        {/* Dot grid overlay */}
+        <div
+          className="absolute inset-0 opacity-[0.03] pointer-events-none"
+          style={{
+            backgroundImage: 'radial-gradient(circle, rgba(255,218,0,0.75) 1px, transparent 1px)',
+            backgroundSize: '36px 36px',
+          }}
+        />
+
+        {/* Glow blobs */}
+        <div
+          className="absolute -top-40 -left-40 w-[560px] h-[560px] rounded-full pointer-events-none"
+          style={{ background: 'radial-gradient(circle, rgba(255,193,7,0.07) 0%, transparent 70%)' }}
+        />
+        <div
+          className="absolute top-60 -right-40 w-[480px] h-[480px] rounded-full pointer-events-none"
+          style={{ background: 'radial-gradient(circle, rgba(255,193,7,0.05) 0%, transparent 70%)' }}
+        />
+
+        <div className="relative z-10 container mx-auto px-4 py-16 md:py-24">
+          {/* Hero heading */}
+          <div className="text-center mb-2 md:mb-8">
+            <p className="text-secondary-500 font-semibold text-xs tracking-[0.22em] uppercase mb-4">
+              Curated Experiences
+            </p>
+            <h1 className="font-black text-white text-3xl md:text-5xl mb-5">
+              Tour Packages
+            </h1>
+
+          </div>
 
           {tours.length === 0 ? (
-            <div className="text-center py-12">
-              <p className="text-gray-600">No tours available at the moment.</p>
+            <div className="max-w-lg mx-auto text-center rounded-2xl border border-primary-800 bg-primary-900/60 backdrop-blur-sm p-10 md:p-14">
+              <div className="w-14 h-14 rounded-full bg-secondary-500/10 border border-secondary-500/20 flex items-center justify-center mx-auto mb-5">
+                <Star size={24} className="text-secondary-500" />
+              </div>
+              <p className="text-white font-bold text-xl mb-2">No tours available right now</p>
+              <p className="text-gray-400 text-sm mb-8">Check back soon or book a private taxi for a custom trip.</p>
+              <a
+                href="/book-taxi"
+                className="inline-flex items-center gap-2 bg-secondary-500 text-primary-950 font-black px-6 py-3 rounded-xl hover:bg-secondary-400 transition-colors"
+              >
+                Book a Taxi Instead
+                <ArrowRight size={16} />
+              </a>
             </div>
           ) : (
             <>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-8">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
                 {tours.map((tour, index) => (
-                  <div key={tour.id} className="bg-white rounded-lg shadow-lg overflow-hidden hover:shadow-xl transition-shadow">
-                    {/* Image / Banner */}
-                    <div className="relative h-48 w-full bg-gray-200 overflow-hidden">
+                  <div
+                    key={tour.id}
+                    className="flex flex-col h-[500px] rounded-3xl bg-gradient-to-b from-[#fff6e5] to-[#ffe8bf] border border-[#ffcf73]/60 shadow-[0_16px_44px_rgba(0,0,0,0.35)] overflow-hidden hover:shadow-[0_24px_56px_rgba(0,0,0,0.45)] transition-shadow duration-300"
+                  >
+                    {/* Image */}
+                    <div className="relative h-40 w-full overflow-hidden shrink-0">
                       <Image
                         src={TOUR_IMAGES[index % TOUR_IMAGES.length]}
                         alt={tour.name}
                         fill
-                        className="object-cover w-full h-full hover:scale-105 transition-transform duration-300"
+                        className="object-cover w-full h-full hover:scale-105 transition-transform duration-500"
                       />
+                      {/* Price badge */}
+                      <div className="absolute top-2 left-3 bg-primary-950/80 backdrop-blur-sm text-secondary-500 font-black text-sm px-2.5 py-1 rounded-xl border border-secondary-500/30">
+                        ₹{toNum(tour.price).toFixed(0)}
+                      </div>
+                      {/* Departure time badge */}
                       {tour.arrival_time && (
-                        <div className="absolute bottom-3 right-4 bg-black/60 text-white text-sm font-semibold px-3 py-1 rounded-full flex items-center gap-1">
-                          <Calendar size={13} />
+                        <div className="absolute bottom-2 right-3 bg-primary-950/75 backdrop-blur-sm text-white text-[10px] font-semibold px-2 py-1 rounded-full flex items-center gap-1 border border-white/10">
+                          <Calendar size={10} />
                           Daily {formatDepartureTime(tour.arrival_time)}
                         </div>
                       )}
                     </div>
 
-                    {/* Content */}
-                    <div className="p-6">
-                      <h3 className="text-2xl font-bold mb-2">{tour.name}</h3>
-                      {tour.description && (
-                        <p className="text-gray-600 mb-4 text-sm leading-relaxed">{tour.description}</p>
-                      )}
+                    {/* Content Wrapper */}
+                    <div className="flex flex-col flex-1 overflow-hidden">
+                      {/* Scrollable Middle Content */}
+                      <div className="flex-1 overflow-y-auto p-4 pb-2 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+                        <h3 className="text-lg font-black text-primary-950 mb-1.5">{tour.name}</h3>
+                        {tour.description && (
+                          <p className="text-primary-950/70 mb-2.5 text-xs leading-relaxed line-clamp-2">{tour.description}</p>
+                        )}
 
-                      {/* Key Details */}
-                      <div className="grid grid-cols-2 gap-2 mb-5">
-                        {tour.duration_hours && (
-                          <div className="flex items-center gap-2 text-gray-700 text-sm">
-                            <Clock size={16} className="text-yellow-500 flex-shrink-0" />
-                            <span>{tour.duration_hours} hours</span>
+                        {/* Key Details */}
+                        <div className="grid grid-cols-2 gap-1.5 mb-3">
+                          {tour.duration_hours && (
+                            <div className="flex items-center gap-1.5 text-primary-950/80 text-xs">
+                              <Clock size={13} className="text-amber-600 flex-shrink-0" />
+                              <span>{tour.duration_hours} hours</span>
+                            </div>
+                          )}
+                          {tour.max_passengers && (
+                            <div className="flex items-center gap-1.5 text-primary-950/80 text-xs">
+                              <Users size={13} className="text-amber-600 flex-shrink-0" />
+                              <span>Up to {tour.max_passengers} passengers</span>
+                            </div>
+                          )}
+                          {tour.car_model && (
+                            <div className="flex items-center gap-1.5 text-primary-950/80 text-xs">
+                              <Car size={13} className="text-amber-600 flex-shrink-0" />
+                              <span>{tour.car_model}</span>
+                            </div>
+                          )}
+                          {tour.arrival_time && (
+                            <div className="flex items-center gap-1.5 text-xs">
+                              <Clock size={13} className="text-emerald-600 flex-shrink-0" />
+                              <span className="font-semibold text-emerald-700">Departs {formatDepartureTime(tour.arrival_time)}</span>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Highlights */}
+                        {tour.highlights && tour.highlights.length > 0 && (
+                          <div className="mb-3">
+                            <h4 className="font-bold text-[10px] text-primary-950/50 uppercase tracking-wider mb-1.5">Includes</h4>
+                            <ul className="text-xs text-primary-950/75 space-y-0.5">
+                              {tour.highlights.slice(0, 3).map((highlight, i) => (
+                                <li key={i} className="flex items-center gap-1.5">
+                                  <span className="text-amber-600 font-bold text-sm leading-none">✓</span>
+                                  {highlight}
+                                </li>
+                              ))}
+                            </ul>
                           </div>
                         )}
-                        {tour.max_passengers && (
-                          <div className="flex items-center gap-2 text-gray-700 text-sm">
-                            <Users size={16} className="text-yellow-500 flex-shrink-0" />
-                            <span>Up to {tour.max_passengers} passengers</span>
-                          </div>
-                        )}
-                        {tour.car_model && (
-                          <div className="flex items-center gap-2 text-gray-700 text-sm">
-                            <Car size={16} className="text-yellow-500 flex-shrink-0" />
-                            <span>{tour.car_model}</span>
-                          </div>
-                        )}
-                        {tour.arrival_time && (
-                          <div className="flex items-center gap-2 text-gray-700 text-sm">
-                            <Clock size={16} className="text-green-500 flex-shrink-0" />
-                            <span className="font-medium text-green-700">Departs {formatDepartureTime(tour.arrival_time)}</span>
+
+                        {/* Itinerary Preview */}
+                        {tour.itinerary && (
+                          <div className="mb-1 bg-amber-100/60 border border-amber-200/60 rounded-xl px-3 py-2 text-xs text-primary-950/65">
+                            {tour.itinerary}
                           </div>
                         )}
                       </div>
 
-                      {/* Highlights */}
-                      {tour.highlights && tour.highlights.length > 0 && (
-                        <div className="mb-5">
-                          <h4 className="font-semibold mb-2 text-sm text-gray-500 uppercase tracking-wide">Includes</h4>
-                          <ul className="text-sm text-gray-600 space-y-1">
-                            {tour.highlights.slice(0, 4).map((highlight, index) => (
-                              <li key={index} className="flex items-center gap-2">
-                                <span className="text-yellow-500">✓</span>
-                                {highlight}
-                              </li>
-                            ))}
-                          </ul>
+                      {/* Fixed Footer */}
+                      <div className="p-4 pt-2 shrink-0 bg-gradient-to-b from-transparent to-[#ffe8bf]">
+                        {/* Price + CTA */}
+                        <div className="flex items-center justify-between pt-3 border-t border-primary-950/10">
+                          <div>
+                            <p className="text-primary-950/50 text-[10px] mb-0.5">Price per person</p>
+                            <p className="text-xl font-black text-primary-950">₹{toNum(tour.price).toFixed(0)}</p>
+                          </div>
+                          <button
+                            onClick={() => handleBookTour(tour.id)}
+                            className="flex items-center gap-1 bg-primary-950 text-white font-black px-3 py-1.5 text-xs rounded-xl hover:bg-secondary-500 hover:text-primary-950 transition-colors duration-200 whitespace-nowrap"
+                          >
+                            Book Now
+                            <ArrowRight size={12} />
+                          </button>
                         </div>
-                      )}
-
-                      {/* Itinerary Preview */}
-                      {tour.itinerary && (
-                        <div className="mb-5 bg-gray-50 rounded p-3 text-sm text-gray-600 line-clamp-2">
-                          {tour.itinerary}
-                        </div>
-                      )}
-
-                      {/* Price and CTA */}
-                      <div className="flex items-center justify-between pt-4 border-t">
-                        <div>
-                          <p className="text-gray-500 text-xs">Price per person</p>
-                          <p className="text-3xl font-bold text-yellow-500">₹{toNum(tour.price).toFixed(0)}</p>
-                        </div>
-                        <button
-                          onClick={() => handleBookTour(tour.id)}
-                          className="btn-secondary whitespace-nowrap"
-                        >
-                          Book Now
-                        </button>
                       </div>
                     </div>
                   </div>
                 ))}
               </div>
 
-              <div className="mt-16 bg-blue-50 border-l-4 border-blue-500 p-6 rounded">
-                <h3 className="font-bold text-lg mb-2">Custom Tours Available</h3>
-                <p className="text-gray-700">
-                  Don't see what you're looking for? We can customize tours based on your preferences.
-                  <br />
-                  <span className="text-sm">Contact us at support@rinastoursandtravels.com for custom packages.</span>
-                </p>
+              {/* Custom tours banner */}
+              <div className="mt-16 rounded-2xl border border-primary-800 bg-primary-900/60 backdrop-blur-sm p-7 md:p-10 flex flex-col md:flex-row md:items-center gap-5 md:gap-8">
+                <div className="w-12 h-12 rounded-full bg-secondary-500/10 border border-secondary-500/20 flex items-center justify-center flex-shrink-0">
+                  <Star size={22} className="text-secondary-500" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-black text-white text-lg mb-1">Custom Tours Available</h3>
+                  <p className="text-gray-400 text-sm leading-relaxed">
+                    Don&apos;t see what you&apos;re looking for? We can customize tours based on your preferences and schedule.{' '}
+                    <a
+                      href="mailto:support@rinastoursandtravels.com"
+                      className="text-secondary-500 hover:text-secondary-400 font-semibold transition-colors"
+                    >
+                      support@rinastoursandtravels.com
+                    </a>
+                  </p>
+                </div>
+                <a
+                  href="mailto:support@rinastoursandtravels.com"
+                  className="inline-flex items-center gap-2 bg-secondary-500 text-primary-950 font-black px-5 py-3 rounded-xl hover:bg-secondary-400 transition-colors whitespace-nowrap flex-shrink-0"
+                >
+                  Contact Us
+                  <ArrowRight size={15} />
+                </a>
               </div>
             </>
           )}
         </div>
       </main>
-
-      <Footer />
     </div>
   )
 }
+

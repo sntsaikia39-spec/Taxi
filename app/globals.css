@@ -8,8 +8,13 @@
   box-sizing: border-box;
 }
 
+html, body {
+  overflow-x: hidden;
+  overscroll-behavior: none;
+}
+
 html {
-  scroll-behavior: smooth;
+  scroll-behavior: auto;
 }
 
 body {
@@ -21,28 +26,92 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Custom scrollbar */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+/* No scrollbar on the main page */
+html::-webkit-scrollbar,
+body::-webkit-scrollbar {
+  display: none;
+}
+html, body {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
 
-::-webkit-scrollbar-track {
-  background: #f1f1f1;
-}
-
-::-webkit-scrollbar-thumb {
-  background: #ffda00;
-  border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: #e5c200;
+/* 3D card base */
+.card-3d {
+  transform-style: preserve-3d;
+  will-change: transform;
 }
 
 /* Toast notifications styling */
 .toast-container {
   z-index: 9999;
+}
+
+@keyframes menuSlideDown {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.mobile-menu-animate {
+  animation: menuSlideDown 0.22s ease forwards;
+}
+
+/* Thin modern scrollbar for in-panel scroll areas */
+.scrollbar-thin-modern {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 218, 0, 0.5) rgba(255, 255, 255, 0.06);
+}
+
+.scrollbar-thin-modern::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.scrollbar-thin-modern::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 999px;
+}
+
+.scrollbar-thin-modern::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(255, 218, 0, 0.9) 0%, rgba(255, 178, 0, 0.8) 100%);
+  border-radius: 999px;
+}
+
+.scrollbar-thin-modern::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, rgba(255, 228, 77, 0.95) 0%, rgba(255, 196, 48, 0.9) 100%);
+}
+
+/* Tours section — animated background blobs */
+@keyframes toursBlob1 {
+  0%, 100% { transform: translate(0px, 0px) scale(1); }
+  25%       { transform: translate(60px, 90px) scale(1.08); }
+  50%       { transform: translate(-40px, 160px) scale(0.94); }
+  75%       { transform: translate(80px, 50px) scale(1.05); }
+}
+@keyframes toursBlob2 {
+  0%, 100% { transform: translate(0px, 0px) scale(1); }
+  30%       { transform: translate(-80px, -55px) scale(1.12); }
+  60%       { transform: translate(50px, -130px) scale(0.88); }
+}
+@keyframes toursBlob3 {
+  0%, 100% { transform: translate(0px, 0px) scale(1); }
+  33%       { transform: translate(70px, -70px) scale(1.1); }
+  66%       { transform: translate(-60px, 70px) scale(0.9); }
+}
+/* Waterfall stream drop - Enhanced */
+@keyframes streamFall {
+  0%   { transform: translateY(-100%) scaleY(1); opacity: 0; filter: blur(0px); }
+  3%   { opacity: 0.6; filter: blur(0.5px); }
+  8%   { opacity: 0.9; filter: blur(0.8px); }
+  50%  { opacity: 0.85; filter: blur(1px); }
+  92%  { opacity: 0.6; filter: blur(0.8px); }
+  100% { transform: translateY(120vh) scaleY(0.95); opacity: 0; filter: blur(0px); }
+}
+
+/* Waterfall splash effect at bottom */
+@keyframes splashEffect {
+  0%   { transform: scaleX(0.3) scaleY(1); opacity: 0; }
+  50%  { opacity: 0.8; }
+  100% { transform: scaleX(1) scaleY(0); opacity: 0; }
 }
 
 /* Smooth transitions */
@@ -79,3 +148,70 @@ body {
     display: none;
   }
 }
+
+/* ─── Admin Panel Dark Mode ──────────────────────────────── */
+[data-admin-theme="dark"] {
+  color-scheme: dark;
+  background-color: #0f172a;
+  color: #e2e8f0;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+[data-admin-theme="dark"] main.bg-gray-50 {
+  background-color: #0f172a;
+}
+[data-admin-theme="dark"] .bg-white {
+  background-color: #1e293b;
+}
+[data-admin-theme="dark"] .bg-gray-50 {
+  background-color: #162032;
+}
+[data-admin-theme="dark"] .bg-gray-100 {
+  background-color: #334155;
+}
+[data-admin-theme="dark"] .bg-gray-200 {
+  background-color: #475569;
+}
+[data-admin-theme="dark"] .text-gray-900 { color: #f1f5f9; }
+[data-admin-theme="dark"] .text-gray-800 { color: #e2e8f0; }
+[data-admin-theme="dark"] .text-gray-700 { color: #cbd5e1; }
+[data-admin-theme="dark"] .text-gray-600 { color: #94a3b8; }
+[data-admin-theme="dark"] .text-gray-500 { color: #64748b; }
+[data-admin-theme="dark"] .border-gray-200 { border-color: #334155; }
+[data-admin-theme="dark"] .border-gray-300 { border-color: #475569; }
+[data-admin-theme="dark"] .border { border-color: #334155; }
+[data-admin-theme="dark"] .divide-gray-200 > * + * { border-color: #334155; }
+[data-admin-theme="dark"] .card {
+  background-color: #1e293b;
+  border-color: #334155;
+}
+[data-admin-theme="dark"] .input-field {
+  background-color: #0f172a;
+  border-color: #475569;
+  color: #e2e8f0;
+}
+[data-admin-theme="dark"] input:not([type="checkbox"]):not([type="radio"]),
+[data-admin-theme="dark"] select,
+[data-admin-theme="dark"] textarea {
+  background-color: #0f172a;
+  border-color: #475569;
+  color: #e2e8f0;
+}
+[data-admin-theme="dark"] .hover\:bg-gray-50:hover { background-color: #1e293b; }
+[data-admin-theme="dark"] .hover\:bg-gray-100:hover { background-color: #334155; }
+/* analytics gradient cards */
+[data-admin-theme="dark"] .from-blue-50   { --tw-gradient-from: #0c1e3d; }
+[data-admin-theme="dark"] .to-blue-100    { --tw-gradient-to: #1e3a5f; }
+[data-admin-theme="dark"] .from-green-50  { --tw-gradient-from: #0a1f14; }
+[data-admin-theme="dark"] .to-green-100   { --tw-gradient-to: #14532d; }
+[data-admin-theme="dark"] .from-yellow-50 { --tw-gradient-from: #1c1506; }
+[data-admin-theme="dark"] .to-yellow-100  { --tw-gradient-to: #3d2e0a; }
+[data-admin-theme="dark"] .from-purple-50 { --tw-gradient-from: #1a0f2e; }
+[data-admin-theme="dark"] .to-purple-100  { --tw-gradient-to: #3b0764; }
+/* status/badge backgrounds */
+[data-admin-theme="dark"] .bg-green-100  { background-color: #14532d; }
+[data-admin-theme="dark"] .bg-yellow-100 { background-color: #3d2e0a; }
+[data-admin-theme="dark"] .bg-red-100    { background-color: #450a0a; }
+[data-admin-theme="dark"] .bg-blue-100   { background-color: #1e3a5f; }
+[data-admin-theme="dark"] .bg-purple-100 { background-color: #3b0764; }
+[data-admin-theme="dark"] .bg-orange-100 { background-color: #431407; }
+[data-admin-theme="dark"] .bg-indigo-100 { background-color: #1e1b4b; }

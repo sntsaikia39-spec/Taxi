@@ -1,16 +1,16 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Header from '@/components/Header'
-import Footer from '@/components/Footer'
 import toast from 'react-hot-toast'
+import gsap from 'gsap'
 import { generateBookingId } from '@/lib/utils'
 import { validateFullName, validatePhoneNumber, validateEmail } from '@/lib/validation'
 import { useAuth } from '@/context/AuthContext'
 import { fetchTourById } from '@/lib/db'
 import type { TourPackage } from '@/lib/db'
-import { Users, Calendar, CheckCircle, ArrowLeft, Clock, Car, MapPin } from 'lucide-react'
+import { Users, CheckCircle, ArrowLeft, Clock, Car, ArrowRight } from 'lucide-react'
 
 const STEPS = ['Contact', 'Passengers', 'Date', 'Confirm'] as const
 type Step = 0 | 1 | 2 | 3
@@ -20,7 +20,6 @@ function toNum(val: unknown): number {
   return isNaN(n) ? 0 : n
 }
 
-// Extract HH:MM from ISO timestamp string without timezone conversion
 function extractTime(arrival_time: string): string {
   const match = arrival_time.match(/T(\d{2}):(\d{2})/)
   return match ? `${match[1]}:${match[2]}` : '00:00'
@@ -56,17 +55,32 @@ export default function BookTour() {
   const tourId = params.id as string
   const { user, isLoading } = useAuth()
 
+  const scrollRef = useRef<HTMLDivElement | null>(null)
+
   const [tour, setTour] = useState<TourPackage | null>(null)
   const [loadingTour, setLoadingTour] = useState(true)
   const [step, setStep] = useState<Step>(0)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  // Form state
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
   const [passengers, setPassengers] = useState(1)
   const [date, setDate] = useState('')
+
+  useEffect(() => {
+    const scroller = scrollRef.current
+    if (!scroller) return
+    let targetTop = scroller.scrollTop
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault()
+      const max = Math.max(0, scroller.scrollHeight - scroller.clientHeight)
+      targetTop = Math.min(max, Math.max(0, targetTop + e.deltaY))
+      gsap.to(scroller, { scrollTop: targetTop, duration: 0.75, ease: 'power3.out', overwrite: true })
+    }
+    scroller.addEventListener('wheel', onWheel, { passive: false })
+    return () => scroller.removeEventListener('wheel', onWheel)
+  }, [])
 
   useEffect(() => {
     if (!isLoading && !user) {
@@ -105,22 +119,11 @@ export default function BookTour() {
   const totalPrice = tour ? toNum(tour.price) * passengers : 0
   const advancePayment = Math.round(totalPrice * 0.3 * 100) / 100
 
-  // ── Step validation ──────────────────────────────────────────────────────────
-
   const canAdvanceStep = (): boolean => {
     if (step === 0) {
-      // Validate name
-      const nameValidation = validateFullName(name)
-      if (!nameValidation.valid) return false
-      
-      // Validate phone
-      const phoneValidation = validatePhoneNumber(phone)
-      if (!phoneValidation.valid) return false
-      
-      // Validate email
-      const emailValidation = validateEmail(email)
-      if (!emailValidation.valid) return false
-      
+      if (!validateFullName(name).valid) return false
+      if (!validatePhoneNumber(phone).valid) return false
+      if (!validateEmail(email).valid) return false
       return true
     }
     if (step === 1) return passengers >= 1 && (tour ? passengers <= (tour.max_passengers ?? 999) : true)
@@ -131,23 +134,12 @@ export default function BookTour() {
   const nextStep = () => {
     if (!canAdvanceStep()) {
       if (step === 0) {
-        const nameValidation = validateFullName(name)
-        if (!nameValidation.valid) {
-          toast.error(nameValidation.error || 'Invalid name')
-          return
-        }
-        
-        const phoneValidation = validatePhoneNumber(phone)
-        if (!phoneValidation.valid) {
-          toast.error(phoneValidation.error || 'Invalid phone number')
-          return
-        }
-        
-        const emailValidation = validateEmail(email)
-        if (!emailValidation.valid) {
-          toast.error(emailValidation.error || 'Invalid email')
-          return
-        }
+        const nv = validateFullName(name)
+        if (!nv.valid) { toast.error(nv.error || 'Invalid name'); return }
+        const pv = validatePhoneNumber(phone)
+        if (!pv.valid) { toast.error(pv.error || 'Invalid phone'); return }
+        const ev = validateEmail(email)
+        if (!ev.valid) { toast.error(ev.error || 'Invalid email'); return }
       }
       if (step === 2) toast.error('Please select a tour date.')
       return
@@ -157,16 +149,12 @@ export default function BookTour() {
 
   const prevStep = () => setStep((s) => (s - 1) as Step)
 
-  // ── Submit ───────────────────────────────────────────────────────────────────
-
   const handleSubmit = async () => {
     if (!tour || isSubmitting) return
-
     setIsSubmitting(true)
     try {
       const bookingId = generateBookingId()
       const startTime = tour.arrival_time ? extractTime(tour.arrival_time) : '09:00'
-
       const payload = {
         booking_id: bookingId,
         booking_type: 'tour',
@@ -183,45 +171,29 @@ export default function BookTour() {
         amount_total: totalPrice,
         booking_status: 'pending',
       }
-
       const res = await fetch('/api/bookings/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       })
       const result = await res.json()
-
       if (!result.success || !result.booking) {
         toast.error(result.error || 'Failed to create booking. Please try again.')
         setIsSubmitting(false)
         return
       }
-
       const savedBooking = result.booking
       const displayTime = formatDisplayTime(tour.arrival_time)
-
       sessionStorage.setItem(
         'tourBookingData',
         JSON.stringify({
-          bookingId,
-          bookingType: 'tour',
-          tourId: tour.id,
-          tourName: tour.name,
-          name: name.trim(),
-          phone: phone.trim(),
-          email: email.trim(),
-          passengers,
-          date,
-          time: displayTime,
-          startTime: displayTime,
-          car: tour.car_model || '',
-          carType: tour.car_model || '',
-          totalPrice,
-          advancePayment,
-          dbBookingId: savedBooking.id,
+          bookingId, bookingType: 'tour', tourId: tour.id, tourName: tour.name,
+          name: name.trim(), phone: phone.trim(), email: email.trim(),
+          passengers, date, time: displayTime, startTime: displayTime,
+          car: tour.car_model || '', carType: tour.car_model || '',
+          totalPrice, advancePayment, dbBookingId: savedBooking.id,
         })
       )
-
       toast.success('Booking created! Redirecting to payment...')
       window.location.href = `/payment?bookingId=${bookingId}&type=tour&amount=${advancePayment}`
     } catch (err) {
@@ -231,16 +203,16 @@ export default function BookTour() {
     }
   }
 
-  // ── Loading / not found ──────────────────────────────────────────────────────
-
   if (loadingTour) {
     return (
-      <div className="flex flex-col min-h-screen">
+      <div ref={scrollRef} className="h-[100dvh] overflow-y-auto overflow-x-hidden bg-primary-950">
         <Header />
-        <main className="flex-1 flex items-center justify-center py-20">
-          <p className="text-gray-600">Loading tour details...</p>
+        <main className="flex-1 flex items-center justify-center min-h-[80dvh]">
+          <div className="flex flex-col items-center gap-4">
+            <div className="w-10 h-10 border-2 border-secondary-500 border-t-transparent rounded-full animate-spin" />
+            <p className="text-gray-400 text-sm">Loading tour details...</p>
+          </div>
         </main>
-        <Footer />
       </div>
     )
   }
@@ -250,87 +222,89 @@ export default function BookTour() {
   const maxPax = tour.max_passengers ?? 20
   const departureTime = formatDisplayTime(tour.arrival_time)
 
-  // ── Render ───────────────────────────────────────────────────────────────────
+  const inputCls = "w-full px-4 py-3 bg-primary-950 border border-primary-700 rounded-xl text-white placeholder:text-gray-600 focus:outline-none focus:ring-1 focus:ring-secondary-500 focus:border-secondary-500 transition-colors text-sm"
 
   return (
-    <div className="flex flex-col min-h-screen">
+    <div ref={scrollRef} className="scrollbar-thin-modern h-[100dvh] overflow-y-auto overflow-x-hidden bg-primary-950">
       <Header />
 
-      <main className="flex-1 py-12 md:py-16 bg-gray-50">
-        <div className="container mx-auto px-4">
+      <main className="relative overflow-x-hidden">
+        {/* Dot grid */}
+        <div
+          className="absolute inset-0 opacity-[0.03] pointer-events-none"
+          style={{ backgroundImage: 'radial-gradient(circle, rgba(255,218,0,0.75) 1px, transparent 1px)', backgroundSize: '36px 36px' }}
+        />
+        {/* Glow blobs */}
+        <div className="absolute -top-40 -left-40 w-[500px] h-[500px] rounded-full pointer-events-none"
+          style={{ background: 'radial-gradient(circle, rgba(255,193,7,0.07) 0%, transparent 70%)' }} />
+        <div className="absolute top-60 -right-40 w-[440px] h-[440px] rounded-full pointer-events-none"
+          style={{ background: 'radial-gradient(circle, rgba(255,193,7,0.05) 0%, transparent 70%)' }} />
+
+        <div className="relative z-10 container mx-auto px-4 pt-20 pb-10">
 
           {/* Back */}
           <button
             onClick={() => router.push('/tours')}
-            className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-8 transition-colors"
+            className="flex items-center gap-2 text-gray-500 hover:text-white mb-5 text-sm transition-colors"
           >
-            <ArrowLeft size={18} /> Back to Tours
+            <ArrowLeft size={15} /> Back to Tours
           </button>
 
-          <h1 className="text-xl md:text-3xl font-bold text-center mb-2 md:mb-3">Book {tour.name}</h1>
-          <p className="text-center text-gray-500 mb-10">Complete the steps below to reserve your spot</p>
+          {/* Title */}
+          <div className="text-center mb-6">
+            <p className="text-secondary-500 font-semibold text-xs tracking-[0.22em] uppercase mb-2">Tour Booking</p>
+            <h1 className="font-black text-white text-2xl md:text-3xl">{tour.name}</h1>
+          </div>
 
-          {/* Progress Bar */}
-          <div className="max-w-2xl mx-auto mb-10">
+          {/* Progress Steps */}
+          <div className="max-w-md mx-auto mb-7">
             <div className="flex items-center">
               {STEPS.map((label, idx) => (
                 <div key={label} className="flex-1 flex items-center">
                   <div className="flex flex-col items-center">
-                    <div className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm transition-colors
-                      ${idx < step ? 'bg-green-500 text-white' : idx === step ? 'bg-yellow-400 text-black' : 'bg-gray-200 text-gray-500'}`}>
-                      {idx < step ? <CheckCircle size={18} /> : idx + 1}
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-xs transition-all
+                      ${idx < step
+                        ? 'bg-secondary-500 text-primary-950'
+                        : idx === step
+                        ? 'bg-secondary-500 text-primary-950 ring-2 ring-secondary-500/30'
+                        : 'bg-primary-800 text-gray-500 border border-primary-700'}`}>
+                      {idx < step ? <CheckCircle size={14} /> : idx + 1}
                     </div>
-                    <span className={`text-xs mt-1 font-medium ${idx === step ? 'text-yellow-600' : idx < step ? 'text-green-600' : 'text-gray-400'}`}>
+                    <span className={`text-[10px] mt-1 font-semibold tracking-wide ${idx === step ? 'text-secondary-500' : idx < step ? 'text-secondary-500/70' : 'text-gray-600'}`}>
                       {label}
                     </span>
                   </div>
                   {idx < STEPS.length - 1 && (
-                    <div className={`flex-1 h-0.5 mx-1 mb-5 transition-colors ${idx < step ? 'bg-green-400' : 'bg-gray-200'}`} />
+                    <div className={`flex-1 h-px mx-1 mb-4 transition-colors ${idx < step ? 'bg-secondary-500/50' : 'bg-primary-800'}`} />
                   )}
                 </div>
               ))}
             </div>
           </div>
 
-          <div className="max-w-5xl mx-auto grid md:grid-cols-3 gap-4 md:gap-8">
+          {/* Main Grid */}
+          <div className="max-w-5xl mx-auto grid md:grid-cols-3 gap-4 md:gap-6">
 
-            {/* ── Form Panel ── */}
-            <div className="md:col-span-2 bg-white rounded-xl shadow-lg p-4 md:p-8">
+            {/* Form Panel */}
+            <div className="md:col-span-2 bg-primary-900/60 border border-primary-800 rounded-2xl backdrop-blur-sm p-5 md:p-7">
 
               {/* Step 0: Contact */}
               {step === 0 && (
-                <div className="space-y-5">
-                  <h2 className="text-xl font-bold mb-6">Contact Details</h2>
+                <div className="space-y-4">
+                  <h2 className="font-black text-white text-lg mb-5">Contact Details</h2>
                   <div>
-                    <label className="block text-sm font-semibold mb-2">Full Name *</label>
-                    <input
-                      type="text"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      placeholder="Enter your full name"
-                      className="input-field"
-                    />
+                    <label className="block text-xs font-semibold text-gray-400 mb-1.5 uppercase tracking-wide">Full Name *</label>
+                    <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Enter your full name" className={inputCls} />
                   </div>
                   <div>
-                    <label className="block text-sm font-semibold mb-2">Phone Number *</label>
-                    <input
-                      type="tel"
-                      value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
-                      placeholder="10-digit mobile number"
-                      className="input-field"
-                    />
+                    <label className="block text-xs font-semibold text-gray-400 mb-1.5 uppercase tracking-wide">Phone Number *</label>
+                    <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="10-digit mobile number" className={inputCls} />
                   </div>
                   <div>
-                    <label className="block text-sm font-semibold mb-2">Email Address *</label>
-                    <input
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="your@email.com"
-                      className="input-field disabled:bg-gray-100 disabled:cursor-not-allowed"
-                      disabled
-                    />
+                    <label className="block text-xs font-semibold text-gray-400 mb-1.5 uppercase tracking-wide">Email Address *</label>
+                    <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="your@email.com"
+                      className={`${inputCls} opacity-60 cursor-not-allowed`} disabled />
+                    <p className="text-gray-600 text-[11px] mt-1">Linked to your account</p>
                   </div>
                 </div>
               )}
@@ -338,26 +312,19 @@ export default function BookTour() {
               {/* Step 1: Passengers */}
               {step === 1 && (
                 <div className="space-y-5">
-                  <h2 className="text-xl font-bold mb-6">Number of Passengers</h2>
-
+                  <h2 className="font-black text-white text-lg mb-5">Number of Passengers</h2>
                   <div>
-                    <label className="block text-sm font-semibold mb-3">
-                      Select number of passengers (max {maxPax})
+                    <label className="block text-xs font-semibold text-gray-400 mb-3 uppercase tracking-wide">
+                      Select passengers (max {maxPax})
                     </label>
-                    <div className="flex items-center gap-4">
-                      <button
-                        type="button"
-                        onClick={() => setPassengers((p) => Math.max(1, p - 1))}
-                        className="w-10 h-10 rounded-full border-2 border-gray-300 text-xl font-bold hover:border-yellow-400 transition-colors flex items-center justify-center"
-                      >
+                    <div className="flex items-center gap-5">
+                      <button type="button" onClick={() => setPassengers((p) => Math.max(1, p - 1))}
+                        className="w-11 h-11 rounded-full border border-primary-700 text-white text-xl font-bold hover:border-secondary-500 hover:text-secondary-500 transition-colors flex items-center justify-center bg-primary-950">
                         −
                       </button>
-                      <span className="text-3xl font-bold w-12 text-center">{passengers}</span>
-                      <button
-                        type="button"
-                        onClick={() => setPassengers((p) => Math.min(maxPax, p + 1))}
-                        className="w-10 h-10 rounded-full border-2 border-gray-300 text-xl font-bold hover:border-yellow-400 transition-colors flex items-center justify-center"
-                      >
+                      <span className="text-4xl font-black text-white w-14 text-center">{passengers}</span>
+                      <button type="button" onClick={() => setPassengers((p) => Math.min(maxPax, p + 1))}
+                        className="w-11 h-11 rounded-full border border-primary-700 text-white text-xl font-bold hover:border-secondary-500 hover:text-secondary-500 transition-colors flex items-center justify-center bg-primary-950">
                         +
                       </button>
                     </div>
@@ -365,14 +332,13 @@ export default function BookTour() {
                       {passengers} {passengers === 1 ? 'person' : 'people'} × ₹{toNum(tour.price).toFixed(0)} per person
                     </p>
                   </div>
-
-                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                    <div className="flex justify-between items-center">
-                      <span className="font-semibold">Total Tour Price</span>
-                      <span className="text-2xl font-bold text-yellow-600">₹{totalPrice.toFixed(2)}</span>
+                  <div className="bg-secondary-500/10 border border-secondary-500/25 rounded-xl p-4">
+                    <div className="flex justify-between items-center mb-1">
+                      <span className="text-gray-300 font-semibold text-sm">Total Tour Price</span>
+                      <span className="text-2xl font-black text-secondary-500">₹{totalPrice.toFixed(0)}</span>
                     </div>
-                    <p className="text-xs text-yellow-700 mt-2">
-                      Pay full online, or prebook with just ₹{advancePayment.toFixed(2)} (30% advance) on the next screen.
+                    <p className="text-xs text-gray-500 mt-1">
+                      Or prebook with ₹{advancePayment.toFixed(0)} (30% advance) — choose on next screen.
                     </p>
                   </div>
                 </div>
@@ -381,32 +347,29 @@ export default function BookTour() {
               {/* Step 2: Date */}
               {step === 2 && (
                 <div className="space-y-5">
-                  <h2 className="text-xl font-bold mb-6">Select Tour Date</h2>
-
+                  <h2 className="font-black text-white text-lg mb-5">Select Tour Date</h2>
                   {tour.arrival_time && (
-                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-start gap-3">
-                      <Clock size={20} className="text-blue-500 flex-shrink-0 mt-0.5" />
+                    <div className="bg-primary-950 border border-primary-700 rounded-xl p-4 flex items-start gap-3">
+                      <Clock size={16} className="text-secondary-500 flex-shrink-0 mt-0.5" />
                       <div>
-                        <p className="font-semibold text-blue-900">Fixed Daily Departure: {departureTime}</p>
-                        <p className="text-sm text-blue-700 mt-0.5">
-                          This tour departs at the same time every day. Please arrive 15 minutes early at the meeting point.
-                        </p>
+                        <p className="font-semibold text-white text-sm">Fixed Daily Departure: {departureTime}</p>
+                        <p className="text-xs text-gray-500 mt-0.5">Please arrive 15 minutes early at the meeting point.</p>
                       </div>
                     </div>
                   )}
-
                   <div>
-                    <label className="block text-sm font-semibold mb-2">Tour Date *</label>
+                    <label className="block text-xs font-semibold text-gray-400 mb-1.5 uppercase tracking-wide">Tour Date *</label>
                     <input
                       type="date"
                       value={date}
                       onChange={(e) => setDate(e.target.value)}
                       min={todayISO()}
-                      className="input-field"
+                      style={{ colorScheme: 'dark' }}
+                      className={inputCls}
                     />
                     {date && (
-                      <p className="text-sm text-green-700 mt-2 font-medium">
-                        Selected: {formatDisplayDate(date)} at {departureTime}
+                      <p className="text-sm text-secondary-500 mt-2 font-semibold">
+                        ✓ {formatDisplayDate(date)} at {departureTime}
                       </p>
                     )}
                   </div>
@@ -415,146 +378,103 @@ export default function BookTour() {
 
               {/* Step 3: Confirm */}
               {step === 3 && (
-                <div className="space-y-5">
-                  <h2 className="text-xl font-bold mb-6">Confirm Your Booking</h2>
-
-                  <div className="space-y-3">
-                    <div className="flex justify-between py-2 border-b">
-                      <span className="text-gray-600">Tour Package</span>
-                      <span className="font-semibold">{tour.name}</span>
-                    </div>
-                    <div className="flex justify-between py-2 border-b">
-                      <span className="text-gray-600">Name</span>
-                      <span className="font-semibold">{name}</span>
-                    </div>
-                    <div className="flex justify-between py-2 border-b">
-                      <span className="text-gray-600">Phone</span>
-                      <span className="font-semibold">{phone}</span>
-                    </div>
-                    <div className="flex justify-between py-2 border-b">
-                      <span className="text-gray-600">Email</span>
-                      <span className="font-semibold break-all">{email}</span>
-                    </div>
-                    <div className="flex justify-between py-2 border-b">
-                      <span className="text-gray-600">Passengers</span>
-                      <span className="font-semibold">{passengers} {passengers === 1 ? 'person' : 'people'}</span>
-                    </div>
-                    <div className="flex justify-between py-2 border-b">
-                      <span className="text-gray-600">Tour Date</span>
-                      <span className="font-semibold">{formatDisplayDate(date)}</span>
-                    </div>
-                    <div className="flex justify-between py-2 border-b">
-                      <span className="text-gray-600">Departure Time</span>
-                      <span className="font-semibold">{departureTime}</span>
-                    </div>
-                    {tour.car_model && (
-                      <div className="flex justify-between py-2 border-b">
-                        <span className="text-gray-600">Vehicle</span>
-                        <span className="font-semibold">{tour.car_model}</span>
+                <div>
+                  <h2 className="font-black text-white text-lg mb-5">Confirm Your Booking</h2>
+                  <div className="space-y-0 divide-y divide-primary-800">
+                    {[
+                      { label: 'Tour Package', value: tour.name },
+                      { label: 'Name', value: name },
+                      { label: 'Phone', value: phone },
+                      { label: 'Email', value: email },
+                      { label: 'Passengers', value: `${passengers} ${passengers === 1 ? 'person' : 'people'}` },
+                      { label: 'Tour Date', value: formatDisplayDate(date) },
+                      { label: 'Departure', value: departureTime },
+                      ...(tour.car_model ? [{ label: 'Vehicle', value: tour.car_model }] : []),
+                      ...(tour.duration_hours ? [{ label: 'Duration', value: `${tour.duration_hours} hours` }] : []),
+                    ].map(({ label, value }) => (
+                      <div key={label} className="flex justify-between py-2.5 text-sm">
+                        <span className="text-gray-500">{label}</span>
+                        <span className="text-white font-semibold text-right max-w-[60%] break-all">{value}</span>
                       </div>
-                    )}
-                    {tour.duration_hours && (
-                      <div className="flex justify-between py-2 border-b">
-                        <span className="text-gray-600">Duration</span>
-                        <span className="font-semibold">{tour.duration_hours} hours</span>
-                      </div>
-                    )}
-                    <div className="flex justify-between py-3 text-lg font-bold">
-                      <span>Total Amount</span>
-                      <span className="text-yellow-600">₹{totalPrice.toFixed(2)}</span>
+                    ))}
+                    <div className="flex justify-between py-3 text-base font-black">
+                      <span className="text-gray-300">Total Amount</span>
+                      <span className="text-secondary-500">₹{totalPrice.toFixed(2)}</span>
                     </div>
                   </div>
-
-                  <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-sm text-green-900">
-                    <p><strong>Total to pay:</strong> ₹{totalPrice.toFixed(2)}</p>
-                    <p className="mt-1 text-green-700">Or prebook with ₹{advancePayment.toFixed(2)} (30% advance) — choose on the next screen.</p>
-                  </div>
-
-                  <div className="bg-yellow-50 border border-yellow-300 rounded-lg p-3 text-sm text-yellow-900">
+                  <div className="mt-4 bg-secondary-500/10 border border-secondary-500/25 rounded-xl p-3 text-xs text-gray-400">
+                    Pay full online or prebook with ₹{advancePayment.toFixed(2)} (30%) — choose on the next screen.
                     Please arrive at least 15 minutes before departure at {departureTime}.
                   </div>
                 </div>
               )}
 
-              {/* Navigation Buttons */}
-              <div className="flex gap-3 mt-8">
+              {/* Navigation */}
+              <div className="flex gap-3 mt-7">
                 {step > 0 && (
-                  <button
-                    type="button"
-                    onClick={prevStep}
-                    className="px-6 py-3 border border-gray-300 rounded-lg font-semibold hover:bg-gray-50 transition-colors"
-                  >
+                  <button type="button" onClick={prevStep}
+                    className="px-5 py-3 border border-primary-700 rounded-xl font-semibold text-gray-300 hover:border-primary-600 hover:text-white transition-colors text-sm">
                     Back
                   </button>
                 )}
                 {step < 3 ? (
-                  <button
-                    type="button"
-                    onClick={nextStep}
-                    className="flex-1 btn-primary py-3 text-base font-bold"
-                  >
+                  <button type="button" onClick={nextStep}
+                    className="flex-1 flex items-center justify-center gap-2 py-3 bg-secondary-500 text-primary-950 font-black rounded-xl hover:bg-secondary-400 transition-colors text-sm">
                     Continue
+                    <ArrowRight size={15} />
                   </button>
                 ) : (
-                  <button
-                    type="button"
-                    onClick={handleSubmit}
-                    disabled={isSubmitting}
-                    className={`flex-1 btn-primary py-3 text-base font-bold ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
-                  >
+                  <button type="button" onClick={handleSubmit} disabled={isSubmitting}
+                    className={`flex-1 flex items-center justify-center gap-2 py-3 bg-secondary-500 text-primary-950 font-black rounded-xl hover:bg-secondary-400 transition-colors text-sm ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}>
                     {isSubmitting ? 'Processing...' : 'Confirm & Pay'}
+                    {!isSubmitting && <ArrowRight size={15} />}
                   </button>
                 )}
               </div>
             </div>
 
-            {/* ── Tour Summary Sidebar ── */}
-            <div className="space-y-5">
-              <div className="bg-white rounded-xl shadow-lg overflow-hidden sticky top-4 md:top-20">
-                <div className="bg-gradient-to-r from-yellow-500 to-yellow-400 h-32 flex items-center justify-center text-6xl">
-                  🏞️
+            {/* Sidebar */}
+            <div className="space-y-4">
+              <div className="bg-primary-900/60 border border-primary-800 rounded-2xl backdrop-blur-sm overflow-hidden">
+                <div className="bg-gradient-to-br from-secondary-500/20 to-secondary-500/5 border-b border-primary-800 px-5 py-4">
+                  <p className="text-secondary-500 font-semibold text-[10px] tracking-[0.2em] uppercase mb-1">Tour Package</p>
+                  <h3 className="text-white font-black text-base leading-tight">{tour.name}</h3>
                 </div>
-                <div className="p-5">
-                  <h3 className="text-lg font-bold mb-3">{tour.name}</h3>
-
-                  <div className="space-y-2 text-sm text-gray-600 mb-4">
-                    {tour.arrival_time && (
-                      <div className="flex items-center gap-2">
-                        <Clock size={14} className="text-yellow-500" />
-                        <span>Daily departure {departureTime}</span>
-                      </div>
-                    )}
-                    {tour.duration_hours && (
-                      <div className="flex items-center gap-2">
-                        <Clock size={14} className="text-yellow-500" />
-                        <span>{tour.duration_hours} hours</span>
-                      </div>
-                    )}
-                    {tour.max_passengers && (
-                      <div className="flex items-center gap-2">
-                        <Users size={14} className="text-yellow-500" />
-                        <span>Max {tour.max_passengers} passengers</span>
-                      </div>
-                    )}
-                    {tour.car_model && (
-                      <div className="flex items-center gap-2">
-                        <Car size={14} className="text-yellow-500" />
-                        <span>{tour.car_model}</span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Live Price */}
-                  <div className="border-t pt-4 space-y-1">
-                    <div className="flex justify-between text-sm text-gray-600">
-                      <span>₹{toNum(tour.price).toFixed(0)} × {passengers} {passengers === 1 ? 'person' : 'people'}</span>
-                      <span>₹{totalPrice.toFixed(2)}</span>
+                <div className="p-5 space-y-2.5 text-sm text-gray-400">
+                  {tour.arrival_time && (
+                    <div className="flex items-center gap-2">
+                      <Clock size={13} className="text-secondary-500 flex-shrink-0" />
+                      <span>Daily departure {departureTime}</span>
                     </div>
-                    <div className="flex justify-between font-bold text-base pt-1 border-t">
-                      <span>Total</span>
-                      <span className="text-yellow-600">₹{totalPrice.toFixed(2)}</span>
+                  )}
+                  {tour.duration_hours && (
+                    <div className="flex items-center gap-2">
+                      <Clock size={13} className="text-secondary-500 flex-shrink-0" />
+                      <span>{tour.duration_hours} hours</span>
                     </div>
-                    <div className="flex justify-between text-sm text-green-700">
+                  )}
+                  {tour.max_passengers && (
+                    <div className="flex items-center gap-2">
+                      <Users size={13} className="text-secondary-500 flex-shrink-0" />
+                      <span>Max {tour.max_passengers} passengers</span>
+                    </div>
+                  )}
+                  {tour.car_model && (
+                    <div className="flex items-center gap-2">
+                      <Car size={13} className="text-secondary-500 flex-shrink-0" />
+                      <span>{tour.car_model}</span>
+                    </div>
+                  )}
+                  <div className="border-t border-primary-800 pt-3 mt-3 space-y-1.5">
+                    <div className="flex justify-between text-xs">
+                      <span className="text-gray-500">₹{toNum(tour.price).toFixed(0)} × {passengers} {passengers === 1 ? 'person' : 'people'}</span>
+                      <span className="text-gray-300">₹{totalPrice.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between font-black text-sm border-t border-primary-800 pt-1.5">
+                      <span className="text-gray-300">Total</span>
+                      <span className="text-secondary-500">₹{totalPrice.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-xs text-gray-500">
                       <span>Pay now (30%)</span>
                       <span>₹{advancePayment.toFixed(2)}</span>
                     </div>
@@ -562,14 +482,13 @@ export default function BookTour() {
                 </div>
               </div>
 
-              {/* Highlights */}
               {tour.highlights && tour.highlights.length > 0 && (
-                <div className="bg-white rounded-xl shadow-lg p-5">
-                  <h4 className="font-bold mb-3 text-sm uppercase tracking-wide text-gray-500">What's Included</h4>
-                  <ul className="space-y-2 text-sm text-gray-600">
+                <div className="bg-primary-900/60 border border-primary-800 rounded-2xl backdrop-blur-sm p-5">
+                  <h4 className="text-gray-500 font-semibold text-[10px] uppercase tracking-wider mb-3">What&apos;s Included</h4>
+                  <ul className="space-y-2">
                     {tour.highlights.map((h, i) => (
-                      <li key={i} className="flex items-start gap-2">
-                        <span className="text-yellow-500 mt-0.5">✓</span>
+                      <li key={i} className="flex items-start gap-2 text-sm text-gray-400">
+                        <span className="text-secondary-500 font-black text-base leading-none mt-px">✓</span>
                         {h}
                       </li>
                     ))}
@@ -577,11 +496,10 @@ export default function BookTour() {
                 </div>
               )}
             </div>
+
           </div>
         </div>
       </main>
-
-      <Footer />
     </div>
   )
 }

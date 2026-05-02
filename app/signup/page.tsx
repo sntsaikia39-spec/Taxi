@@ -5,7 +5,6 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { useAuth } from '@/context/AuthContext'
 import Header from '@/components/Header'
-import Footer from '@/components/Footer'
 import { Mail, Lock, User as UserIcon, UserPlus, CheckCircle, RefreshCw } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { validateFullName, validateEmail, validatePassword } from '@/lib/validation'
@@ -23,6 +22,18 @@ function SignupContent() {
   const [resending, setResending] = useState(false)
   const [verificationSent, setVerificationSent] = useState(false)
   const [smtpFailed, setSmtpFailed] = useState(false)
+
+  useEffect(() => {
+    document.documentElement.style.overflowY = 'auto'
+    document.body.style.overflowY = 'auto'
+    document.documentElement.style.overflowX = 'hidden'
+    document.body.style.overflowX = 'hidden'
+
+    return () => {
+      document.documentElement.style.overflow = ''
+      document.body.style.overflow = ''
+    }
+  }, [])
 
   // Auto-login once email is verified — works same browser (BroadcastChannel)
   // and cross-device (polling signInWithPassword every 10s)
@@ -147,31 +158,37 @@ function SignupContent() {
   // ── Verification sent screen ────────────────────────────────────────────────
   if (verificationSent) {
     return (
-      <div className="flex flex-col min-h-screen bg-gray-50">
+      <div className="flex min-h-screen flex-col bg-primary-950">
         <Header />
-        <main className="flex-1 flex items-center justify-center py-12 px-4">
-          <div className="w-full max-w-md">
-            <div className="card p-8 text-center">
-              <div className="flex justify-center mb-4">
-                <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
-                  <CheckCircle size={36} className="text-green-500" />
+        <main className="relative flex flex-1 items-center justify-center overflow-hidden px-4 py-12 md:py-16">
+          <div className="absolute top-0 right-0 h-[420px] w-[420px] rounded-full bg-secondary-500/10 blur-[120px] pointer-events-none" />
+          <div className="absolute bottom-0 left-0 h-[320px] w-[320px] rounded-full bg-secondary-500/10 blur-[110px] pointer-events-none" />
+          <div
+            className="absolute inset-0 opacity-[0.04] pointer-events-none"
+            style={{ backgroundImage: 'radial-gradient(circle, rgba(255,218,0,0.7) 1px, transparent 1px)', backgroundSize: '34px 34px' }}
+          />
+          <div className="relative z-10 w-full max-w-md">
+            <div className="rounded-3xl border border-secondary-500/25 bg-primary-900/80 p-3 text-center shadow-[0_24px_64px_rgba(0,0,0,0.45)] backdrop-blur-sm">
+              <div className="flex justify-center mb-2">
+                <div className="w-12 h-12 bg-green-500/15 rounded-full flex items-center justify-center border border-green-400/40">
+                  <CheckCircle size={30} className="text-green-500" />
                 </div>
               </div>
-              <h1 className="text-2xl font-bold mb-1">
+              <h1 className="text-2xl font-bold text-white mb-1">
                 {smtpFailed ? 'Account created' : 'Verify your email'}
               </h1>
-              <p className="text-sm text-gray-500 mb-6">Almost there!</p>
+              <p className="text-xs text-gray-400 mb-3">Almost there!</p>
               
               {smtpFailed ? (
-                <p className="text-gray-600 mb-6">
+                 <p className="text-sm text-gray-300 mb-3">
                   Your account was created but we couldn&apos;t send the verification email right now.
                   Use the button below to resend it.
                 </p>
               ) : (
                 <>
-                  <p className="text-gray-600 mb-1">We sent a verification link to</p>
-                  <p className="font-semibold text-gray-900 mb-6 break-all">{email}</p>
-                  <p className="text-sm text-gray-500 mb-8">
+                   <p className="text-gray-300 mb-1">We sent a verification link to</p>
+                   <p className="font-semibold text-white mb-3 break-all">{email}</p>
+                   <p className="text-xs text-gray-400 mb-4">
                     Click the link in the email — this page will log you in automatically.
                     The link expires in 24 hours.
                   </p>
@@ -181,7 +198,7 @@ function SignupContent() {
               <button
                 onClick={handleResend}
                 disabled={resending}
-                className="w-full mb-3 px-4 py-3 border-2 border-secondary-500 rounded-lg font-semibold hover:bg-secondary-50 transition-smooth flex items-center justify-center gap-2 disabled:opacity-50"
+                className="w-full mb-1.5 px-4 py-2 border border-secondary-500/60 rounded-xl font-semibold text-secondary-400 hover:bg-secondary-500/10 transition-smooth flex items-center justify-center gap-2 disabled:opacity-50"
               >
                 <RefreshCw size={16} className={resending ? 'animate-spin' : ''} />
                 {resending ? 'Sending...' : 'Resend verification email'}
@@ -189,43 +206,42 @@ function SignupContent() {
 
               <Link
                 href={`/login?redirect=${encodeURIComponent(redirect)}`}
-                className="block text-sm text-secondary-600 hover:underline"
+                className="block text-xs text-secondary-500 hover:underline"
               >
                 Already verified? Sign in
               </Link>
             </div>
           </div>
         </main>
-        <Footer />
       </div>
     )
   }
 
   // ── Sign up form ────────────────────────────────────────────────────────────
   return (
-    <div className="flex flex-col min-h-screen bg-gray-50">
+    <div className="flex min-h-screen flex-col bg-primary-950">
       <Header />
 
-      <main className="flex-1 flex items-center justify-center py-12 px-4">
-        <div className="w-full max-w-md">
-          <div className="card p-5 md:p-8">
+      <main className="relative flex flex-1 items-start justify-center overflow-hidden px-4 pt-[105px] pb-12 md:pt-[105px] md:pb-16">
+        <div className="absolute top-0 right-0 h-[420px] w-[420px] rounded-full bg-secondary-500/10 blur-[120px] pointer-events-none" />
+        <div className="absolute bottom-0 left-0 h-[320px] w-[320px] rounded-full bg-secondary-500/10 blur-[110px] pointer-events-none" />
+        <div
+          className="absolute inset-0 opacity-[0.04] pointer-events-none"
+          style={{ backgroundImage: 'radial-gradient(circle, rgba(255,218,0,0.7) 1px, transparent 1px)', backgroundSize: '34px 34px' }}
+        />
+        <div className="relative z-10 w-full max-w-md">
+          <div className="rounded-3xl border border-secondary-500/25 bg-primary-900/80 p-2.5 md:p-3 shadow-[0_24px_64px_rgba(0,0,0,0.45)] backdrop-blur-sm">
             {/* Header */}
-            <div className="text-center mb-6 md:mb-8">
-              <div className="flex justify-center mb-3 md:mb-4">
-                <svg viewBox="0 0 100 100" width="56" height="56" xmlns="http://www.w3.org/2000/svg" className="rounded-full shadow">
-                  <circle cx="50" cy="50" r="50" fill="#ffda00"/>
-                  <text x="50" y="67" textAnchor="middle" fontFamily="Georgia,serif" fontWeight="bold" fontSize="52" fill="#1a1a2e">R</text>
-                </svg>
-              </div>
-              <h1 className="text-2xl md:text-3xl font-bold mb-2">Create Account</h1>
-              <p className="text-gray-600">Join Rina&apos;s Tours and Travels today</p>
+            <div className="text-center mb-3 md:mb-3.5">
+              <h1 className="text-xl md:text-2xl font-bold text-white mb-1">Create Account</h1>
+              <p className="text-sm text-gray-300">Join Rina&apos;s Tours and Travels today</p>
             </div>
 
             {/* Google Sign Up */}
             <button
               onClick={handleGoogleSignup}
               disabled={loading}
-              className="w-full mb-6 px-4 py-3 bg-white border-2 border-gray-300 rounded-lg hover:border-secondary-500 transition-smooth flex items-center justify-center gap-2 font-semibold disabled:opacity-50"
+              className="w-full mb-3 px-4 py-2 bg-white border border-white/20 rounded-xl hover:border-secondary-500 transition-smooth flex items-center justify-center gap-2 font-semibold text-sm disabled:opacity-50"
             >
               <svg width="20" height="20" viewBox="0 0 24 24">
                 <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -237,72 +253,72 @@ function SignupContent() {
             </button>
 
             {/* Divider */}
-            <div className="relative mb-6">
+            <div className="relative mb-3">
               <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-gray-300"></div>
+                 <div className="w-full border-t border-primary-700"></div>
               </div>
               <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-white text-gray-500">or sign up with email</span>
+                 <span className="px-2 bg-primary-900 text-gray-400">or sign up with email</span>
               </div>
             </div>
 
             {/* Sign Up Form */}
-            <form onSubmit={handleEmailSignup} className="space-y-4">
+            <form onSubmit={handleEmailSignup} className="space-y-3.5">
               <div>
-                <label className="block text-sm font-semibold mb-2">Full Name</label>
+                <label className="block text-xs font-semibold text-gray-200 mb-1.5">Full Name</label>
                 <div className="relative">
-                  <UserIcon className="absolute left-3 top-3 text-gray-400" size={20} />
+                   <UserIcon className="absolute left-3 top-2 text-gray-500" size={16} />
                   <input
                     type="text"
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
                     placeholder="First Last"
-                    className="input-field pl-10"
+                    className="w-full rounded-xl border border-primary-700 bg-primary-950/70 px-3 py-2 pl-9 text-sm text-white placeholder:text-gray-500 outline-none focus:border-secondary-500"
                     required
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm font-semibold mb-2">Email</label>
+                <label className="block text-xs font-semibold text-gray-200 mb-1.5">Email</label>
                 <div className="relative">
-                  <Mail className="absolute left-3 top-3 text-gray-400" size={20} />
+                   <Mail className="absolute left-3 top-2 text-gray-500" size={16} />
                   <input
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="your@email.com"
-                    className="input-field pl-10"
+                    className="w-full rounded-xl border border-primary-700 bg-primary-950/70 px-3 py-2 pl-9 text-sm text-white placeholder:text-gray-500 outline-none focus:border-secondary-500"
                     required
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm font-semibold mb-2">Password</label>
+                <label className="block text-xs font-semibold text-gray-200 mb-1.5">Password</label>
                 <div className="relative">
-                  <Lock className="absolute left-3 top-3 text-gray-400" size={20} />
+                   <Lock className="absolute left-3 top-2 text-gray-500" size={16} />
                   <input
                     type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="At least 6 characters"
-                    className="input-field pl-10"
+                    className="w-full rounded-xl border border-primary-700 bg-primary-950/70 px-3 py-2 pl-9 text-sm text-white placeholder:text-gray-500 outline-none focus:border-secondary-500"
                     required
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm font-semibold mb-2">Confirm Password</label>
+                <label className="block text-xs font-semibold text-gray-200 mb-1.5">Confirm Password</label>
                 <div className="relative">
-                  <Lock className="absolute left-3 top-3 text-gray-400" size={20} />
+                   <Lock className="absolute left-3 top-2 text-gray-500" size={16} />
                   <input
                     type="password"
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     placeholder="Repeat your password"
-                    className="input-field pl-10"
+                    className="w-full rounded-xl border border-primary-700 bg-primary-950/70 px-3 py-2 pl-9 text-sm text-white placeholder:text-gray-500 outline-none focus:border-secondary-500"
                     required
                   />
                 </div>
@@ -311,15 +327,15 @@ function SignupContent() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full btn-primary flex items-center justify-center gap-2 disabled:opacity-50"
+                className="w-full flex items-center justify-center gap-2 rounded-xl bg-secondary-500 px-4 py-2 font-black text-primary-950 text-sm hover:bg-secondary-400 transition-colors disabled:opacity-50"
               >
                 <UserPlus size={20} />
                 {loading ? 'Creating Account...' : 'Create Account'}
               </button>
             </form>
 
-            <div className="mt-6 pt-6 border-t border-gray-200 text-center">
-              <p className="text-gray-600">
+            <div className="mt-3 pt-3 border-t border-primary-700 text-center">
+              <p className="text-sm text-gray-300">
                 Already have an account?{' '}
                 <Link href={`/login?redirect=${encodeURIComponent(redirect)}`} className="text-secondary-500 font-semibold hover:underline">
                   Sign in
@@ -329,8 +345,6 @@ function SignupContent() {
           </div>
         </div>
       </main>
-
-      <Footer />
     </div>
   )
 }
@@ -338,3 +352,4 @@ function SignupContent() {
 export default function Signup() {
   return <Suspense><SignupContent /></Suspense>
 }
+

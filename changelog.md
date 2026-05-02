@@ -4,6 +4,14 @@ All notable changes to TaxiHollongi will be documented in this file.
 
 ---
 
+## [2026-05-01]
+
+**Author:** Yami
+
+### Changes
+- update: Car availability algo update.
+- update: Car management - strict check adding car
+
 ## [2026-04-30]
 
 **Author:** Yami

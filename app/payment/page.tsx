@@ -1,12 +1,12 @@
 'use client'
 
 import { useSearchParams } from 'next/navigation'
-import { useState, useEffect, Suspense } from 'react'
+import { useState, useEffect, useRef, Suspense } from 'react'
 import Header from '@/components/Header'
-import Footer from '@/components/Footer'
 import toast from 'react-hot-toast'
-import { generateInvoiceNumber } from '@/lib/utils'
+import gsap from 'gsap'
 import { calculatePaymentAmounts } from '@/lib/payment-utils'
+import { Shield, MapPin, Clock, Users, Car } from 'lucide-react'
 
 declare global {
   interface Window {
@@ -17,65 +17,52 @@ declare global {
 function PaymentContent() {
   const searchParams = useSearchParams()
   const bookingId = searchParams.get('bookingId')
-  const amount = parseFloat(searchParams.get('amount') || '0')
   const bookingType = searchParams.get('type') || 'taxi'
 
+  const scrollRef = useRef<HTMLDivElement | null>(null)
   const [bookingData, setBookingData] = useState<any>(null)
   const [loading, setLoading] = useState(false)
-  const [paymentData, setPaymentData] = useState<any>(null)
 
   useEffect(() => {
-    // Use the bookingType from URL to load the correct session key
+    const scroller = scrollRef.current
+    if (!scroller) return
+    let targetTop = scroller.scrollTop
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault()
+      const max = Math.max(0, scroller.scrollHeight - scroller.clientHeight)
+      targetTop = Math.min(max, Math.max(0, targetTop + e.deltaY))
+      gsap.to(scroller, { scrollTop: targetTop, duration: 0.75, ease: 'power3.out', overwrite: true })
+    }
+    scroller.addEventListener('wheel', onWheel, { passive: false })
+    return () => scroller.removeEventListener('wheel', onWheel)
+  }, [])
+
+  useEffect(() => {
     const storageKey = bookingType === 'tour' ? 'tourBookingData' : 'bookingData'
     const raw = sessionStorage.getItem(storageKey)
     const data = raw ? JSON.parse(raw) : null
+    if (data) setBookingData(data)
 
-    if (data) {
-      setBookingData(data)
-    }
-
-    // Load Razorpay script
     const script = document.createElement('script')
     script.src = 'https://checkout.razorpay.com/v1/checkout.js'
     script.async = true
     document.body.appendChild(script)
-
-    return () => {
-      document.body.removeChild(script)
-    }
+    return () => { document.body.removeChild(script) }
   }, [])
 
   const handleRazorpayPayment = async (method: 'partial' | 'full') => {
-    if (!bookingData) {
-      toast.error('Booking data not found')
-      return
-    }
-
+    if (!bookingData) { toast.error('Booking data not found'); return }
     setLoading(true)
-
     try {
       const paymentAmount = method === 'full' ? bookingData.totalPrice : bookingData.advancePayment
-
-      // Create order on backend
       const orderResponse = await fetch('/api/payment/create-order', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          amount: paymentAmount,
-          bookingId: bookingData.dbBookingId,
-          currency: 'INR',
-        }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount: paymentAmount, bookingId: bookingData.dbBookingId, currency: 'INR' }),
       })
-
       const orderData = await orderResponse.json()
+      if (!orderData.orderId) throw new Error('Failed to create payment order')
 
-      if (!orderData.orderId) {
-        throw new Error('Failed to create payment order')
-      }
-
-      // Razorpay payment options
       const options = {
         key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
         amount: Math.round(paymentAmount * 100),
@@ -85,39 +72,24 @@ function PaymentContent() {
         order_id: orderData.orderId,
         handler: async (response: any) => {
           try {
-            // Verify payment
             const verifyResponse = await fetch('/api/payment/verify', {
               method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
+              headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 orderId: orderData.orderId,
                 paymentId: response.razorpay_payment_id,
                 signature: response.razorpay_signature,
                 bookingId: bookingData.dbBookingId,
-                bookingType,
-                paymentMethod: method,
-                amount: paymentAmount,
-                // User & booking details for confirmation email
-                userEmail: bookingData.email,
-                userName: bookingData.name,
-                destination: bookingData.destination,
-                tourPackageName: bookingData.tourName,
-                pickupDate: bookingData.date,
-                pickupTime: bookingData.time,
-                carType: bookingData.carType,
+                bookingType, paymentMethod: method, amount: paymentAmount,
+                userEmail: bookingData.email, userName: bookingData.name,
+                destination: bookingData.destination, tourPackageName: bookingData.tourName,
+                pickupDate: bookingData.date, pickupTime: bookingData.time, carType: bookingData.carType,
               }),
             })
-
             const verifyData = await verifyResponse.json()
-
             if (verifyData.success) {
               toast.success('Payment successful! Your booking is confirmed.')
-              // Redirect to booking confirmation
-              setTimeout(() => {
-                window.location.href = `/booking-confirmed?bookingId=${bookingData.dbBookingId}`
-              }, 2000)
+              setTimeout(() => { window.location.href = `/booking-confirmed?bookingId=${bookingData.dbBookingId}` }, 2000)
             } else {
               toast.error('Payment verification failed')
             }
@@ -126,16 +98,9 @@ function PaymentContent() {
             toast.error('Error verifying payment')
           }
         },
-        prefill: {
-          name: bookingData.name,
-          email: bookingData.email,
-          contact: bookingData.phone,
-        },
-        theme: {
-          color: '#ffda00',
-        },
+        prefill: { name: bookingData.name, email: bookingData.email, contact: bookingData.phone },
+        theme: { color: '#ffda00' },
       }
-
       const rzp = new window.Razorpay(options)
       rzp.open()
     } catch (error) {
@@ -147,76 +112,38 @@ function PaymentContent() {
   }
 
   const handleDemoPayment = async (method: 'partial' | 'full') => {
-    if (!bookingData) {
-      toast.error('Booking data not found')
-      return
-    }
-
+    if (!bookingData) { toast.error('Booking data not found'); return }
     setLoading(true)
     try {
-      console.log('=== Demo Payment Flow Started ===')
-      console.log('Payment Method:', method)
-      console.log('Booking ID:', bookingData.bookingId)
-      console.log('Total Amount:', bookingData.totalPrice)
-
-      // Calculate payment amounts based on payment type
-      const { amountOnlinePaid, amountCashPaid } = calculatePaymentAmounts(
-        bookingData.totalPrice,
-        method
-      )
-
-      console.log('Calculated amounts:', { amountOnlinePaid, amountCashPaid })
-
-      // Simulate payment processing delay (1.5 seconds)
+      const { amountOnlinePaid, amountCashPaid } = calculatePaymentAmounts(bookingData.totalPrice, method)
       await new Promise((resolve) => setTimeout(resolve, 1500))
-
-      // Create demo transaction ID
       const demoTxnId = `DEMO_TXN_${Date.now()}`
-      console.log('Generated Demo Txn ID:', demoTxnId)
-
-      // Call create-payment API to store in database
-      console.log('Calling /api/payment/create-payment...')
       const createPaymentResponse = await fetch('/api/payment/create-payment', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           bookingId: bookingData.dbBookingId,
           paymentType: method,
           amountTotal: bookingData.totalPrice,
-          amountOnlinePaid: amountOnlinePaid,
+          amountOnlinePaid,
           txnId: demoTxnId,
           txnStatus: 'success',
           gateway: 'razorpay',
         }),
       })
-
       const paymentResult = await createPaymentResponse.json()
-
       if (!createPaymentResponse.ok || !paymentResult.success) {
-        console.error('Payment API Error:', paymentResult)
         toast.error(paymentResult.error || 'Failed to process payment. Please try again.')
         return
       }
-
-      console.log('✅ Payment created successfully:', paymentResult.payment)
-
-      // Show success message with payment details
       const message = method === 'full'
         ? `Full payment of ₹${amountOnlinePaid.toFixed(2)} completed successfully!`
         : `Advance payment of ₹${amountOnlinePaid.toFixed(2)} received. Remaining ₹${amountCashPaid.toFixed(2)} to be paid at airport.`
-
       toast.success(message)
-
-      // Redirect to booking confirmation after 2 seconds
-      setTimeout(() => {
-        window.location.href = `/booking-confirmed?bookingId=${bookingData.dbBookingId}`
-      }, 2000)
+      setTimeout(() => { window.location.href = `/booking-confirmed?bookingId=${bookingData.dbBookingId}` }, 2000)
     } catch (error) {
-      console.error('=== Demo Payment Error ===', error)
-      const errorMessage = error instanceof Error ? error.message : 'Demo payment failed'
-      toast.error(errorMessage)
+      console.error('Demo Payment Error:', error)
+      toast.error(error instanceof Error ? error.message : 'Demo payment failed')
     } finally {
       setLoading(false)
     }
@@ -224,14 +151,14 @@ function PaymentContent() {
 
   if (!bookingData) {
     return (
-      <div className="flex flex-col min-h-screen">
+      <div ref={scrollRef} className="h-[100dvh] overflow-y-auto overflow-x-hidden bg-primary-950">
         <Header />
-        <main className="flex-1 flex items-center justify-center py-20">
-          <div className="text-center">
-            <p className="text-lg text-gray-600">Loading payment details...</p>
+        <main className="flex items-center justify-center min-h-[80dvh]">
+          <div className="flex flex-col items-center gap-4">
+            <div className="w-10 h-10 border-2 border-secondary-500 border-t-transparent rounded-full animate-spin" />
+            <p className="text-gray-400 text-sm">Loading payment details...</p>
           </div>
         </main>
-        <Footer />
       </div>
     )
   }
@@ -240,172 +167,173 @@ function PaymentContent() {
   const remainingAmount = bookingData.totalPrice - advanceAmount
 
   return (
-    <div className="flex flex-col min-h-screen">
+    <div ref={scrollRef} className="scrollbar-thin-modern h-[100dvh] overflow-y-auto overflow-x-hidden bg-primary-950">
       <Header />
 
-      <main className="flex-1 py-12 md:py-16 bg-gray-50">
-        <div className="container mx-auto px-4">
-          <h1 className="text-2xl md:text-4xl font-bold text-center mb-6 md:mb-12">Complete Your Payment</h1>
+      <main className="relative overflow-x-hidden">
+        {/* Dot grid */}
+        <div
+          className="absolute inset-0 opacity-[0.03] pointer-events-none"
+          style={{ backgroundImage: 'radial-gradient(circle, rgba(255,218,0,0.75) 1px, transparent 1px)', backgroundSize: '36px 36px' }}
+        />
+        {/* Glow blobs */}
+        <div className="absolute -top-40 -left-40 w-[500px] h-[500px] rounded-full pointer-events-none"
+          style={{ background: 'radial-gradient(circle, rgba(255,193,7,0.07) 0%, transparent 70%)' }} />
+        <div className="absolute top-60 -right-40 w-[440px] h-[440px] rounded-full pointer-events-none"
+          style={{ background: 'radial-gradient(circle, rgba(255,193,7,0.05) 0%, transparent 70%)' }} />
 
-          <div className="max-w-4xl mx-auto grid md:grid-cols-3 gap-4 md:gap-8">
-            {/* Payment Form */}
-            <div className="md:col-span-2 bg-white rounded-lg shadow-lg p-4 md:p-8">
-              <h2 className="text-2xl font-bold mb-6">Payment</h2>
+        <div className="relative z-10 container mx-auto px-4 pt-20 pb-10">
 
-              {/* Payment Details */}
-              <div className="bg-gray-50 rounded-lg p-6 mb-8">
-                <div className="flex justify-between font-bold text-lg">
-                  <span>Booking Amount:</span>
-                  <span className="text-secondary-500">₹{bookingData.totalPrice.toFixed(2)}</span>
+          {/* Title */}
+          <div className="text-center mb-8">
+            <p className="text-secondary-500 font-semibold text-xs tracking-[0.22em] uppercase mb-2">Secure Checkout</p>
+            <h1 className="font-black text-white text-2xl md:text-3xl">Complete Your Payment</h1>
+          </div>
+
+          <div className="max-w-4xl mx-auto grid md:grid-cols-3 gap-4 md:gap-6">
+
+            {/* Payment Panel */}
+            <div className="md:col-span-2 bg-primary-900/60 border border-primary-800 rounded-2xl backdrop-blur-sm p-5 md:p-7">
+
+              {/* Booking Summary */}
+              <div className="bg-primary-950 border border-primary-800 rounded-xl p-4 mb-6">
+                <p className="text-gray-500 text-[10px] font-semibold uppercase tracking-wider mb-2.5">Booking Summary</p>
+                <div className="space-y-1.5 text-sm">
+                  <p className="text-gray-300"><span className="text-gray-500">ID:</span> <span className="font-mono">{bookingData.bookingId}</span></p>
+                  <p className="text-gray-300"><span className="text-gray-500">Name:</span> {bookingData.name}</p>
+                  {bookingData.destination && <p className="text-gray-300"><span className="text-gray-500">Destination:</span> {bookingData.destination}</p>}
+                  {bookingData.tourName && <p className="text-gray-300"><span className="text-gray-500">Tour:</span> {bookingData.tourName}</p>}
+                  <p className="text-gray-300"><span className="text-gray-500">Date:</span> {bookingData.date} · {bookingData.startTime}</p>
+                  <p className="text-gray-300"><span className="text-gray-500">Passengers:</span> {bookingData.passengers}</p>
                 </div>
               </div>
 
-              {/* Booking Details */}
-              <div className="bg-blue-50 border-l-4 border-blue-500 p-4 mb-8">
-                <h3 className="font-bold mb-2">Booking Summary</h3>
-                <div className="text-sm space-y-1">
-                  <p><strong>Booking ID:</strong> {bookingData.bookingId}</p>
-                  <p><strong>Name:</strong> {bookingData.name}</p>
-                  <p><strong>Phone:</strong> {bookingData.phone}</p>
-                  {bookingData.destination && (
-                    <p><strong>Destination:</strong> {bookingData.destination}</p>
-                  )}
-                  {bookingData.tourName && (
-                    <p><strong>Tour:</strong> {bookingData.tourName}</p>
-                  )}
-                  {bookingData.noOfHours && (
-                    <p><strong>Duration:</strong> {(() => {
-                      const h = bookingData.noOfHours
-                      const d = Math.floor(h / 24)
-                      const rem = h % 24
-                      if (d > 0 && rem > 0) return `${d}d ${rem}h (${h} hrs)`
-                      if (d > 0) return `${d}d (${h} hrs)`
-                      return `${h}h`
-                    })()}</p>
-                  )}
-                  <p><strong>Car:</strong> {bookingData.car}</p>
-                  <p><strong>Passengers:</strong> {bookingData.passengers}</p>
-                  <p><strong>Booking Date:</strong> {bookingData.date}</p>
-                  <p><strong>Pickup Time:</strong> {bookingData.startTime}</p>
-                </div>
+              {/* Total amount display */}
+              <div className="flex items-baseline justify-between mb-6 px-1">
+                <span className="text-gray-400 text-sm font-semibold">Booking Amount</span>
+                <span className="text-3xl font-black text-secondary-500">₹{bookingData.totalPrice.toFixed(2)}</span>
               </div>
 
-              {/* Primary: Full Payment */}
-              <div className="space-y-3 mb-6">
+              {/* Full Payment */}
+              <div className="space-y-2.5 mb-5">
+                <p className="text-gray-500 text-[10px] font-semibold uppercase tracking-wider">Pay in Full</p>
                 <button
                   onClick={() => handleRazorpayPayment('full')}
                   disabled={loading}
-                  className="w-full px-6 py-4 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg font-semibold hover:shadow-lg transition-smooth disabled:opacity-50 flex items-center justify-center gap-2"
+                  className="w-full px-6 py-3.5 bg-secondary-500 text-primary-950 rounded-xl font-black hover:bg-secondary-400 transition-colors disabled:opacity-50 flex items-center justify-center gap-2 text-sm"
                 >
-                  <span>💳</span>
-                  <span>{loading ? 'Processing...' : `Pay ₹${bookingData.totalPrice.toFixed(2)} — Full Payment`}</span>
+                  💳 {loading ? 'Processing...' : `Pay ₹${bookingData.totalPrice.toFixed(2)} — Full Payment`}
                 </button>
-
                 <button
                   onClick={() => handleDemoPayment('full')}
                   disabled={loading}
-                  className="w-full px-6 py-4 bg-gradient-to-r from-secondary-500 to-secondary-600 text-primary-950 rounded-lg font-semibold hover:shadow-lg transition-smooth disabled:opacity-50"
+                  className="w-full px-6 py-3 border border-secondary-500/40 text-secondary-500 rounded-xl font-semibold hover:bg-secondary-500/10 transition-colors disabled:opacity-50 text-sm"
                 >
-                  {loading ? 'Processing...' : `Demo Full Payment — ₹${bookingData.totalPrice.toFixed(2)} (Testing)`}
+                  {loading ? 'Processing...' : `Demo Full Payment — ₹${bookingData.totalPrice.toFixed(2)}`}
                 </button>
               </div>
 
               {/* Divider */}
-              <div className="flex items-center gap-4 my-6">
-                <div className="flex-1 border-t border-gray-200" />
-                <span className="text-gray-400 text-sm font-medium">or</span>
-                <div className="flex-1 border-t border-gray-200" />
+              <div className="flex items-center gap-4 my-5">
+                <div className="flex-1 border-t border-primary-800" />
+                <span className="text-gray-600 text-xs font-medium">or prebook</span>
+                <div className="flex-1 border-t border-primary-800" />
               </div>
 
-              {/* Secondary: Prebook with 30% */}
-              <div className="rounded-lg border border-gray-200 p-5 mb-8">
-                <p className="text-sm text-gray-600 mb-4">
-                  Want to just prebook? Pay <strong>₹{advanceAmount.toFixed(2)}</strong> (30% advance) online now and the remaining{' '}
-                  <strong>₹{remainingAmount.toFixed(2)}</strong> in cash at the airport office on arrival.
+              {/* Prebook / Partial */}
+              <div className="bg-primary-950 border border-primary-800 rounded-xl p-4 mb-5">
+                <p className="text-gray-400 text-sm mb-3">
+                  Pay <span className="text-white font-black">₹{advanceAmount.toFixed(2)}</span> (30% advance) now and the remaining{' '}
+                  <span className="text-white font-black">₹{remainingAmount.toFixed(2)}</span> in cash at the airport office on arrival.
                 </p>
                 <div className="space-y-2">
                   <button
                     onClick={() => handleRazorpayPayment('partial')}
                     disabled={loading}
-                    className="w-full px-5 py-3 border-2 border-blue-400 text-blue-600 rounded-lg font-semibold hover:bg-blue-50 transition-smooth disabled:opacity-50 flex items-center justify-center gap-2 text-sm"
+                    className="w-full px-5 py-3 border border-primary-700 text-white rounded-xl font-semibold hover:border-secondary-500/50 hover:text-secondary-500 transition-colors disabled:opacity-50 flex items-center justify-center gap-2 text-sm"
                   >
-                    <span>💳</span>
-                    <span>{loading ? 'Processing...' : `Pay ₹${advanceAmount.toFixed(2)} to Prebook (30% advance)`}</span>
+                    💳 {loading ? 'Processing...' : `Pay ₹${advanceAmount.toFixed(2)} to Prebook`}
                   </button>
                   <button
                     onClick={() => handleDemoPayment('partial')}
                     disabled={loading}
-                    className="w-full px-5 py-3 border border-gray-200 text-gray-500 rounded-lg font-medium hover:bg-gray-50 transition-smooth disabled:opacity-50 text-sm"
+                    className="w-full px-5 py-2.5 border border-primary-800 text-gray-500 rounded-xl font-medium hover:text-gray-400 transition-colors disabled:opacity-50 text-sm"
                   >
-                    {loading ? 'Processing...' : `Demo Prebook — ₹${advanceAmount.toFixed(2)} (Testing)`}
+                    {loading ? 'Processing...' : `Demo Prebook — ₹${advanceAmount.toFixed(2)}`}
                   </button>
                 </div>
               </div>
 
-              {/* Security Info */}
-              <div className="bg-green-50 border-l-4 border-green-500 p-4 text-sm">
-                <p className="text-green-900">
-                  🔒 <strong>Secure Payment:</strong> All payments are encrypted and secure. Your data is protected.
-                </p>
+              {/* Security note */}
+              <div className="flex items-center gap-2.5 text-xs text-gray-500">
+                <Shield size={13} className="text-green-500 flex-shrink-0" />
+                <span>All payments are encrypted and secure. Your data is protected.</span>
               </div>
             </div>
 
             {/* Order Summary Sidebar */}
-            <div>
-              <div className="bg-white rounded-lg shadow-lg p-6 sticky top-20">
-                <h3 className="text-xl font-bold mb-4">Order Summary</h3>
+            <div className="bg-primary-900/60 border border-primary-800 rounded-2xl backdrop-blur-sm p-5">
+              <p className="text-gray-500 text-[10px] font-semibold uppercase tracking-wider mb-4">Order Summary</p>
 
+              <div className="space-y-3 text-sm mb-4">
                 {bookingData.destination && (
-                  <div className="mb-4">
-                    <p className="text-gray-600 text-sm">Destination</p>
-                    <p className="font-semibold">{bookingData.destination}</p>
+                  <div className="flex items-start gap-2">
+                    <MapPin size={13} className="text-secondary-500 mt-0.5 flex-shrink-0" />
+                    <div>
+                      <p className="text-gray-500 text-[10px]">Destination</p>
+                      <p className="text-white font-semibold">{bookingData.destination}</p>
+                    </div>
                   </div>
                 )}
-
                 {bookingData.tourName && (
-                  <div className="mb-4">
-                    <p className="text-gray-600 text-sm">Tour Package</p>
-                    <p className="font-semibold">{bookingData.tourName}</p>
+                  <div className="flex items-start gap-2">
+                    <Car size={13} className="text-secondary-500 mt-0.5 flex-shrink-0" />
+                    <div>
+                      <p className="text-gray-500 text-[10px]">Tour Package</p>
+                      <p className="text-white font-semibold">{bookingData.tourName}</p>
+                    </div>
                   </div>
                 )}
-
-                <div className="mb-4">
-                  <p className="text-gray-600 text-sm">Passengers</p>
-                  <p className="font-semibold">{bookingData.passengers}</p>
-                </div>
-
-                <div className="mb-4">
-                  <p className="text-gray-600 text-sm">Date</p>
-                  <p className="font-semibold">{bookingData.date}</p>
-                </div>
-
-                <div className="border-t pt-4">
-                  <div className="flex justify-between mb-2">
-                    <span className="text-gray-600">Subtotal</span>
-                    <span>₹{bookingData.totalPrice.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between mb-4">
-                    <span className="text-gray-600">Taxes & Fees</span>
-                    <span>₹0</span>
-                  </div>
-                  <div className="border-t pt-4 flex justify-between text-lg font-bold">
-                    <span>Total</span>
-                    <span className="text-secondary-500">₹{bookingData.totalPrice.toFixed(2)}</span>
+                <div className="flex items-start gap-2">
+                  <Users size={13} className="text-secondary-500 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="text-gray-500 text-[10px]">Passengers</p>
+                    <p className="text-white font-semibold">{bookingData.passengers}</p>
                   </div>
                 </div>
-
-                <div className="mt-4 bg-blue-50 border border-blue-200 rounded p-3">
-                  <p className="text-xs text-blue-800">
-                    Or prebook for just <strong>₹{advanceAmount.toFixed(2)}</strong> — pay rest in cash at the airport office on arrival.
-                  </p>
+                <div className="flex items-start gap-2">
+                  <Clock size={13} className="text-secondary-500 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="text-gray-500 text-[10px]">Date & Time</p>
+                    <p className="text-white font-semibold">{bookingData.date}</p>
+                    <p className="text-gray-400 text-xs">{bookingData.startTime}</p>
+                  </div>
                 </div>
               </div>
+
+              <div className="border-t border-primary-800 pt-4 space-y-2 text-sm">
+                <div className="flex justify-between text-gray-500">
+                  <span>Subtotal</span>
+                  <span>₹{bookingData.totalPrice.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-gray-500">
+                  <span>Taxes & Fees</span>
+                  <span>₹0</span>
+                </div>
+                <div className="flex justify-between font-black text-base border-t border-primary-800 pt-2">
+                  <span className="text-gray-200">Total</span>
+                  <span className="text-secondary-500">₹{bookingData.totalPrice.toFixed(2)}</span>
+                </div>
+              </div>
+
+              <div className="mt-4 bg-secondary-500/10 border border-secondary-500/20 rounded-xl p-3 text-xs text-gray-400">
+                Or prebook for just <span className="text-secondary-500 font-black">₹{advanceAmount.toFixed(2)}</span> — pay rest in cash at the airport.
+              </div>
             </div>
+
           </div>
         </div>
       </main>
-
-      <Footer />
     </div>
   )
 }

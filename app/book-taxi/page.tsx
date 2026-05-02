@@ -77,50 +77,50 @@ interface ContactStepProps {
   isEmailLocked?: boolean
 }
 
-const ContactStepComponent = memo(({ 
-  name, phone, email, 
+const ContactStepComponent = memo(({
+  name, phone, email,
   nameInputRef, phoneInputRef, emailInputRef,
   onNameChange, onPhoneChange, onEmailChange,
   isEmailLocked = false
 }: ContactStepProps) => (
-  <div className="bg-white rounded-lg shadow-lg p-4 md:p-8">
-    <h2 className="text-2xl font-bold mb-6">Contact Details</h2>
-    <div className="space-y-4">
+  <div className="rounded-2xl border border-secondary-500/20 bg-primary-900/65 backdrop-blur-sm shadow-[0_20px_60px_rgba(0,0,0,0.35)] p-4 text-gray-100">
+    <h2 className="text-xl font-black text-white mb-3">Contact Details</h2>
+    <div className="space-y-2.5">
       <div>
-        <label className="block text-sm font-semibold mb-2">Full Name *</label>
-        <input 
+        <label className="block text-sm font-semibold text-gray-300 mb-1">Full Name *</label>
+        <input
           ref={nameInputRef}
-          type="text" 
-          value={name} 
+          type="text"
+          value={name}
           onChange={(e) => onNameChange(e.target.value)}
-          placeholder="Enter your full name" 
-          className="input-field" 
-          required 
+          placeholder="Enter your full name"
+          className="input-field !bg-primary-950/70 !border-primary-700 !text-white placeholder:!text-gray-500 focus:!border-secondary-500"
+          required
         />
       </div>
       <div>
-        <label className="block text-sm font-semibold mb-2">Phone Number *</label>
-        <input 
+        <label className="block text-sm font-semibold text-gray-300 mb-1">Phone Number *</label>
+        <input
           ref={phoneInputRef}
-          type="tel" 
-          value={phone} 
+          type="tel"
+          value={phone}
           onChange={(e) => onPhoneChange(e.target.value)}
-          placeholder="10-digit mobile number" 
-          className="input-field" 
-          required 
+          placeholder="10-digit mobile number"
+          className="input-field !bg-primary-950/70 !border-primary-700 !text-white placeholder:!text-gray-500 focus:!border-secondary-500"
+          required
         />
       </div>
       <div>
-        <label className="block text-sm font-semibold mb-2">Email *</label>
-        <input 
+        <label className="block text-sm font-semibold text-gray-300 mb-1">Email *</label>
+        <input
           ref={emailInputRef}
-          type="email" 
-          value={email} 
+          type="email"
+          value={email}
           onChange={(e) => !isEmailLocked && onEmailChange(e.target.value)}
-          placeholder="your@email.com" 
-          className="input-field disabled:bg-gray-100 disabled:cursor-not-allowed" 
+          placeholder="your@email.com"
+          className="input-field !bg-primary-950/70 !border-primary-700 !text-white placeholder:!text-gray-500 focus:!border-secondary-500 disabled:!bg-primary-900 disabled:cursor-not-allowed"
           disabled={isEmailLocked}
-          required 
+          required
         />
       </div>
     </div>
@@ -143,13 +143,16 @@ export default function BookTaxi() {
   const [destinationSearch, setDestinationSearch] = useState('')
   const [availableCarModels, setAvailableCarModels] = useState<CarModel[]>([])
   const [loadingCars, setLoadingCars] = useState(false)
+  const [carSearch, setCarSearch] = useState('')
+  const [carClassFilter, setCarClassFilter] = useState('')
+  const [carSort, setCarSort] = useState<'price-asc' | 'price-desc' | 'capacity-asc' | 'capacity-desc' | ''>('')
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   // Shared form fields
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
-  const [passengers, setPassengers] = useState('1')
+  const [passengers, setPassengers] = useState('')
   const [date, setDate] = useState('')
   const [startTime, setStartTime] = useState('')
   const [selectedCarModel, setSelectedCarModel] = useState<CarModel | null>(null)
@@ -179,6 +182,20 @@ export default function BookTaxi() {
   useEffect(() => {
     if (user?.email) setEmail(user.email || '')
   }, [user])
+
+  // Ensure this page can always scroll even if another screen previously
+  // locked document overflow for custom transitions.
+  useEffect(() => {
+    document.documentElement.style.overflowY = 'auto'
+    document.body.style.overflowY = 'auto'
+    document.documentElement.style.overflowX = 'hidden'
+    document.body.style.overflowX = 'hidden'
+
+    return () => {
+      document.documentElement.style.overflow = ''
+      document.body.style.overflow = ''
+    }
+  }, [])
 
   // ── Focus management for contact step ────────────────────────────────────
   useEffect(() => {
@@ -260,6 +277,9 @@ export default function BookTaxi() {
     setDurationDays(0)
     setDurationHrs(2)
     setAvailableCarModels([])
+    setCarSearch('')
+    setCarClassFilter('')
+    setCarSort('')
   }
 
   // ── Cost calculators ──────────────────────────────────────────────────────
@@ -282,6 +302,33 @@ export default function BookTaxi() {
       dest.description?.toLowerCase().includes(search)
     )
   }, [destinations, destinationSearch])
+
+  // ── Filtered + sorted car models ──────────────────────────────────────────
+  const filteredCarModels = useMemo(() => {
+    let result = availableCarModels
+    if (carClassFilter) result = result.filter((m) => m.class === carClassFilter)
+    if (carSearch.trim()) {
+      const s = carSearch.toLowerCase()
+      result = result.filter((m) => m.model_name.toLowerCase().includes(s) || m.class.toLowerCase().includes(s))
+    }
+    if (carSort) {
+      result = [...result].sort((a, b) => {
+        const priceA = mode === 'airport' && selectedDest ? selectedDest.distance_km * a.per_km_charge : noOfHours * a.per_hr_charge
+        const priceB = mode === 'airport' && selectedDest ? selectedDest.distance_km * b.per_km_charge : noOfHours * b.per_hr_charge
+        if (carSort === 'price-asc') return priceA - priceB
+        if (carSort === 'price-desc') return priceB - priceA
+        if (carSort === 'capacity-asc') return a.capacity - b.capacity
+        if (carSort === 'capacity-desc') return b.capacity - a.capacity
+        return 0
+      })
+    }
+    return result
+  }, [availableCarModels, carSearch, carClassFilter, carSort, mode, selectedDest, noOfHours])
+
+  const carClasses = useMemo(
+    () => Array.from(new Set(availableCarModels.map((m) => m.class))).sort(),
+    [availableCarModels]
+  )
 
   // ── Airport step navigation ───────────────────────────────────────────────
   const handleAirportNext = (e: React.FormEvent) => {
@@ -490,24 +537,40 @@ export default function BookTaxi() {
   }) => {
     const idx = steps.indexOf(current)
     return (
-      <div className="mb-8">
-        <div className="flex justify-between items-center">
+      <div className="mb-2 shrink-0 rounded-2xl border border-primary-800 bg-primary-900/45 px-3 py-2.5 md:px-5">
+        <div
+          className="grid items-center gap-x-1.5"
+          style={{ gridTemplateColumns: `repeat(${steps.length * 2 - 1}, minmax(0, 1fr))` }}
+        >
           {steps.map((step, i) => (
-            <div key={step} className="flex items-center flex-1">
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center font-semibold text-sm transition-all ${
-                idx >= i ? 'bg-secondary-500 text-white' : 'bg-gray-300 text-gray-600'
-              }`}>
-                {i + 1}
-              </div>
-              {i < steps.length - 1 && (
-                <div className={`h-1 flex-1 mx-1 transition-all ${idx > i ? 'bg-secondary-500' : 'bg-gray-300'}`} />
-              )}
+            <div
+              key={`${step}-dot`}
+              className={`w-8 h-8 mx-auto rounded-full flex items-center justify-center font-semibold text-sm transition-all ${
+                idx >= i ? 'bg-secondary-500 text-primary-950' : 'bg-primary-800 text-gray-400'
+              }`}
+              style={{ gridColumn: `${i * 2 + 1} / ${i * 2 + 2}` }}
+            >
+              {i + 1}
             </div>
           ))}
+          {steps.slice(0, -1).map((step, i) => (
+            <div
+              key={`${step}-line`}
+              className={`h-1 rounded transition-all ${idx > i ? 'bg-secondary-500' : 'bg-primary-800'}`}
+              style={{ gridColumn: `${i * 2 + 2} / ${i * 2 + 3}` }}
+            />
+          ))}
         </div>
-        <div className="flex justify-between text-xs text-gray-500 mt-2">
-          {steps.map((step) => (
-            <span key={step} className="text-center flex-1 truncate px-0.5">
+        <div
+          className="grid text-xs text-gray-400 mt-2"
+          style={{ gridTemplateColumns: `repeat(${steps.length * 2 - 1}, minmax(0, 1fr))` }}
+        >
+          {steps.map((step, i) => (
+            <span
+              key={step}
+              className="text-center px-0.5 text-[11px] md:text-xs leading-tight"
+              style={{ gridColumn: `${i * 2 + 1} / ${i * 2 + 2}` }}
+            >
               {labels[step]}
             </span>
           ))}
@@ -521,33 +584,33 @@ export default function BookTaxi() {
     isFirst: boolean
     isLast: boolean
   }) => (
-    <div className="flex gap-3 mt-8">
+    <div className="flex gap-3 mt-2 pt-2 border-t border-primary-800/80 bg-primary-950/75 backdrop-blur-sm shrink-0">
       {!isFirst && (
         <button type="button" onClick={onPrev}
-          className="flex-1 px-6 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 font-semibold transition-smooth">
+          className="flex-1 px-4 py-2.5 border border-primary-700 bg-primary-900/60 text-gray-200 rounded-xl hover:bg-primary-900 font-semibold transition-smooth text-sm">
           Previous
         </button>
       )}
       <button type="submit" disabled={isSubmitting}
-        className={`flex-1 px-6 py-3 rounded-lg font-semibold transition-smooth ${
-          isLast ? 'btn-primary text-lg' : 'btn-secondary'
+        className={`flex-1 px-4 py-2.5 rounded-xl font-semibold transition-smooth text-sm ${
+          isLast ? 'bg-secondary-500 text-primary-950 shadow-[0_14px_30px_rgba(255,218,0,0.35)]' : 'bg-primary-950 text-white border border-secondary-500/40 hover:bg-primary-900'
         } ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}>
-        {isSubmitting ? 'Processing...' : isLast ? 'Proceed to Payment' : 'Next'}
+        {isSubmitting ? 'Processing...' : isLast ? 'Proceed to Payment' : 'Next →'}
       </button>
     </div>
   )
 
   // ── Passengers step (shared) ──────────────────────────────────────────────
   const PassengersStep = () => (
-    <div className="bg-white rounded-lg shadow-lg p-4 md:p-8">
-      <h2 className="text-xl md:text-2xl font-bold mb-4 md:mb-6">Number of Passengers</h2>
+    <div className="rounded-2xl border border-secondary-500/20 bg-primary-900/65 backdrop-blur-sm shadow-[0_20px_60px_rgba(0,0,0,0.35)] p-4 md:p-8 text-gray-100">
+      <h2 className="text-xl md:text-2xl font-black text-white mb-4 md:mb-6">Number of Passengers</h2>
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         {[1, 2, 3, 4, 5, 6].map((n) => (
           <button key={n} type="button" onClick={() => setPassengers(n.toString())}
             className={`p-4 border-2 rounded-lg font-semibold transition-smooth ${
               passengers === n.toString()
-                ? 'border-secondary-500 bg-secondary-50 text-secondary-700'
-                : 'border-gray-300 hover:border-secondary-300'
+                ? 'border-secondary-500 bg-secondary-500/15 text-secondary-400'
+                : 'border-primary-700 hover:border-secondary-500/60 bg-primary-950/35 hover:bg-primary-950/55 text-gray-200'
             }`}>
             <Users className="w-5 h-5 mx-auto mb-1" />
             {n} {n === 1 ? 'Person' : 'People'}
@@ -559,24 +622,24 @@ export default function BookTaxi() {
 
   // ── Date step (shared) ────────────────────────────────────────────────────
   const DateStep = () => (
-    <div className="bg-white rounded-lg shadow-lg p-4 md:p-8">
-      <h2 className="text-2xl font-bold mb-6">Booking Date</h2>
-      <label className="block text-sm font-semibold mb-2">Select Date *</label>
+    <div className="rounded-2xl border border-secondary-500/20 bg-primary-900/65 backdrop-blur-sm shadow-[0_20px_60px_rgba(0,0,0,0.35)] p-4 md:p-8 text-gray-100">
+      <h2 className="text-2xl font-black text-white mb-6">Booking Date</h2>
+      <label className="block text-sm font-semibold text-gray-300 mb-2">Select Date *</label>
       <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
-        className="input-field w-full" min={new Date().toISOString().split('T')[0]} required />
+        className="input-field w-full !bg-primary-950/70 !border-primary-700 !text-white placeholder:!text-gray-500 focus:!border-secondary-500" min={new Date().toISOString().split('T')[0]} required />
     </div>
   )
 
   // ── Time step (shared) ────────────────────────────────────────────────────
   const TimeStep = ({ hint }: { hint?: string }) => (
-    <div className="bg-white rounded-lg shadow-lg p-4 md:p-8">
-      <h2 className="text-2xl font-bold mb-6">Pickup Time</h2>
-      <label className="block text-sm font-semibold mb-2">Select Pickup Time *</label>
+    <div className="rounded-2xl border border-secondary-500/20 bg-primary-900/65 backdrop-blur-sm shadow-[0_20px_60px_rgba(0,0,0,0.35)] p-4 md:p-8 text-gray-100">
+      <h2 className="text-2xl font-black text-white mb-6">Pickup Time</h2>
+      <label className="block text-sm font-semibold text-gray-300 mb-2">Select Pickup Time *</label>
       <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)}
-        className="input-field w-full" required />
+        className="input-field w-full !bg-primary-950/70 !border-primary-700 !text-white placeholder:!text-gray-500 focus:!border-secondary-500" required />
       {hint && (
-        <div className="mt-4 p-4 bg-blue-50 rounded-lg">
-          <p className="text-sm text-blue-800">{hint}</p>
+        <div className="mt-4 p-4 bg-secondary-500/10 border border-secondary-500/25 rounded-xl">
+          <p className="text-sm text-secondary-300">{hint}</p>
         </div>
       )}
     </div>
@@ -584,43 +647,111 @@ export default function BookTaxi() {
 
   // ── Car selection (shared, shows different rate based on mode) ────────────
   const CarStep = () => (
-    <div className="bg-white rounded-lg shadow-lg p-4 md:p-8">
-      <h2 className="text-2xl font-bold mb-6">Select Your Car Model</h2>
-      <p className="text-sm text-gray-600 mb-6">
-        Choose your preferred car model. A specific car will be assigned by our team once your booking is confirmed.
-      </p>
+    <div className="rounded-2xl border border-secondary-500/20 bg-primary-900/65 backdrop-blur-sm shadow-[0_20px_60px_rgba(0,0,0,0.35)] p-4 md:p-8 text-gray-100">
       {loadingCars ? (
-        <p className="text-gray-600">Loading available car models...</p>
+        <p className="text-gray-400">Loading available car models...</p>
       ) : availableCarModels.length === 0 ? (
-        <p className="text-gray-600">No car models available for {passengers} passenger(s) in this timeslot. Try adjusting your booking time or passenger count.</p>
+        <p className="text-gray-400">No car models available for {passengers} passenger(s) in this timeslot. Try adjusting your booking time or passenger count.</p>
       ) : (
-        <div className="space-y-3">
-          {availableCarModels.map((model) => {
-            const estimate = mode === 'airport'
-              ? selectedDest ? `Rs. ${(selectedDest.distance_km * model.per_km_charge).toFixed(0)}` : 'Price on request'
-              : `Rs. ${(noOfHours * model.per_hr_charge).toFixed(0)}`
-            return (
-              <button key={model.model_name} type="button"
-                onClick={() => setSelectedCarModel(model)}
-                className={`w-full p-4 border-2 rounded-lg text-left transition-smooth ${
-                  selectedCarModel?.model_name === model.model_name
-                    ? 'border-secondary-500 bg-secondary-50'
-                    : 'border-gray-300 hover:border-secondary-300'
-                }`}>
-                <div className="flex items-center justify-between">
-                  <div className="flex-1">
-                    <p className="font-semibold text-lg">{model.model_name}</p>
-                    <p className="text-sm text-gray-600">Class: {model.class} · Capacity: {model.capacity} pax · Available: {model.available_count}</p>
-                    <p className="text-sm text-secondary-600 font-semibold mt-2">
-                      Estimated: {estimate}
-                    </p>
-                  </div>
-                  <Car className="w-6 h-6 text-secondary-500 shrink-0 ml-3" />
-                </div>
+        <>
+          {/* Search */}
+          <div className="relative mb-3">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Search car model..."
+              value={carSearch}
+              onChange={(e) => setCarSearch(e.target.value)}
+              className="w-full pl-9 pr-9 py-2 rounded-lg border border-primary-700 bg-primary-950/70 text-white placeholder:text-gray-500 text-sm focus:outline-none focus:border-secondary-500"
+            />
+            {carSearch && (
+              <button type="button" onClick={() => setCarSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-200">
+                <X className="w-4 h-4" />
               </button>
-            )
-          })}
-        </div>
+            )}
+          </div>
+
+          {/* Class filter chips */}
+          {carClasses.length > 1 && (
+            <div className="flex flex-wrap gap-2 mb-3">
+              <button
+                type="button"
+                onClick={() => setCarClassFilter('')}
+                className={`px-3 py-1 rounded-full text-xs font-semibold border transition-smooth ${
+                  carClassFilter === '' ? 'bg-secondary-500 text-primary-950 border-secondary-500' : 'border-primary-700 text-gray-400 hover:border-secondary-500/50 hover:text-gray-200'
+                }`}
+              >
+                All
+              </button>
+              {carClasses.map((cls) => (
+                <button
+                  key={cls}
+                  type="button"
+                  onClick={() => setCarClassFilter(cls === carClassFilter ? '' : cls)}
+                  className={`px-3 py-1 rounded-full text-xs font-semibold border transition-smooth ${
+                    carClassFilter === cls ? 'bg-secondary-500 text-primary-950 border-secondary-500' : 'border-primary-700 text-gray-400 hover:border-secondary-500/50 hover:text-gray-200'
+                  }`}
+                >
+                  {cls}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Sort controls */}
+          <div className="flex flex-wrap items-center gap-2 mb-4">
+            <span className="text-xs text-gray-500 shrink-0">Sort by:</span>
+            {([
+              { key: 'price-asc', label: 'Price ↑' },
+              { key: 'price-desc', label: 'Price ↓' },
+              { key: 'capacity-asc', label: 'Capacity ↑' },
+              { key: 'capacity-desc', label: 'Capacity ↓' },
+            ] as const).map(({ key, label }) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setCarSort(carSort === key ? '' : key)}
+                className={`px-3 py-1 rounded-full text-xs font-semibold border transition-smooth ${
+                  carSort === key ? 'bg-secondary-500 text-primary-950 border-secondary-500' : 'border-primary-700 text-gray-400 hover:border-secondary-500/50 hover:text-gray-200'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {filteredCarModels.length === 0 ? (
+            <p className="text-gray-400 text-sm">No cars match your search.</p>
+          ) : (
+            <div className="space-y-3">
+              {filteredCarModels.map((model) => {
+                const estimate = mode === 'airport'
+                  ? selectedDest ? `Rs. ${(selectedDest.distance_km * model.per_km_charge).toFixed(0)}` : 'Price on request'
+                  : `Rs. ${(noOfHours * model.per_hr_charge).toFixed(0)}`
+                return (
+                  <button key={model.model_name} type="button"
+                    onClick={() => setSelectedCarModel(model)}
+                    className={`w-full p-4 border-2 rounded-lg text-left transition-smooth ${
+                      selectedCarModel?.model_name === model.model_name
+                        ? 'border-secondary-500 bg-secondary-500/15'
+                        : 'border-primary-700 hover:border-secondary-500/60 bg-primary-950/35 hover:bg-primary-950/55 text-gray-200'
+                    }`}>
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1">
+                        <p className="font-semibold text-lg">{model.model_name}</p>
+                        <p className="text-sm text-gray-400">Class: {model.class} · Capacity: {model.capacity} pax · Available: {model.available_count}</p>
+                        <p className="text-sm text-secondary-600 font-semibold mt-2">
+                          Estimated: {estimate}
+                        </p>
+                      </div>
+                      <Car className="w-6 h-6 text-secondary-500 shrink-0 ml-3" />
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          )}
+        </>
       )}
     </div>
   )
@@ -629,7 +760,7 @@ export default function BookTaxi() {
     return (
       <div className="flex flex-col min-h-screen">
         <Header />
-        <main className="flex-1 flex items-center justify-center">
+        <main className="flex-1 flex items-center justify-center bg-primary-950">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-secondary-500" />
         </main>
         <Footer />
@@ -649,108 +780,143 @@ export default function BookTaxi() {
     const isLast = airportStep === 'confirm'
 
     return (
-      <form onSubmit={isLast ? handleSubmit : handleAirportNext}>
-        {airportStep === 'contact' && (
-          <ContactStepComponent
-            name={name}
-            phone={phone}
-            email={email}
-            nameInputRef={nameInputRef}
-            phoneInputRef={phoneInputRef}
-            emailInputRef={emailInputRef}
-            onNameChange={setName}
-            onPhoneChange={setPhone}
-            onEmailChange={setEmail}
-            isEmailLocked={true}
-          />
-        )}
+      <form
+        onSubmit={isLast ? handleSubmit : handleAirportNext}
+        className="flex-1 flex flex-col overflow-hidden"
+      >
+        <div className="flex-1 min-h-0 overflow-y-auto pr-1 scrollbar-thin-modern">
+          {airportStep === 'contact' && (
+            <ContactStepComponent
+              name={name}
+              phone={phone}
+              email={email}
+              nameInputRef={nameInputRef}
+              phoneInputRef={phoneInputRef}
+              emailInputRef={emailInputRef}
+              onNameChange={setName}
+              onPhoneChange={setPhone}
+              onEmailChange={setEmail}
+              isEmailLocked={true}
+            />
+          )}
 
         {/* Route: Destination + Passengers */}
         {airportStep === 'route' && (
-          <div className="bg-white rounded-lg shadow-lg p-4 md:p-8 space-y-8">
+          <div className="rounded-2xl border border-secondary-500/20 bg-primary-900/65 backdrop-blur-sm shadow-[0_20px_60px_rgba(0,0,0,0.35)] p-4 md:p-8 space-y-8 text-gray-100">
             {/* Destination */}
             <div>
-              <h2 className="text-2xl font-bold mb-6">Select Destination</h2>
-              
-              {/* Search Bar */}
-              {destinations.length > 0 && (
-                <div className="relative mb-4">
-                  <Search className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
-                  <input
-                    type="text"
-                    placeholder="Search destinations..."
-                    value={destinationSearch}
-                    onChange={(e) => setDestinationSearch(e.target.value)}
-                    className="w-full pl-10 pr-10 py-2 border-2 border-gray-300 rounded-lg focus:border-secondary-500 focus:outline-none"
-                  />
-                  {destinationSearch && (
-                    <button
-                      type="button"
-                      onClick={() => setDestinationSearch('')}
-                      className="absolute right-3 top-3 text-gray-400 hover:text-gray-600"
-                    >
-                      <X className="w-5 h-5" />
-                    </button>
+              {!selectedDest ? (
+                <>
+                  {/* Search Bar */}
+                  {destinations.length > 0 && (
+                    <div className="relative mb-4">
+                      <Search className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
+                      <input
+                        type="text"
+                        placeholder="Search destinations..."
+                        value={destinationSearch}
+                        onChange={(e) => setDestinationSearch(e.target.value)}
+                        className="w-full pl-10 pr-10 py-2 border-2 border-gray-300 rounded-lg focus:border-secondary-500 focus:outline-none"
+                      />
+                      {destinationSearch && (
+                        <button
+                          type="button"
+                          onClick={() => setDestinationSearch('')}
+                          className="absolute right-3 top-3 text-gray-400 hover:text-gray-600"
+                        >
+                          <X className="w-5 h-5" />
+                        </button>
+                      )}
+                    </div>
                   )}
-                </div>
-              )}
 
-              {loadingDest ? (
-                <p className="text-gray-600">Loading destinations...</p>
-              ) : destinations.length === 0 ? (
-                <p className="text-gray-600">No destinations available.</p>
-              ) : filteredDestinations.length === 0 ? (
-                <p className="text-gray-600">No destinations match your search.</p>
+                  {loadingDest ? (
+                    <p className="text-gray-600">Loading destinations...</p>
+                  ) : destinations.length === 0 ? (
+                    <p className="text-gray-600">No destinations available.</p>
+                  ) : filteredDestinations.length === 0 ? (
+                    <p className="text-gray-600">No destinations match your search.</p>
+                  ) : (
+                    <div className="space-y-3 max-h-[400px] overflow-y-auto scrollbar-thin-modern pr-1">
+                      {filteredDestinations.map((dest) => (
+                        <button key={dest.id} type="button"
+                          onClick={() => { setDestinationId(dest.id); setSelectedDest(dest) }}
+                          className={`w-full p-4 border-2 rounded-lg text-left transition-smooth ${
+                            destinationId === dest.id
+                              ? 'border-secondary-500 bg-secondary-50'
+                              : 'border-gray-300 hover:border-secondary-300'
+                          }`}>
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="font-semibold">{dest.name}</p>
+                              <p className="text-sm text-gray-600">{dest.distance_km} km � Est. {formatDurationMinutes(dest.estimated_duration_minutes)}</p>
+                              {dest.description && <p className="text-xs text-gray-500 mt-1">{dest.description}</p>}
+                            </div>
+                            <MapPin className="w-5 h-5 text-secondary-500 shrink-0 ml-3" />
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </>
               ) : (
-                <div className="space-y-3 max-h-[400px] overflow-y-auto">
-                  {filteredDestinations.map((dest) => (
-                    <button key={dest.id} type="button"
-                      onClick={() => { setDestinationId(dest.id); setSelectedDest(dest) }}
-                      className={`w-full p-4 border-2 rounded-lg text-left transition-smooth ${
-                        destinationId === dest.id
-                          ? 'border-secondary-500 bg-secondary-50'
-                          : 'border-gray-300 hover:border-secondary-300'
-                      }`}>
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="font-semibold">{dest.name}</p>
-                          <p className="text-sm text-gray-600">{dest.distance_km} km · Est. {formatDurationMinutes(dest.estimated_duration_minutes)}</p>
-                          {dest.description && <p className="text-xs text-gray-500 mt-1">{dest.description}</p>}
-                        </div>
-                        <MapPin className="w-5 h-5 text-secondary-500 shrink-0 ml-3" />
-                      </div>
-                    </button>
-                  ))}
+                <div className="p-4 rounded-xl border border-secondary-500/30 bg-secondary-500/10 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <p className="text-sm md:text-base text-gray-100">
+                    Destination selected: <span className="font-bold text-secondary-400">"{selectedDest.name}"</span>
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDestinationId('')
+                      setSelectedDest(null)
+                      setDestinationSearch('')
+                    }}
+                    className="px-4 py-2 rounded-lg border border-secondary-500/50 text-secondary-400 hover:bg-secondary-500/10 transition-smooth font-semibold text-sm"
+                  >
+                    Choose Another
+                  </button>
                 </div>
               )}
             </div>
 
             {/* Passengers */}
-            <div className="border-t pt-6 md:pt-8">
-              <h3 className="text-xl font-bold mb-4">Number of Passengers</h3>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {[1, 2, 3, 4, 5, 6].map((n) => (
-                  <button key={n} type="button" onClick={() => setPassengers(n.toString())}
-                    className={`p-4 border-2 rounded-lg font-semibold transition-smooth text-center ${
-                      passengers === n.toString()
-                        ? 'border-secondary-500 bg-secondary-50 text-secondary-700'
-                        : 'border-gray-300 hover:border-secondary-300'
-                    }`}>
-                    <Users className="w-5 h-5 mx-auto mb-1" />
-                    {n} {n === 1 ? 'Person' : 'People'}
-                  </button>
-                ))}
+            {selectedDest && (
+              <div className="border-t pt-6 md:pt-8">
+                <h3 className="text-xl font-bold mb-4">Number of Passengers</h3>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  {[1, 2, 3, 4, 5, 6].map((n) => (
+                    <button key={n} type="button" onClick={() => setPassengers(n.toString())}
+                      className={`p-4 border-2 rounded-lg font-semibold transition-smooth text-center ${
+                        passengers === n.toString()
+                          ? 'border-secondary-500 bg-secondary-50 text-secondary-700'
+                          : 'border-gray-300 hover:border-secondary-300'
+                      }`}>
+                      <Users className="w-5 h-5 mx-auto mb-1" />
+                      {n} {n === 1 ? 'Person' : 'People'}
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
           </div>
         )}
 
         {/* Schedule: Date + Time */}
         {airportStep === 'schedule' && (
-          <div className="bg-white rounded-lg shadow-lg p-4 md:p-8 space-y-8">
-            {/* Date */}
-            <div>
-              <h2 className="text-2xl font-bold mb-4">Booking Date</h2>
+          <div className="relative rounded-2xl border border-secondary-500/20 bg-primary-900/65 backdrop-blur-sm shadow-[0_20px_60px_rgba(0,0,0,0.35)] p-4 md:p-8 space-y-8 text-gray-100">
+            {selectedDest && (
+              <div className="absolute right-4 md:right-8 top-6 md:top-7 text-right pointer-events-none">
+                <p className="text-[11px] md:text-xs text-gray-300 leading-tight">
+                  Destination: <span className="font-semibold text-secondary-400">{selectedDest.name}</span>
+                </p>
+                <p className="text-[11px] md:text-xs text-gray-400 leading-tight">
+                  Est. duration: {formatDurationMinutes(selectedDest.estimated_duration_minutes)}
+                </p>
+              </div>
+            )}
+            {/* Date + Time */}
+            <div className="-mt-4 md:-mt-5">
+              <h2 className="text-2xl font-bold mb-4">Booking Date and Time</h2>
               <label className="block text-sm font-semibold mb-2">Select Date *</label>
               <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
                 className="input-field w-full" min={new Date().toISOString().split('T')[0]} required />
@@ -758,45 +924,36 @@ export default function BookTaxi() {
 
             {/* Time */}
             <div className="border-t pt-8">
-              <h3 className="text-xl font-bold mb-4">Pickup Time</h3>
               <label className="block text-sm font-semibold mb-2">Select Pickup Time *</label>
               <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)}
                 className="input-field w-full" required />
-              {selectedDest && (
-                <div className="mt-4 p-4 bg-blue-50 rounded-lg">
-                  <p className="text-sm text-blue-800">
-                    <strong>Destination:</strong> {selectedDest.name}<br/>
-                    <strong>Estimated trip duration:</strong> {formatDurationMinutes(selectedDest.estimated_duration_minutes)}
-                  </p>
-                </div>
-              )}
             </div>
           </div>
         )}
 
         {airportStep === 'car' && <CarStep />}
 
-        {airportStep === 'confirm' && (
-          <div className="bg-white rounded-lg shadow-lg p-4 md:p-8 space-y-6">
-            <h2 className="text-2xl font-bold">Confirm Your Booking</h2>
-            <div className="bg-gray-50 rounded-lg p-5 space-y-3 text-sm">
-              <Row label="Name" value={name} />
-              <Row label="Phone" value={phone} />
-              <Row label="Email" value={email} />
-              <Row label="Destination" value={selectedDest?.name ?? '-'} />
-              <Row label="Passengers" value={passengers} />
-              <Row label="Date" value={new Date(date).toLocaleDateString('en-IN')} />
-              <Row label="Pickup Time" value={startTime} />
-              <div className="border-t pt-3">
-                <Row label="Car Model" value={selectedCarModel?.model_name ?? '-'} />
+          {airportStep === 'confirm' && (
+            <div className="rounded-2xl border border-secondary-500/20 bg-primary-900/65 backdrop-blur-sm shadow-[0_20px_60px_rgba(0,0,0,0.35)] p-4 md:p-8 space-y-6 text-gray-100">
+              <PriceBox
+                lines={[]}
+                total={totalCost} advance={advance} remaining={remaining}
+              />
+              <div className="bg-primary-950/50 border border-primary-800 rounded-xl p-5 space-y-3 text-sm">
+                <Row label="Name" value={name} />
+                <Row label="Phone" value={phone} />
+                <Row label="Email" value={email} />
+                <Row label="Destination" value={selectedDest?.name ?? '-'} />
+                <Row label="Passengers" value={passengers} />
+                <Row label="Date" value={new Date(date).toLocaleDateString('en-IN')} />
+                <Row label="Pickup Time" value={startTime} />
+                <div className="border-t pt-3">
+                  <Row label="Car Model" value={selectedCarModel?.model_name ?? '-'} />
+                </div>
               </div>
             </div>
-            <PriceBox
-              lines={[]}
-              total={totalCost} advance={advance} remaining={remaining}
-            />
-          </div>
-        )}
+          )}
+        </div>
 
         <NavButtons onPrev={handleAirportPrev} isFirst={isFirst} isLast={isLast} />
       </form>
@@ -810,25 +967,29 @@ export default function BookTaxi() {
     const isLast = hourlyStep === 'confirm'
 
     return (
-      <form onSubmit={isLast ? handleSubmit : handleHourlyNext}>
-        {hourlyStep === 'contact' && (
-          <ContactStepComponent
-            name={name}
-            phone={phone}
-            email={email}
-            nameInputRef={nameInputRef}
-            phoneInputRef={phoneInputRef}
-            emailInputRef={emailInputRef}
-            onNameChange={setName}
-            onPhoneChange={setPhone}
-            onEmailChange={setEmail}
-            isEmailLocked={true}
-          />
-        )}
+      <form
+        onSubmit={isLast ? handleSubmit : handleHourlyNext}
+        className="flex-1 flex flex-col overflow-hidden"
+      >
+        <div className="flex-1 min-h-0 overflow-y-auto pr-1 scrollbar-thin-modern">
+          {hourlyStep === 'contact' && (
+            <ContactStepComponent
+              name={name}
+              phone={phone}
+              email={email}
+              nameInputRef={nameInputRef}
+              phoneInputRef={phoneInputRef}
+              emailInputRef={emailInputRef}
+              onNameChange={setName}
+              onPhoneChange={setPhone}
+              onEmailChange={setEmail}
+              isEmailLocked={true}
+            />
+          )}
 
         {/* Details: Passengers + Date */}
         {hourlyStep === 'details' && (
-          <div className="bg-white rounded-lg shadow-lg p-4 md:p-8 space-y-8">
+          <div className="rounded-2xl border border-secondary-500/20 bg-primary-900/65 backdrop-blur-sm shadow-[0_20px_60px_rgba(0,0,0,0.35)] p-4 md:p-8 space-y-8 text-gray-100">
             {/* Passengers */}
             <div>
               <h2 className="text-xl md:text-2xl font-bold mb-4">Number of Passengers</h2>
@@ -859,7 +1020,7 @@ export default function BookTaxi() {
 
         {/* Schedule: Time + Hours */}
         {hourlyStep === 'schedule' && (
-          <div className="bg-white rounded-lg shadow-lg p-4 md:p-8 space-y-8">
+          <div className="rounded-2xl border border-secondary-500/20 bg-primary-900/65 backdrop-blur-sm shadow-[0_20px_60px_rgba(0,0,0,0.35)] p-4 md:p-8 space-y-8 text-gray-100">
             {/* Time */}
             <div>
               <h2 className="text-2xl font-bold mb-4">Pickup Time</h2>
@@ -940,27 +1101,27 @@ export default function BookTaxi() {
 
         {hourlyStep === 'car' && <CarStep />}
 
-        {hourlyStep === 'confirm' && (
-          <div className="bg-white rounded-lg shadow-lg p-4 md:p-8 space-y-6">
-            <h2 className="text-2xl font-bold">Confirm Your Booking</h2>
-            <div className="bg-gray-50 rounded-lg p-5 space-y-3 text-sm">
-              <Row label="Name" value={name} />
-              <Row label="Phone" value={phone} />
-              <Row label="Email" value={email} />
-              <Row label="Passengers" value={passengers} />
-              <Row label="Date" value={new Date(date).toLocaleDateString('en-IN')} />
-              <Row label="Pickup Time" value={startTime} />
-              <Row label="Duration" value={`${formatDuration(noOfHours)}${noOfHours >= 24 ? ` (${noOfHours} hrs)` : ''}`} />
-              <div className="border-t pt-3">
-                <Row label="Car Model" value={selectedCarModel?.model_name ?? '-'} />
+          {hourlyStep === 'confirm' && (
+            <div className="rounded-2xl border border-secondary-500/20 bg-primary-900/65 backdrop-blur-sm shadow-[0_20px_60px_rgba(0,0,0,0.35)] p-4 md:p-8 space-y-6 text-gray-100">
+              <PriceBox
+                lines={[]}
+                total={totalCost} advance={advance} remaining={remaining}
+              />
+              <div className="bg-primary-950/50 border border-primary-800 rounded-xl p-5 space-y-3 text-sm">
+                <Row label="Name" value={name} />
+                <Row label="Phone" value={phone} />
+                <Row label="Email" value={email} />
+                <Row label="Passengers" value={passengers} />
+                <Row label="Date" value={new Date(date).toLocaleDateString('en-IN')} />
+                <Row label="Pickup Time" value={startTime} />
+                <Row label="Duration" value={`${formatDuration(noOfHours)}${noOfHours >= 24 ? ` (${noOfHours} hrs)` : ''}`} />
+                <div className="border-t pt-3">
+                  <Row label="Car Model" value={selectedCarModel?.model_name ?? '-'} />
+                </div>
               </div>
             </div>
-            <PriceBox
-              lines={[]}
-              total={totalCost} advance={advance} remaining={remaining}
-            />
-          </div>
-        )}
+          )}
+        </div>
 
         <NavButtons onPrev={handleHourlyPrev} isFirst={isFirst} isLast={isLast} />
       </form>
@@ -975,23 +1136,26 @@ export default function BookTaxi() {
     : (HOURLY_LABELS as Record<string, string>)
 
   return (
-    <div className="flex flex-col min-h-screen">
+    <div className="flex flex-col h-[100dvh] overflow-hidden bg-primary-950">
       <Header />
 
-      <main className="flex-1 py-12 md:py-16 bg-gray-50">
-        <div className="container mx-auto px-4">
-          <h1 className="text-2xl md:text-4xl font-bold text-center mb-5 md:mb-8">Book Your Taxi</h1>
+      <main className="overflow-hidden flex flex-col py-2 md:py-3 bg-primary-950 relative mt-[72px] md:mt-[84px] h-[calc(100dvh-72px)] md:h-[calc(100dvh-84px)]">
+        <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle, rgba(255,218,0,0.75) 1px, transparent 1px)', backgroundSize: '36px 36px' }} />
+        <div className="absolute -top-24 -left-16 w-[420px] h-[420px] rounded-full pointer-events-none" style={{ background: 'radial-gradient(circle, rgba(255,218,0,0.09) 0%, transparent 68%)' }} />
+        <div className="absolute -bottom-24 -right-16 w-[420px] h-[420px] rounded-full pointer-events-none" style={{ background: 'radial-gradient(circle, rgba(255,190,0,0.08) 0%, transparent 68%)' }} />
+        <div className="container mx-auto px-4 relative z-10 flex-1 flex flex-col overflow-hidden">
+          <h1 className="text-xl md:text-2xl font-black text-white text-center mb-2 tracking-tight shrink-0">Book Your Taxi</h1>
 
           {/* ── Mode tabs ── */}
-          <div className="max-w-2xl mx-auto mb-8">
-            <div className="flex rounded-xl overflow-hidden border border-gray-300 bg-white shadow-sm">
+          <div className="max-w-3xl mx-auto mb-2 w-full shrink-0">
+            <div className="flex rounded-2xl overflow-hidden border border-primary-700 bg-primary-900/70 backdrop-blur-sm shadow-[0_12px_36px_rgba(0,0,0,0.28)]">
               <button
                 type="button"
                 onClick={() => switchMode('airport')}
-                className={`flex-1 py-4 px-6 font-semibold text-sm transition-all flex items-center justify-center gap-2 ${
+                className={`flex-1 py-2.5 px-4 font-semibold text-sm transition-all flex items-center justify-center gap-2 ${
                   mode === 'airport'
-                    ? 'bg-secondary-500 text-primary-950'
-                    : 'text-gray-600 hover:bg-gray-50'
+                    ? 'bg-secondary-500 text-primary-950 shadow-[0_10px_24px_rgba(255,218,0,0.35)]'
+                    : 'text-gray-300 hover:bg-primary-900'
                 }`}
               >
                 <MapPin className="w-4 h-4" />
@@ -1000,31 +1164,25 @@ export default function BookTaxi() {
               <button
                 type="button"
                 onClick={() => switchMode('hourly')}
-                className={`flex-1 py-4 px-6 font-semibold text-sm transition-all flex items-center justify-center gap-2 ${
+                className={`flex-1 py-2.5 px-4 font-semibold text-sm transition-all flex items-center justify-center gap-2 ${
                   mode === 'hourly'
-                    ? 'bg-secondary-500 text-primary-950'
-                    : 'text-gray-600 hover:bg-gray-50'
+                    ? 'bg-secondary-500 text-primary-950 shadow-[0_10px_24px_rgba(255,218,0,0.35)]'
+                    : 'text-gray-300 hover:bg-primary-900'
                 }`}
               >
                 <Clock className="w-4 h-4" />
                 Hourly Booking
               </button>
             </div>
-            <p className="text-center text-sm text-gray-500 mt-3">
-              {mode === 'airport'
-                ? 'Fixed rate transfer from Hollongi to your destination'
-                : 'Book a taxi by the hour — go wherever you need, no fixed route'}
-            </p>
           </div>
+          <div className="mb-2" />
 
-          <div className="max-w-2xl mx-auto">
+          <div className="max-w-2xl mx-auto flex-1 flex flex-col overflow-hidden w-full">
             <StepIndicator steps={steps} labels={labels} current={currentStepStr} />
             {mode === 'airport' ? renderAirport() : renderHourly()}
           </div>
         </div>
       </main>
-
-      <Footer />
     </div>
   )
 }
@@ -1033,8 +1191,8 @@ export default function BookTaxi() {
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between gap-4">
-      <span className="text-gray-600 shrink-0">{label}:</span>
-      <span className="font-semibold text-right">{value}</span>
+      <span className="text-gray-400 shrink-0">{label}:</span>
+      <span className="font-semibold text-right text-gray-100">{value}</span>
     </div>
   )
 }
@@ -1048,12 +1206,12 @@ function PriceBox({
   remaining: number
 }) {
   return (
-    <div className="bg-blue-50 rounded-lg p-5 space-y-3">
+    <div className="bg-secondary-500/10 border border-secondary-500/25 rounded-xl p-5 space-y-3">
       <div className="flex justify-between font-bold text-lg">
-        <span>Estimated Price:</span>
-        <span className="text-secondary-600">Rs. {total.toFixed(2)}</span>
+        <span className="text-gray-100">Estimated Price:</span>
+        <span className="text-secondary-400">Rs. {total.toFixed(2)}</span>
       </div>
-      <p className="text-xs text-blue-700 pt-1">
+      <p className="text-xs text-secondary-200 pt-1">
         Pay the full amount online, or choose to prebook with just 30% (Rs. {advance.toFixed(2)}) on the next screen.
       </p>
     </div>
