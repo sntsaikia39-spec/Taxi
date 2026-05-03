@@ -397,7 +397,7 @@ export default function MyBookings() {
             backgroundImage: 'radial-gradient(circle, rgba(255,218,0,0.75) 1px, transparent 1px)',
             backgroundSize: '36px 36px',
           }}
-        />
+        ></div>
 
         <div className="relative z-10 container mx-auto px-4 pt-14 pb-12 md:pt-20 md:pb-24 flex-1 flex flex-col">
           {/* Hero heading */}

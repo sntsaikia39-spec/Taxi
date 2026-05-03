@@ -4,11 +4,19 @@ All notable changes to TaxiHollongi will be documented in this file.
 
 ---
 
+## [2026-05-04]
+
+**Author:** Yami
+
+### Changes
+- update: Splash and Landing animation
+
 ## [2026-05-03]
 
 **Author:** Yami
 
 ### Changes
+- update: booking UI and invoice regen. custom loader in pages
 - update: Logout button
 - fix: homescreen UI tour section and transition
 - fix: tours and book taxi screen UI

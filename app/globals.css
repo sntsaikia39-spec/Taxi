@@ -374,3 +374,20 @@ html, body {
     transition: none !important;
   }
 }
+
+/* Hide animated hero and stats elements by default so they stay invisible
+   while the splash is showing. GSAP will animate them to visible when
+   the splashFinished event fires. */
+.hero-badge,
+.hero-line,
+.hero-btns > *,
+.hero-sub,
+.hero-mini-stat,
+.hero-img-back,
+.hero-img-main,
+.hero-float-1,
+.hero-float-2,
+.stat-item {
+  opacity: 0;
+  pointer-events: none;
+}
