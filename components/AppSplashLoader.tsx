@@ -115,6 +115,7 @@ export default function AppSplashLoader() {
               repeat: -1,
               delay: i * 0.7,
               ease: "power2.in",
+              force3D: true,
             }
           )
           gsap.to(ring, {
@@ -128,10 +129,10 @@ export default function AppSplashLoader() {
         })
       }
 
-      // 2. Car Trail Momentum (Synced to CSS keyframes of 2.75s)
+      // 2. Car Trail Momentum
       if (trailRef.current) {
         const lines = gsap.utils.toArray(trailRef.current.children)
-        const tl = gsap.timeline()
+        const tl = gsap.timeline({ defaults: { force3D: true, lazy: true } })
         
         // Fast entrance
         tl.set(lines, { scaleX: 0, opacity: 0 })
@@ -157,31 +158,38 @@ export default function AppSplashLoader() {
     >
       <div className="app-splash__track" />
       
-      <div className="app-splash__content-wrapper" style={{ transform: 'translateY(40px)' }}>
+      <div 
+        className="app-splash__content-wrapper" 
+        style={{ 
+          transform: 'translate3d(0, 40px, 0)',
+          willChange: 'transform'
+        }}
+      >
         {/* Radar Rings Container */}
         <div ref={ringsRef} className={`app-splash__radar-container ${phase === 'exiting' ? 'app-splash__radar-container--exit' : ''}`}>
-          <div className="app-splash__radar-ring" />
-          <div className="app-splash__radar-ring" />
-          <div className="app-splash__radar-ring" />
-          <div className="app-splash__radar-ring" />
+          <div className="app-splash__radar-ring" style={{ willChange: 'transform, opacity' }} />
+          <div className="app-splash__radar-ring" style={{ willChange: 'transform, opacity' }} />
+          <div className="app-splash__radar-ring" style={{ willChange: 'transform, opacity' }} />
+          <div className="app-splash__radar-ring" style={{ willChange: 'transform, opacity' }} />
         </div>
 
         <div
           className={`app-splash__taxi ${motionReady ? 'app-splash__taxi--start' : ''} ${
             phase === 'exiting' ? 'app-splash__taxi--exit' : ''
           }`}
+          style={{ willChange: 'transform' }}
         >
           {/* GSAP Trail lines */}
           <div ref={trailRef} className="app-splash__trail">
-            <div className="app-splash__trail-line" style={{ width: '90px' }} />
-            <div className="app-splash__trail-line" style={{ width: '130px', marginLeft: '10px' }} />
-            <div className="app-splash__trail-line" style={{ width: '100px', marginLeft: '5px' }} />
+            <div className="app-splash__trail-line" style={{ width: '90px', willChange: 'transform, opacity' }} />
+            <div className="app-splash__trail-line" style={{ width: '130px', marginLeft: '10px', willChange: 'transform, opacity' }} />
+            <div className="app-splash__trail-line" style={{ width: '100px', marginLeft: '5px', willChange: 'transform, opacity' }} />
           </div>
 
           <DotLottieReact
             src="/assets/yellow taxi.lottie"
             loop={true}
-            autoplay={true}
+            autoplay={false} // Managed by startMotion to prevent double-initialization jank
             dotLottieRefCallback={setDotLottie}
             className="app-splash__taxi-lottie"
           />
