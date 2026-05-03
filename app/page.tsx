@@ -558,14 +558,14 @@ export default function Home() {
         <div className="absolute bottom-[-10%] left-[-6%] w-[380px] h-[380px] bg-secondary-500 opacity-[0.035] rounded-full blur-[110px] pointer-events-none" />
 
         {/* Mountain silhouette */}
-        <div className="absolute bottom-0 left-0 right-0 pointer-events-none select-none opacity-[0.09]">
-          <svg viewBox="0 0 1440 160" fill="none" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">
-            <path d="M0 160L200 72L420 118L660 18L900 96L1140 38L1320 82L1440 48V160H0Z" fill="#ffda00" />
+        <div className="absolute bottom-10 sm:bottom-0 -left-[34%] w-[168%] sm:left-0 sm:w-full pointer-events-none select-none opacity-[0.09]">
+          <svg className="w-full h-auto" viewBox="0 0 1440 160" fill="none" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMax meet">
+            <path d="M0 160L110 72L260 120L410 48L580 110L740 18L890 90L1070 38L1260 95L1440 34V160H0Z" fill="#ffda00" />
           </svg>
         </div>
 
         {/* Two-column layout */}
-        <div className="container mx-auto px-4 lg:px-8 relative z-10 flex-1 flex flex-col justify-center">
+        <div className="container mx-auto px-4 lg:px-8 relative z-10 flex-1 flex flex-col justify-center -mt-10">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-center">
 
             {/* ── Left: text + CTAs ── */}
@@ -697,7 +697,7 @@ export default function Home() {
       </section>
 
       {/* ════════════════════ STATS ════════════════════ */}
-      <section className="stats-section relative z-20 shrink-0 -mt-10 sm:mt-0 py-4 sm:py-5 md:py-6" style={{
+      <section className="stats-section relative z-20 shrink-0 -mt-10 -ml-[3px] sm:mt-0 sm:ml-0 py-4 sm:py-5 md:py-6" style={{
         background: 'linear-gradient(135deg, #0a0a0a 0%, #1a1410 50%, #0f0c0a 100%)',
         boxShadow: 'inset 0 1px 0 rgba(255,218,0,0.1), inset 0 -1px 0 rgba(0,0,0,0.8), 0 10px 40px rgba(0,0,0,0.8), 0 0 100px rgba(255,218,0,0.05)',
         border: '1px solid',

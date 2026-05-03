@@ -9,6 +9,7 @@ All notable changes to TaxiHollongi will be documented in this file.
 **Author:** Yami
 
 ### Changes
+- update: UI mobile responsive adjustment
 - update: UI Update Major
 
 ## [2026-05-01]

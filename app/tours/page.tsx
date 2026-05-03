@@ -279,8 +279,8 @@ export default function Tours() {
 
                     {/* Content Wrapper */}
                     <div className="flex flex-col flex-1 overflow-hidden">
-                      {/* Scrollable Middle Content */}
-                      <div className="flex-1 overflow-y-auto p-4 pb-2 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+                      {/* Fixed-height middle content to avoid nested scroll on touch devices */}
+                      <div className="flex-1 overflow-hidden p-4 pb-2">
                         <h3 className="text-lg font-black text-primary-950 mb-1.5">{tour.name}</h3>
                         {tour.description && (
                           <p className="text-primary-950/70 mb-2.5 text-xs leading-relaxed line-clamp-2">{tour.description}</p>
@@ -331,7 +331,7 @@ export default function Tours() {
 
                         {/* Itinerary Preview */}
                         {tour.itinerary && (
-                          <div className="mb-1 bg-amber-100/60 border border-amber-200/60 rounded-xl px-3 py-2 text-xs text-primary-950/65">
+                          <div className="mb-1 bg-amber-100/60 border border-amber-200/60 rounded-xl px-3 py-2 text-xs text-primary-950/65 line-clamp-3">
                             {tour.itinerary}
                           </div>
                         )}
