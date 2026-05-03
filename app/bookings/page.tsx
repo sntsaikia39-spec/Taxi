@@ -283,7 +283,7 @@ export default function MyBookings() {
     return (
       <div ref={scrollRef} className="scrollbar-thin-modern flex h-[100dvh] flex-col overflow-y-auto overflow-x-hidden bg-primary-950">
         <Header />
-        <main className="flex-1 flex items-center justify-center">
+        <main className="flex-1 flex items-center justify-center p-4">
           <div className="flex flex-col items-center gap-4">
             <div className="w-10 h-10 border-2 border-secondary-500 border-t-transparent rounded-full animate-spin" />
             <p className="text-gray-400 text-sm">Loading your bookings...</p>
@@ -297,7 +297,7 @@ export default function MyBookings() {
     <div ref={scrollRef} className="scrollbar-thin-modern h-[100dvh] overflow-y-auto overflow-x-hidden bg-primary-950">
       <Header />
 
-      <main className="relative overflow-x-hidden">
+      <main className="relative overflow-x-hidden flex flex-col min-h-full">
         {/* Dot grid overlay */}
         <div
           className="absolute inset-0 opacity-[0.03] pointer-events-none"
@@ -307,23 +307,13 @@ export default function MyBookings() {
           }}
         />
 
-        {/* Glow blobs */}
-        <div
-          className="absolute -top-40 -left-40 w-[560px] h-[560px] rounded-full pointer-events-none"
-          style={{ background: 'radial-gradient(circle, rgba(255,193,7,0.07) 0%, transparent 70%)' }}
-        />
-        <div
-          className="absolute top-60 -right-40 w-[480px] h-[480px] rounded-full pointer-events-none"
-          style={{ background: 'radial-gradient(circle, rgba(255,193,7,0.05) 0%, transparent 70%)' }}
-        />
-
-        <div className="relative z-10 container mx-auto px-4 py-16 md:py-24">
+        <div className="relative z-10 container mx-auto px-4 pt-20 pb-12 md:pt-32 md:pb-24 flex-1 flex flex-col">
           {/* Hero heading */}
-          <div className="text-center mb-12 md:mb-16">
+          <div className="text-center mb-8 md:mb-16">
             <p className="text-secondary-500 font-semibold text-xs tracking-[0.22em] uppercase mb-4">
               Your Trips
             </p>
-            <h1 className="font-black text-white text-3xl md:text-5xl mb-5">
+            <h1 className="font-black text-white text-3xl md:text-5xl mb-3 md:mb-5">
               My Bookings
             </h1>
             <p className="text-gray-400 max-w-xl mx-auto text-base leading-relaxed">
@@ -332,7 +322,7 @@ export default function MyBookings() {
           </div>
 
           {bookings.length === 0 ? (
-            <div className="max-w-lg mx-auto text-center rounded-2xl border border-primary-800 bg-primary-900/60 backdrop-blur-sm p-10 md:p-14">
+            <div className="max-w-lg mx-auto text-center rounded-2xl border border-primary-800 bg-primary-900/60 backdrop-blur-sm p-8 md:p-14 my-auto">
               <div className="w-14 h-14 rounded-full bg-secondary-500/10 border border-secondary-500/20 flex items-center justify-center mx-auto mb-5">
                 <Car size={24} className="text-secondary-500" />
               </div>
@@ -485,5 +475,3 @@ export default function MyBookings() {
     </div>
   )
 }
-
-

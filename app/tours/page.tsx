@@ -201,7 +201,7 @@ export default function Tours() {
     <div ref={scrollRef} className="scrollbar-thin-modern h-[100dvh] overflow-y-auto overflow-x-hidden bg-primary-950">
       <Header />
 
-      <main className="relative overflow-x-hidden">
+      <main className="relative overflow-x-hidden flex flex-col min-h-full">
         {/* Dot grid overlay */}
         <div
           className="absolute inset-0 opacity-[0.03] pointer-events-none"
@@ -211,30 +211,20 @@ export default function Tours() {
           }}
         />
 
-        {/* Glow blobs */}
-        <div
-          className="absolute -top-40 -left-40 w-[560px] h-[560px] rounded-full pointer-events-none"
-          style={{ background: 'radial-gradient(circle, rgba(255,193,7,0.07) 0%, transparent 70%)' }}
-        />
-        <div
-          className="absolute top-60 -right-40 w-[480px] h-[480px] rounded-full pointer-events-none"
-          style={{ background: 'radial-gradient(circle, rgba(255,193,7,0.05) 0%, transparent 70%)' }}
-        />
-
-        <div className="relative z-10 container mx-auto px-4 py-16 md:py-24">
+        <div className="relative z-10 container mx-auto px-4 pt-20 pb-12 md:pt-32 md:pb-24 flex-1 flex flex-col">
           {/* Hero heading */}
-          <div className="text-center mb-2 md:mb-8">
+          <div className="text-center mb-6 md:mb-12">
             <p className="text-secondary-500 font-semibold text-xs tracking-[0.22em] uppercase mb-4">
               Curated Experiences
             </p>
-            <h1 className="font-black text-white text-3xl md:text-5xl mb-5">
+            <h1 className="font-black text-white text-3xl md:text-5xl mb-2">
               Tour Packages
             </h1>
 
           </div>
 
           {tours.length === 0 ? (
-            <div className="max-w-lg mx-auto text-center rounded-2xl border border-primary-800 bg-primary-900/60 backdrop-blur-sm p-10 md:p-14">
+            <div className="max-w-lg mx-auto text-center rounded-2xl border border-primary-800 bg-primary-900/60 backdrop-blur-sm p-8 md:p-14 my-auto">
               <div className="w-14 h-14 rounded-full bg-secondary-500/10 border border-secondary-500/20 flex items-center justify-center mx-auto mb-5">
                 <Star size={24} className="text-secondary-500" />
               </div>
@@ -391,4 +381,3 @@ export default function Tours() {
     </div>
   )
 }
-

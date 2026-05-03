@@ -155,6 +155,7 @@ export default function AppSplashLoader() {
     <div
       aria-hidden="true"
       className={`app-splash ${phase === 'exiting' ? 'app-splash--exit' : ''}`}
+      style={{ height: '100dvh', position: 'fixed', inset: 0 }}
     >
       <div className="app-splash__track" />
       

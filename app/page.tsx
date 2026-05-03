@@ -324,7 +324,7 @@ export default function Home() {
     const doStep = (from: S, to: S, fwd: boolean) => {
       const toursEl = document.querySelector<HTMLElement>('.tours-section')
       const stepsEl = document.querySelector<HTMLElement>('.steps-section')
-      const ctaEl   = document.querySelector<HTMLElement>('.cta-section')
+      const lastSlide = document.querySelector<HTMLElement>('.last-slide-wrapper')
 
       if (from.t === 'hero' && to.t === 'tours') {
         playSvgWipe(true,
@@ -373,7 +373,7 @@ export default function Home() {
         })
       } else if (from.t === 'steps' && to.t === 'cta') {
         gsap.set('.cta-item', { y: 40, opacity: 0 })
-        moveToSection(ctaEl?.offsetTop ?? 0, false, () => {
+        moveToSection(lastSlide?.offsetTop ?? 0, false, () => {
           gsap.to('.cta-item', { y: 0, opacity: 1, stagger: 0.1, duration: 0.6, ease: 'power2.out' })
           gsap.delayedCall(0.6, () => { transitioning = false })
         })
@@ -542,10 +542,10 @@ export default function Home() {
     <div ref={mainRef} className="flex flex-col bg-primary-950" style={{ willChange: 'transform' }}>
 
       {/* ════════════════════ HERO + STATS = exactly 100vh ════════════════════ */}
-      <div className="min-h-[100svh] md:min-h-[100dvh] lg:h-screen flex flex-col overflow-visible lg:overflow-hidden">
+      <div className="h-[100dvh] flex flex-col overflow-hidden">
 
       {/* ════════════════════ HERO ════════════════════ */}
-      <section className="hero-section relative bg-primary-950 overflow-hidden flex-1 flex flex-col pt-16 md:pt-20">
+      <section className="hero-section relative bg-primary-950 overflow-hidden flex-1 flex flex-col pt-12 md:pt-20 justify-center">
         {/* Light ray right */}
         <div className="absolute top-0 right-0 w-[400px] h-[1px] bg-gradient-to-l from-secondary-500/30 to-transparent" />
         {/* Dot grid */}
@@ -553,10 +553,6 @@ export default function Home() {
           className="absolute inset-0 opacity-[0.035]"
           style={{ backgroundImage: 'radial-gradient(circle, rgba(255,218,0,0.7) 1px, transparent 1px)', backgroundSize: '38px 38px' }}
         />
-        {/* Glow blobs */}
-        <div className="absolute top-[5%] right-[-8%] w-[560px] h-[560px] bg-secondary-500 opacity-[0.055] rounded-full blur-[140px] pointer-events-none" />
-        <div className="absolute bottom-[-10%] left-[-6%] w-[380px] h-[380px] bg-secondary-500 opacity-[0.035] rounded-full blur-[110px] pointer-events-none" />
-
         {/* Mountain silhouette */}
         <div className="absolute bottom-10 sm:bottom-0 -left-[34%] w-[168%] sm:left-0 sm:w-full pointer-events-none select-none opacity-[0.09]">
           <svg className="w-full h-auto" viewBox="0 0 1440 160" fill="none" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMax meet">
@@ -728,16 +724,11 @@ export default function Home() {
 
       {/* ════════════════════ TOURS ════════════════════ */}
       <section
-        className="tours-section min-h-screen py-20 md:py-28 relative overflow-hidden"
+        className="tours-section h-[100dvh] py-12 md:py-28 relative overflow-hidden flex flex-col justify-center"
         style={{ background: 'linear-gradient(160deg, #16120f 0%, #1c1410 35%, #110e0c 70%, #0d0b09 100%)' }}
       >
-        {/* Animated glow blobs */}
-        <div className="absolute -top-24 -left-20 w-[520px] h-[520px] rounded-full pointer-events-none select-none"
-          style={{ background: 'radial-gradient(circle, rgba(255,218,0,0.075) 0%, transparent 68%)', animation: 'toursBlob1 20s ease-in-out infinite' }} />
-        <div className="absolute -bottom-16 -right-16 w-[460px] h-[460px] rounded-full pointer-events-none select-none"
-          style={{ background: 'radial-gradient(circle, rgba(255,190,0,0.06) 0%, transparent 68%)', animation: 'toursBlob2 25s ease-in-out infinite' }} />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[380px] h-[380px] rounded-full pointer-events-none select-none"
-          style={{ background: 'radial-gradient(circle, rgba(255,218,0,0.04) 0%, transparent 65%)', animation: 'toursBlob3 17s ease-in-out infinite' }} />
+        {/* Top side flowing shadow of the 'How it works' section below for depth */}
+        <div className="absolute bottom-0 left-0 right-0 h-48 bg-gradient-to-t from-black/75 to-transparent pointer-events-none" />
 
         {/* Enhanced Waterfall streams with synchronized splash */}
         {(() => {
@@ -768,23 +759,6 @@ export default function Home() {
                   clipPath: `polygon(50% 0, 100% 15%, 100% 100%, 0 100%, 0 15%)`,
                 }} />
               ))}
-              {/* Synchronized splash effects - trigger at end of each stream fall */}
-              {streams.map((s, i) => {
-                // Map stream duration to corresponding splash cycle keyframe
-                const splashAnimationName = `splashCycle${s.dur}`;
-                return (
-                  <div key={`splash-${i}`} className="absolute pointer-events-none select-none rounded-full" style={{
-                    width: '60px',
-                    height: '30px',
-                    left: `calc(${s.left} - 30px)`,
-                    bottom: '-5px',
-                    background: `radial-gradient(ellipse, rgba(255,218,0,0.6) 0%, rgba(255,200,0,0.25) 70%, transparent 100%)`,
-                    animation: `${splashAnimationName} ${s.dur}s linear infinite`,
-                    animationDelay: `${s.delay}s`,
-                    filter: 'blur(0.5px)',
-                  }} />
-                );
-              })}
             </>
           );
         })()}
@@ -793,8 +767,8 @@ export default function Home() {
         <div className="absolute inset-0 opacity-[0.022] pointer-events-none select-none"
           style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=\'0 0 256 256\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'n\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.85\' numOctaves=\'4\' stitchTiles=\'stitch\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23n)\'/%3E%3C/svg%3E")', backgroundSize: '180px' }} />
 
-        <div className="container mx-auto px-4 relative z-10">
-          <div className="tours-heading flex flex-col md:flex-row md:items-end justify-between gap-5 mb-12">
+        <div className="container mx-auto px-4 relative z-10 -translate-y-[30px] md:translate-y-0">
+          <div className="tours-heading flex flex-col md:flex-row md:items-end justify-between gap-5 mb-6 md:mb-12">
             <div>
               <p className="text-secondary-500 font-semibold text-xs tracking-[0.22em] uppercase mb-3">Top Packages</p>
               <h2 className="text-3xl md:text-5xl font-black text-white">Featured Tours</h2>
@@ -829,7 +803,7 @@ export default function Home() {
             // Carousel container — fixed height, all cards absolutely positioned at same location
             // Mobile: full-width cards stack at card-0 position (4 scroll steps)
             // Desktop: 2-column pairs stack at row-0 position (2 scroll steps)
-            <div className="relative w-full overflow-hidden h-[430px] md:h-[490px]">
+            <div className="relative w-full overflow-hidden h-[440px] md:h-[500px]">
               {featuredTours.map((tour, index) => {
                 const posInGroup = index % 2 // 0 = left col, 1 = right col
                 return (
@@ -895,7 +869,7 @@ export default function Home() {
       </section>
 
       {/* ════════════════════ HOW IT WORKS — dark ════════════════════ */}
-      <section className="steps-section min-h-screen py-10 max-[760px]:py-6 sm:py-16 md:py-28 bg-primary-950 relative overflow-hidden">
+      <section className="steps-section h-[100dvh] py-6 sm:py-16 md:py-28 bg-primary-950 relative overflow-hidden flex flex-col justify-center">
         {/* Dot grid */}
         <div
           className="absolute inset-0 opacity-[0.03]"
@@ -936,7 +910,9 @@ export default function Home() {
       </section>
 
       {/* ════════════════════ CTA ════════════════════ */}
-      <section className="cta-section pt-[3.1rem] pb-[4.5rem] md:pt-[4.6rem] md:pb-24 bg-secondary-500 relative overflow-hidden">
+      {/* Grouping CTA and Footer to ensure they are treated as one viewport-constrained slide */}
+      <div className="last-slide-wrapper h-[100dvh] flex flex-col">
+      <section className="cta-section flex-1 pt-8 pb-4 md:pt-[4.6rem] md:pb-24 bg-secondary-500 relative overflow-hidden flex flex-col justify-center">
         <div
           className="absolute inset-0 opacity-[0.06] pointer-events-none"
           style={{ backgroundImage: 'radial-gradient(circle, #1a1512 1.5px, transparent 1.5px)', backgroundSize: '26px 26px' }}
@@ -973,7 +949,7 @@ export default function Home() {
       </section>
 
       <Footer />
-
+      </div>
     </div>
 
       {/* ── Section wipe overlay — outside mainRef so fixed positioning is always viewport-relative ── */}

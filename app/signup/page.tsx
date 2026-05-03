@@ -160,9 +160,7 @@ function SignupContent() {
     return (
       <div className="flex min-h-screen flex-col bg-primary-950">
         <Header />
-        <main className="relative flex flex-1 items-center justify-center overflow-hidden px-4 py-12 md:py-16">
-          <div className="absolute top-0 right-0 h-[420px] w-[420px] rounded-full bg-secondary-500/10 blur-[120px] pointer-events-none" />
-          <div className="absolute bottom-0 left-0 h-[320px] w-[320px] rounded-full bg-secondary-500/10 blur-[110px] pointer-events-none" />
+        <main className="relative flex flex-1 items-center justify-center overflow-hidden px-4 pt-16 pb-12 md:pt-20 md:pb-16">
           <div
             className="absolute inset-0 opacity-[0.04] pointer-events-none"
             style={{ backgroundImage: 'radial-gradient(circle, rgba(255,218,0,0.7) 1px, transparent 1px)', backgroundSize: '34px 34px' }}
@@ -219,12 +217,10 @@ function SignupContent() {
 
   // ── Sign up form ────────────────────────────────────────────────────────────
   return (
-    <div className="flex min-h-screen flex-col bg-primary-950">
+    <div className="flex min-h-[100dvh] flex-col bg-primary-950">
       <Header />
 
-      <main className="relative flex flex-1 items-start justify-center overflow-hidden px-4 pt-[105px] pb-12 md:pt-[105px] md:pb-16">
-        <div className="absolute top-0 right-0 h-[420px] w-[420px] rounded-full bg-secondary-500/10 blur-[120px] pointer-events-none" />
-        <div className="absolute bottom-0 left-0 h-[320px] w-[320px] rounded-full bg-secondary-500/10 blur-[110px] pointer-events-none" />
+      <main className="relative flex flex-1 items-center justify-center overflow-y-auto px-4 pt-16 pb-12 md:pt-20">
         <div
           className="absolute inset-0 opacity-[0.04] pointer-events-none"
           style={{ backgroundImage: 'radial-gradient(circle, rgba(255,218,0,0.7) 1px, transparent 1px)', backgroundSize: '34px 34px' }}
@@ -352,4 +348,3 @@ function SignupContent() {
 export default function Signup() {
   return <Suspense><SignupContent /></Suspense>
 }
-
