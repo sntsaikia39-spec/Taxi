@@ -38,6 +38,7 @@ export default function Tours() {
   const router = useRouter()
   const { user } = useAuth()
   const [tours, setTours] = useState<TourPackage[]>([])
+  const [expandedId, setExpandedId] = useState<string | null>(null)
   const [loadingTours, setLoadingTours] = useState(true)
   const scrollRef = useRef<HTMLDivElement | null>(null)
 
@@ -119,7 +120,10 @@ export default function Tours() {
       }, 250)
     }
 
-    const onScroll = () => scheduleHideAfterScroll()
+    const onScroll = () => {
+      scheduleHideAfterScroll()
+      setExpandedId(null) // Reset expanded card on scroll
+    }
     const onClick = (e: MouseEvent) => {
       if (!isInteractiveTarget(e.target)) showHeaderTemporarily()
     }
@@ -211,12 +215,9 @@ export default function Tours() {
           }}
         />
 
-        <div className="relative z-10 container mx-auto px-4 pt-20 pb-12 md:pt-32 md:pb-24 flex-1 flex flex-col">
+        <div className="relative z-10 container mx-auto px-4 pt-[60px] pb-12 md:pt-[108px] md:pb-24 flex-1 flex flex-col">
           {/* Hero heading */}
           <div className="text-center mb-6 md:mb-12">
-            <p className="text-secondary-500 font-semibold text-xs tracking-[0.22em] uppercase mb-4">
-              Curated Experiences
-            </p>
             <h1 className="font-black text-white text-3xl md:text-5xl mb-2">
               Tour Packages
             </h1>
@@ -241,13 +242,16 @@ export default function Tours() {
           ) : (
             <>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
-                {tours.map((tour, index) => (
-                  <div
-                    key={tour.id}
-                    className="flex flex-col h-[500px] rounded-3xl bg-gradient-to-b from-[#fff6e5] to-[#ffe8bf] border border-[#ffcf73]/60 shadow-[0_16px_44px_rgba(0,0,0,0.35)] overflow-hidden hover:shadow-[0_24px_56px_rgba(0,0,0,0.45)] transition-shadow duration-300"
-                  >
+                {tours.map((tour, index) => {
+                  const isExpanded = expandedId === tour.id
+                  return (
+                    <div 
+                      key={tour.id} 
+                      onClick={() => setExpandedId(isExpanded ? null : tour.id)}
+                      className="flex flex-col h-[clamp(460px,70svh,506px)] md:h-[500px] rounded-3xl bg-primary-900/80 backdrop-blur-md border border-primary-800/60 shadow-[0_16px_44px_rgba(0,0,0,0.45)] overflow-hidden hover:shadow-[0_24px_56px_rgba(0,0,0,0.55)] transition-all duration-300 cursor-pointer"
+                    >
                     {/* Image */}
-                    <div className="relative h-40 w-full overflow-hidden shrink-0">
+                    <div className={`relative transition-all duration-500 ease-in-out w-full overflow-hidden shrink-0 ${isExpanded ? 'h-[129px] md:h-[140px]' : 'h-[clamp(230px,35svh,254px)] md:h-[228px]'}`}>
                       <Image
                         src={TOUR_IMAGES[index % TOUR_IMAGES.length]}
                         alt={tour.name}
@@ -268,38 +272,38 @@ export default function Tours() {
                     </div>
 
                     {/* Content Wrapper */}
-                    <div className="flex flex-col flex-1 overflow-hidden">
+                    <div className="flex flex-col flex-1 overflow-hidden"> {/* flex-1 will automatically take up remaining height */}
                       {/* Fixed-height middle content to avoid nested scroll on touch devices */}
-                      <div className="flex-1 overflow-hidden p-4 pb-2">
-                        <h3 className="text-lg font-black text-primary-950 mb-1.5">{tour.name}</h3>
+                      <div className={`flex-1 p-4 pb-2 transition-all duration-500 ${isExpanded ? 'overflow-y-auto' : 'overflow-hidden'}`}>
+                        <h3 className="text-lg font-black text-white mb-1.5">{tour.name}</h3>
                         {tour.description && (
-                          <p className="text-primary-950/70 mb-2.5 text-xs leading-relaxed line-clamp-2">{tour.description}</p>
+                          <p className={`text-gray-400 mb-2.5 text-xs leading-relaxed ${isExpanded ? '' : 'line-clamp-2'}`}>{tour.description}</p>
                         )}
 
                         {/* Key Details */}
                         <div className="grid grid-cols-2 gap-1.5 mb-3">
                           {tour.duration_hours && (
-                            <div className="flex items-center gap-1.5 text-primary-950/80 text-xs">
-                              <Clock size={13} className="text-amber-600 flex-shrink-0" />
+                            <div className="flex items-center gap-1.5 text-gray-400 text-xs">
+                              <Clock size={13} className="text-secondary-500 flex-shrink-0" />
                               <span>{tour.duration_hours} hours</span>
                             </div>
                           )}
                           {tour.max_passengers && (
-                            <div className="flex items-center gap-1.5 text-primary-950/80 text-xs">
-                              <Users size={13} className="text-amber-600 flex-shrink-0" />
+                            <div className="flex items-center gap-1.5 text-gray-400 text-xs">
+                              <Users size={13} className="text-secondary-500 flex-shrink-0" />
                               <span>Up to {tour.max_passengers} passengers</span>
                             </div>
                           )}
                           {tour.car_model && (
-                            <div className="flex items-center gap-1.5 text-primary-950/80 text-xs">
-                              <Car size={13} className="text-amber-600 flex-shrink-0" />
+                            <div className="flex items-center gap-1.5 text-gray-400 text-xs">
+                              <Car size={13} className="text-secondary-500 flex-shrink-0" />
                               <span>{tour.car_model}</span>
                             </div>
                           )}
                           {tour.arrival_time && (
                             <div className="flex items-center gap-1.5 text-xs">
-                              <Clock size={13} className="text-emerald-600 flex-shrink-0" />
-                              <span className="font-semibold text-emerald-700">Departs {formatDepartureTime(tour.arrival_time)}</span>
+                              <Clock size={13} className="text-secondary-500 flex-shrink-0" />
+                              <span className="font-semibold text-secondary-400">Departs {formatDepartureTime(tour.arrival_time)}</span>
                             </div>
                           )}
                         </div>
@@ -307,11 +311,11 @@ export default function Tours() {
                         {/* Highlights */}
                         {tour.highlights && tour.highlights.length > 0 && (
                           <div className="mb-3">
-                            <h4 className="font-bold text-[10px] text-primary-950/50 uppercase tracking-wider mb-1.5">Includes</h4>
-                            <ul className="text-xs text-primary-950/75 space-y-0.5">
+                            <h4 className="font-bold text-[10px] text-gray-500 uppercase tracking-wider mb-1.5">Includes</h4>
+                            <ul className="text-xs text-gray-400 space-y-0.5">
                               {tour.highlights.slice(0, 3).map((highlight, i) => (
                                 <li key={i} className="flex items-center gap-1.5">
-                                  <span className="text-amber-600 font-bold text-sm leading-none">✓</span>
+                                  <span className="text-secondary-500 font-bold text-sm leading-none">✓</span>
                                   {highlight}
                                 </li>
                               ))}
@@ -321,22 +325,22 @@ export default function Tours() {
 
                         {/* Itinerary Preview */}
                         {tour.itinerary && (
-                          <div className="mb-1 bg-amber-100/60 border border-amber-200/60 rounded-xl px-3 py-2 text-xs text-primary-950/65 line-clamp-3">
+                          <div className={`mb-1 bg-primary-950/50 border border-primary-800 rounded-xl px-3 py-2 text-xs text-gray-500 transition-all ${isExpanded ? '' : 'line-clamp-3'}`}>
                             {tour.itinerary}
                           </div>
                         )}
                       </div>
 
                       {/* Fixed Footer */}
-                      <div className="p-4 pt-2 shrink-0 bg-gradient-to-b from-transparent to-[#ffe8bf]">
+                      <div className="p-4 pt-2 shrink-0 bg-gradient-to-b from-transparent to-primary-950/40">
                         {/* Price + CTA */}
-                        <div className="flex items-center justify-between pt-3 border-t border-primary-950/10">
+                        <div className="flex items-center justify-between pt-3 border-t border-white/5">
                           <div>
-                            <p className="text-primary-950/50 text-[10px] mb-0.5">Price per person</p>
-                            <p className="text-xl font-black text-primary-950">₹{toNum(tour.price).toFixed(0)}</p>
+                            <p className="text-gray-500 text-[10px] mb-0.5">Price per person</p>
+                            <p className="text-xl font-black text-white">₹{toNum(tour.price).toFixed(0)}</p>
                           </div>
                           <button
-                            onClick={() => handleBookTour(tour.id)}
+                            onClick={(e) => { e.stopPropagation(); handleBookTour(tour.id); }}
                             className="flex items-center gap-1 bg-primary-950 text-white font-black px-3 py-1.5 text-xs rounded-xl hover:bg-secondary-500 hover:text-primary-950 transition-colors duration-200 whitespace-nowrap"
                           >
                             Book Now
@@ -346,7 +350,8 @@ export default function Tours() {
                       </div>
                     </div>
                   </div>
-                ))}
+                  )
+                })}
               </div>
 
               {/* Custom tours banner */}

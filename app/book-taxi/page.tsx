@@ -1139,7 +1139,7 @@ export default function BookTaxi() {
     <div className="flex flex-col h-[100dvh] overflow-hidden bg-primary-950">
       <Header />
 
-      <main className="overflow-hidden flex flex-col py-2 md:py-3 bg-primary-950 relative mt-[72px] md:mt-[84px] h-[calc(100dvh-72px)] md:h-[calc(100dvh-84px)]">
+      <main className="overflow-hidden flex flex-col py-2 md:py-3 bg-primary-950 relative mt-[72px] md:mt-[84px] h-[calc(100dvh-72px)] md:h-[calc(100dvh-84px)] min-h-0">
         <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle, rgba(255,218,0,0.75) 1px, transparent 1px)', backgroundSize: '36px 36px' }} />
         <div className="container mx-auto px-4 relative z-10 flex-1 flex flex-col overflow-hidden">
           <h1 className="text-xl md:text-2xl font-black text-white text-center mb-2 tracking-tight shrink-0">Book Your Taxi</h1>

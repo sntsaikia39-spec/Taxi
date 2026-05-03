@@ -53,6 +53,7 @@ const HOW_IT_WORKS = [
 export default function Home() {
   const [featuredTours, setFeaturedTours] = useState<TourPackage[]>([])
   const [loadingTours, setLoadingTours] = useState(true)
+  const [expandedTourId, setExpandedTourId] = useState<string | null>(null)
   const mainRef = useRef<HTMLDivElement>(null)
   const overlayPathsRef = useRef<SVGPathElement[]>([])
   const overlaySvgRef = useRef<SVGSVGElement>(null)
@@ -391,6 +392,7 @@ export default function Home() {
     // ── Navigate one step ──
     const navigate = (dir: 'fwd' | 'bwd') => {
       if (transitioning) return
+      setExpandedTourId(null) // Reset expansion when scrolling between slides
       const steps = buildSteps()
       const nextIdx = dir === 'fwd' ? stepIdx + 1 : stepIdx - 1
       if (nextIdx < 0 || nextIdx >= steps.length) return
@@ -724,7 +726,7 @@ export default function Home() {
 
       {/* ════════════════════ TOURS ════════════════════ */}
       <section
-        className="tours-section h-[100dvh] py-12 md:py-28 relative overflow-hidden flex flex-col justify-center"
+        className="tours-section h-[100dvh] py-8 md:py-28 relative overflow-hidden flex flex-col justify-center"
         style={{ background: 'linear-gradient(160deg, #16120f 0%, #1c1410 35%, #110e0c 70%, #0d0b09 100%)' }}
       >
         {/* Top side flowing shadow of the 'How it works' section below for depth */}
@@ -803,19 +805,21 @@ export default function Home() {
             // Carousel container — fixed height, all cards absolutely positioned at same location
             // Mobile: full-width cards stack at card-0 position (4 scroll steps)
             // Desktop: 2-column pairs stack at row-0 position (2 scroll steps)
-            <div className="relative w-full overflow-hidden h-[440px] md:h-[500px]">
+            <div className="relative w-full overflow-hidden h-[485px] md:h-[500px]">
               {featuredTours.map((tour, index) => {
                 const posInGroup = index % 2 // 0 = left col, 1 = right col
+                const isExpanded = expandedTourId === tour.id
                 return (
                   <div
                     key={tour.id}
-                    className={`tour-card card-3d group absolute top-0 rounded-3xl overflow-hidden bg-gradient-to-b from-[#fff6e5] to-[#ffe8bf] border border-[#ffcf73]/60
-                      w-full h-[430px] md:h-[490px] md:top-0
+                    onClick={() => setExpandedTourId(isExpanded ? null : tour.id)}
+                    className={`tour-card card-3d group absolute top-0 rounded-3xl overflow-hidden bg-primary-900/80 backdrop-blur-md border border-primary-800/60 cursor-pointer
+                      w-full h-[475px] md:h-[490px] md:top-0
                       ${posInGroup === 0 ? 'md:left-0 md:w-[calc(50%-12px)]' : 'md:left-[calc(50%+12px)] md:w-[calc(50%-12px)]'}`}
-                    style={{ boxShadow: '0 16px 44px rgba(0,0,0,0.35), 0 0 0 1px rgba(255,208,116,0.35)' }}
+                    style={{ boxShadow: '0 16px 44px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,218,0,0.1)' }}
                   >
                     {/* Image */}
-                    <div className="tour-img relative h-44 md:h-60 overflow-hidden">
+                    <div className={`tour-img relative transition-all duration-500 ease-in-out overflow-hidden ${isExpanded ? 'h-[140px]' : 'h-[274.2px] md:h-[290px]'}`}>
                       <Image
                         src={TOUR_IMAGES[index % TOUR_IMAGES.length]}
                         alt={tour.name}
@@ -839,11 +843,24 @@ export default function Home() {
                     </div>
 
                     {/* Content */}
-                    <div className="h-[calc(100%-11rem)] md:h-[calc(100%-15rem)] p-4 md:p-7 flex flex-col">
-                      <h3 className="text-2xl font-black text-primary-950 mb-2.5">{tour.name}</h3>
-                      <p className="text-primary-900/70 text-sm md:text-base mb-5 leading-relaxed line-clamp-3 min-h-[3.75rem] md:min-h-[4.5rem]">{tour.description}</p>
+                    <div className={`transition-all duration-500 p-4 md:p-7 flex flex-col ${isExpanded ? 'h-[calc(100%-140px)]' : 'h-[calc(100%-274.2px)] md:h-[calc(100%-290px)]'}`}>
+                      <div className={`flex-1 ${isExpanded ? 'overflow-y-auto pr-1' : 'overflow-hidden'}`}>
+                        <h3 className={`font-black text-white mb-2.5 transition-all ${isExpanded ? 'text-xl' : 'text-2xl'}`}>{tour.name}</h3>
+                        <p className={`text-gray-400 text-sm md:text-base mb-5 leading-relaxed ${isExpanded ? '' : 'line-clamp-3 min-h-[3.75rem] md:min-h-[4.5rem]'}`}>
+                          {tour.description}
+                        </p>
+
+                        {/* Expanded Details: Itinerary */}
+                        {isExpanded && tour.itinerary && (
+                          <div className="mt-4 pt-4 border-t border-white/5 animate-in fade-in slide-in-from-top-2 duration-500">
+                            <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-2">Itinerary</p>
+                            <p className="text-gray-400 text-xs leading-relaxed italic">{tour.itinerary}</p>
+                          </div>
+                        )}
+                      </div>
+
                       <div className="flex items-center justify-between mt-auto">
-                        <div className="flex items-center gap-4 text-xs md:text-sm text-primary-900/65">
+                        <div className={`flex items-center gap-4 text-xs md:text-sm text-gray-400 transition-opacity ${isExpanded ? 'opacity-0 h-0 overflow-hidden' : 'opacity-100'}`}>
                           <span className="flex items-center gap-1.5">
                             <Clock size={12} className="text-secondary-500" />{tour.duration_hours}h
                           </span>
@@ -852,6 +869,7 @@ export default function Home() {
                           </span>
                         </div>
                         <Link
+                          onClick={(e) => e.stopPropagation()}
                           href={`/tours/${tour.id}/book`}
                           className="group/btn flex items-center gap-2 px-5 py-2.5 bg-primary-950 text-white text-sm font-bold rounded-xl hover:bg-secondary-500 hover:text-primary-950 transition-all duration-200 shadow-lg shadow-primary-950/20"
                         >

@@ -9,6 +9,8 @@ All notable changes to TaxiHollongi will be documented in this file.
 **Author:** Yami
 
 ### Changes
+- fix: Dynamic mobile height
+- fix: Loader optimization
 - update: Loader
 - fix: mobile responsiveness homescreen
 - update: UI mobile responsive adjustment
