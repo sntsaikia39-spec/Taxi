@@ -7,7 +7,7 @@ import Logo from '@/components/Logo'
 export default function Footer() {
 
   return (
-    <footer className="bg-primary-950 text-gray-400 pt-[5px] pb-[calc(5px+env(safe-area-inset-bottom))] border-t border-white/[0.06]">
+    <footer className="bg-primary-950 text-gray-400 pt-[calc(2rem+5px)] pb-[calc(2rem+5px+env(safe-area-inset-bottom))] border-t border-white/[0.06]">
       <div className="container mx-auto px-4">
         {/* Main grid — 2-col on mobile (brand full-width, nav+support side-by-side), 4-col on desktop */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-x-4 gap-y-3 sm:gap-y-5 lg:gap-6 pb-3 sm:pb-5 border-b border-white/[0.06]">
@@ -138,4 +138,3 @@ export default function Footer() {
     </footer>
   )
 }
-

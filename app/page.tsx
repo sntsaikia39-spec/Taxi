@@ -936,7 +936,7 @@ export default function Home() {
       </section>
 
       {/* ════════════════════ CTA ════════════════════ */}
-      <section className="cta-section pt-[6.6rem] pb-32 bg-secondary-500 relative overflow-hidden">
+      <section className="cta-section pt-[3.1rem] pb-[4.5rem] md:pt-[4.6rem] md:pb-24 bg-secondary-500 relative overflow-hidden">
         <div
           className="absolute inset-0 opacity-[0.06] pointer-events-none"
           style={{ backgroundImage: 'radial-gradient(circle, #1a1512 1.5px, transparent 1.5px)', backgroundSize: '26px 26px' }}
