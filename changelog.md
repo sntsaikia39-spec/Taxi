@@ -9,6 +9,8 @@ All notable changes to TaxiHollongi will be documented in this file.
 **Author:** Yami
 
 ### Changes
+- update: Logout button
+- fix: homescreen UI tour section and transition
 - fix: tours and book taxi screen UI
 - fix: Dynamic mobile height
 - fix: Loader optimization

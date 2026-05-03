@@ -3,11 +3,18 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Header from '@/components/Header'
+import { DotLottieReact } from '@lottiefiles/dotlottie-react'
 import { Eye, Download, Trash2, ArrowRight, Car, ChevronDown } from 'lucide-react'
 import toast from 'react-hot-toast'
 import gsap from 'gsap'
+import { ScrollTrigger } from 'gsap/ScrollTrigger'
 import { useAuth } from '@/context/AuthContext'
 import type { Booking } from '@/lib/db'
+import { generateInvoicePDF, downloadInvoicePDF, type InvoiceData } from '@/lib/invoice'
+
+if (typeof window !== 'undefined') {
+  gsap.registerPlugin(ScrollTrigger)
+}
 
 function toNum(val: unknown): number {
   const n = parseFloat(String(val ?? 0))
@@ -42,6 +49,7 @@ export default function MyBookings() {
   const [assignmentMap, setAssignmentMap] = useState<Record<string, Assignment>>({})
   const [expandedBookingId, setExpandedBookingId] = useState<string | null>(null)
   const [loadingBookings, setLoadingBookings] = useState(true)
+  const [downloadingInvoiceId, setDownloadingInvoiceId] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
@@ -171,6 +179,44 @@ export default function MyBookings() {
     }
   }, [])
 
+  // ── Booking cards entry/exit scroll animation ──
+  useEffect(() => {
+    if (loadingBookings || bookings.length === 0) return
+
+    const ctx = gsap.context(() => {
+      const cards = gsap.utils.toArray<HTMLElement>('.booking-card')
+      cards.forEach((card, i) => {
+        const isEven = i % 2 === 0
+        gsap.fromTo(card,
+          {
+            opacity: 0,
+            x: isEven ? -80 : 80,
+            rotateY: isEven ? 15 : -15,
+            scale: 0.92,
+            transformPerspective: 1200,
+          },
+          {
+            opacity: 1,
+            x: 0,
+            rotateY: 0,
+            scale: 1,
+            duration: 0.9,
+            ease: 'power3.out',
+            scrollTrigger: {
+              trigger: card,
+              scroller: scrollRef.current,
+              start: 'top 92%',
+              end: 'bottom 8%',
+              toggleActions: 'play reverse play reverse',
+            }
+          }
+        )
+      })
+    }, scrollRef)
+
+    return () => ctx.revert()
+  }, [loadingBookings, bookings])
+
   const loadBookings = async (email: string) => {
     setLoadingBookings(true)
     try {
@@ -253,8 +299,48 @@ export default function MyBookings() {
     toast.error('Cannot cancel. Please contact support within 24 hours of booking.')
   }
 
-  const handleDownloadInvoice = (bookingId: string) => {
-    toast.success('Invoice downloaded successfully!')
+  const handleDownloadInvoice = async (booking: Booking) => {
+    const bookingKey = booking.booking_id || booking.id
+    setDownloadingInvoiceId(booking.id)
+    try {
+      const paymentRes = await fetch(`/api/payment/get-payment?bookingId=${encodeURIComponent(booking.id)}`)
+      if (!paymentRes.ok) {
+        throw new Error('Payment record not found for this booking')
+      }
+
+      const payment = await paymentRes.json()
+      const totalAmount = toNum(payment.amount_total || booking.amount_total)
+      const onlinePaid = toNum(payment.amount_online_paid)
+      const isFullPay = payment.payment_type === 'full'
+      const invoiceData: InvoiceData = {
+        bookingId: bookingKey,
+        date: new Date().toISOString(),
+        userName: booking.user_name || 'Customer',
+        userEmail: booking.user_email || '-',
+        userPhone: booking.phone || '-',
+        bookingType: booking.booking_type === 'tour' ? 'tour' : 'taxi',
+        pickupLocation: 'Hollongi Airport',
+        pickupDate: booking.start_datetime,
+        pickupTime: formatTime(booking.start_datetime),
+        passengers: Number(booking.passenger_count || 1),
+        carType: booking.car_model || 'Not specified',
+        totalAmount,
+        advanceAmount: onlinePaid,
+        remainingAmount: isFullPay ? 0 : Math.max(totalAmount - onlinePaid, 0),
+        paymentStatus: payment.payment_status === 'paid' ? 'completed' : (payment.payment_status || 'pending'),
+        paymentMethod: isFullPay ? 'Full Online Payment' : 'Partial Online + Cash',
+        invoiceNumber: `INV-${bookingKey}-${Date.now()}`,
+      }
+
+      const doc = generateInvoicePDF(invoiceData)
+      downloadInvoicePDF(doc, `Invoice-${bookingKey}.pdf`)
+      toast.success('Invoice downloaded successfully!')
+    } catch (error) {
+      console.error('Invoice download error:', error)
+      toast.error(error instanceof Error ? error.message : 'Failed to download invoice')
+    } finally {
+      setDownloadingInvoiceId(null)
+    }
   }
 
   const formatDate = (dateString: string) => {
@@ -284,9 +370,15 @@ export default function MyBookings() {
       <div ref={scrollRef} className="scrollbar-thin-modern flex h-[100dvh] flex-col overflow-y-auto overflow-x-hidden bg-primary-950">
         <Header />
         <main className="flex-1 flex items-center justify-center p-4">
-          <div className="flex flex-col items-center gap-4">
-            <div className="w-10 h-10 border-2 border-secondary-500 border-t-transparent rounded-full animate-spin" />
-            <p className="text-gray-400 text-sm">Loading your bookings...</p>
+          <div className="flex flex-col items-center">
+            <div className="w-24 h-24 md:w-32 md:h-32">
+              <DotLottieReact
+                src="/assets/yellow taxi.lottie"
+                loop
+                autoplay
+              />
+            </div>
+            <p className="text-gray-400 text-sm font-medium animate-pulse -mt-4 md:-mt-6">Loading your bookings...</p>
           </div>
         </main>
       </div>
@@ -307,12 +399,9 @@ export default function MyBookings() {
           }}
         />
 
-        <div className="relative z-10 container mx-auto px-4 pt-20 pb-12 md:pt-32 md:pb-24 flex-1 flex flex-col">
+        <div className="relative z-10 container mx-auto px-4 pt-14 pb-12 md:pt-20 md:pb-24 flex-1 flex flex-col">
           {/* Hero heading */}
           <div className="text-center mb-8 md:mb-16">
-            <p className="text-secondary-500 font-semibold text-xs tracking-[0.22em] uppercase mb-4">
-              Your Trips
-            </p>
             <h1 className="font-black text-white text-3xl md:text-5xl mb-3 md:mb-5">
               My Bookings
             </h1>
@@ -337,7 +426,7 @@ export default function MyBookings() {
               </a>
             </div>
           ) : (
-            <div className="max-w-6xl mx-auto space-y-6">
+            <div className="max-w-6xl mx-auto space-y-6 [perspective:2000px]">
               {bookings.map((booking) => {
                 const statusBadge = getStatusBadge(booking.booking_status)
                 const bookingTypeLabel =
@@ -352,7 +441,7 @@ export default function MyBookings() {
                 return (
                   <div
                     key={booking.id}
-                    className="rounded-xl border border-primary-800 bg-primary-900/60 backdrop-blur-sm overflow-hidden hover:border-primary-700 transition-colors duration-200"
+                    className="booking-card rounded-xl border border-primary-800 bg-primary-900/60 backdrop-blur-sm overflow-hidden hover:border-primary-700 transition-colors duration-200 will-change-transform"
                   >
                     {/* Assignment Notification Banner */}
                     {assignment && isExpanded && (
@@ -381,9 +470,9 @@ export default function MyBookings() {
                       </div>
                     )}
 
-                    <div className="p-4 md:p-5">
+                    <div className="p-3.5 md:p-4">
                       {/* Header */}
-                      <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-3 pb-3 border-b border-primary-800">
+                      <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-2 pb-2 border-b border-primary-800">
                         <div>
                           <h3 className="text-base md:text-lg font-black text-white mb-1">{bookingTypeLabel}</h3>
                           <p className="text-gray-500 font-mono text-[11px] md:text-xs truncate max-w-[220px] md:max-w-none">{booking.booking_id || booking.id}</p>
@@ -448,11 +537,12 @@ export default function MyBookings() {
                           <ChevronDown size={14} className={`transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`} />
                         </button>
                         <button
-                          onClick={() => handleDownloadInvoice(booking.id)}
+                          onClick={() => handleDownloadInvoice(booking)}
+                          disabled={downloadingInvoiceId === booking.id}
                           className="flex items-center gap-2 px-3.5 py-2 border border-secondary-500/40 text-secondary-500 rounded-lg hover:border-secondary-500 hover:bg-secondary-500/10 transition-colors text-xs"
                         >
                           <Download size={14} />
-                          Invoice
+                          {downloadingInvoiceId === booking.id ? 'Downloading...' : 'Invoice'}
                         </button>
                         {(booking.booking_status === 'pending' || booking.booking_status === 'confirmed') ? (
                           <button

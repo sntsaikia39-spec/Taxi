@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import Header from '@/components/Header'
+import { DotLottieReact } from '@lottiefiles/dotlottie-react'
 import { Clock, Users, Car, Calendar, ArrowRight, Star } from 'lucide-react'
 import toast from 'react-hot-toast'
 import gsap from 'gsap'
@@ -192,9 +193,15 @@ export default function Tours() {
       <div ref={scrollRef} className="scrollbar-thin-modern flex h-[100dvh] flex-col overflow-y-auto overflow-x-hidden bg-primary-950">
         <Header />
         <main className="flex-1 flex items-center justify-center">
-          <div className="flex flex-col items-center gap-4">
-            <div className="w-10 h-10 border-2 border-secondary-500 border-t-transparent rounded-full animate-spin" />
-            <p className="text-gray-400 text-sm">Loading tours...</p>
+          <div className="flex flex-col items-center">
+            <div className="w-24 h-24 md:w-32 md:h-32">
+              <DotLottieReact
+                src="/assets/yellow taxi.lottie"
+                loop
+                autoplay
+              />
+            </div>
+            <p className="text-gray-400 text-sm font-medium animate-pulse -mt-4 md:-mt-6">Loading tours...</p>
           </div>
         </main>
       </div>

@@ -21,11 +21,22 @@ export default function AppSplashLoader() {
   const [pageLoaded, setPageLoaded] = useState(false)
   const [motionReady, setMotionReady] = useState(false)
   const [dotLottie, setDotLottie] = useState<DotLottieInstance | null>(null)
+  const [wrapperY, setWrapperY] = useState(40)
+  const [startScale, setStartScale] = useState(4)
   const hasStartedRef = useRef(false)
   const ringsRef = useRef<HTMLDivElement>(null)
   const trailRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
+    const media = window.matchMedia('(max-width: 767px)')
+    const updateLayout = (matches: boolean) => {
+      setWrapperY(matches ? 2 : 40)
+      setStartScale(matches ? 4.8 : 4) // Increase radius by 20% on mobile (4 * 1.2)
+    }
+    updateLayout(media.matches)
+    const listener = (e: MediaQueryListEvent) => updateLayout(e.matches)
+    media.addEventListener('change', listener)
+
     const handleWindowLoad = () => setPageLoaded(true)
 
     if (document.readyState === 'complete') {
@@ -36,6 +47,7 @@ export default function AppSplashLoader() {
 
     return () => {
       window.removeEventListener('load', handleWindowLoad)
+      media.removeEventListener('change', listener)
     }
   }, [])
 
@@ -108,7 +120,7 @@ export default function AppSplashLoader() {
         const rings = gsap.utils.toArray(ringsRef.current.children)
         rings.forEach((ring: any, i: number) => {
           gsap.fromTo(ring,
-            { scale: 4, opacity: 0 },
+            { scale: startScale, opacity: 0 },
             {
               scale: 0,
               duration: 2.8,
@@ -147,7 +159,7 @@ export default function AppSplashLoader() {
     })
 
     return () => ctx.revert()
-  }, [motionReady])
+  }, [motionReady, startScale])
 
   if (phase === 'hidden') return null
 
@@ -162,7 +174,7 @@ export default function AppSplashLoader() {
       <div 
         className="app-splash__content-wrapper" 
         style={{ 
-          transform: 'translate3d(0, 40px, 0)',
+          transform: `translate3d(0, ${wrapperY}px, 0)`,
           willChange: 'transform'
         }}
       >
