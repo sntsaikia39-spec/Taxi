@@ -106,7 +106,13 @@ export default function AppSplashLoader() {
   useEffect(() => {
     if (phase !== 'exiting') return
 
-    const hideTimer = window.setTimeout(() => setPhase('hidden'), EXIT_MS)
+    const hideTimer = window.setTimeout(() => {
+      setPhase('hidden')
+      if (typeof window !== 'undefined') {
+        (window as any).__splashFinished = true
+        window.dispatchEvent(new CustomEvent('splashFinished'))
+      }
+    }, EXIT_MS)
     return () => window.clearTimeout(hideTimer)
   }, [phase])
 

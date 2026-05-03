@@ -97,52 +97,68 @@ export default function Home() {
 
   // ── Main scroll + entrance animations ──
   useEffect(() => {
-    const ctx = gsap.context(() => {
-      // Set initial 3D state for hero cards
-      gsap.set('.hero-img-main', { transformPerspective: 1200, rotateY: -8, rotateX: 2, z: 0 })
-      gsap.set('.hero-img-back', { transformPerspective: 1200, rotateY: -16, rotateX: 4, x: 36, y: 22, z: -50 })
-      // Ensure buttons are visible by default
-      gsap.set('.hero-btns > *', { opacity: 1 })
+    let ctx: gsap.Context | null = null
 
-      // Hero entrance
-      const tl = gsap.timeline({ delay: 0.08 })
-      tl
-        .from('.hero-badge', { y: 22, opacity: 0, duration: 0.5, ease: 'back.out(1.7)' })
-        .from('.hero-line', { y: 65, opacity: 0, stagger: 0.1, duration: 0.62, ease: 'power3.out' }, '-=0.22')
-        .from('.hero-btns > *', { y: 14, stagger: 0.1, duration: 0.38, ease: 'power2.out' }, '-=0.18')
-        .from('.hero-sub', { y: 12, opacity: 0, duration: 0.36, ease: 'power2.out' }, '-=0.12')
-        .from('.hero-mini-stat', { y: 10, opacity: 0, stagger: 0.06, duration: 0.3, ease: 'power2.out' }, '-=0.1')
-        .from('.hero-img-back', { x: 70, opacity: 0, duration: 0.75, ease: 'power3.out' }, 0.38)
-        .from('.hero-img-main', { x: 50, opacity: 0, duration: 0.7, ease: 'power3.out' }, 0.52)
-        .from('.hero-float-1', { y: 24, opacity: 0, duration: 0.5, ease: 'back.out(2)' }, 0.72)
-        .from('.hero-float-2', { y: -24, opacity: 0, duration: 0.5, ease: 'back.out(2)' }, 0.84)
+    const startAnims = () => {
+      ctx = gsap.context(() => {
+        // Set initial 3D state for hero cards
+        gsap.set('.hero-img-main', { transformPerspective: 1200, rotateY: -8, rotateX: 2, z: 0 })
+        gsap.set('.hero-img-back', { transformPerspective: 1200, rotateY: -16, rotateX: 4, x: 36, y: 22, z: -50 })
 
-      // Stats — visible in initial viewport below hero, animate + counter on load
-      gsap.from('.stat-item', { y: 28, opacity: 0, stagger: 0.09, duration: 0.5, ease: 'power2.out', delay: 0.9 })
-      gsap.delayedCall(0.9, () => {
-        document.querySelectorAll('.stat-number').forEach((el, i) => {
-          const stat = STATS[i]
-          if (!stat) return
-          const proxy = { val: 0 }
-          gsap.to(proxy, {
-            val: stat.value, duration: 2, ease: 'power2.out',
-            onUpdate() {
-              ;(el as HTMLElement).textContent = stat.decimal
-                ? proxy.val.toFixed(1)
-                : Math.floor(proxy.val).toString()
-            },
+        // Hero entrance
+        const tl = gsap.timeline({ delay: 0.08 })
+        tl
+          .to('.hero-badge', { y: 0, opacity: 1, duration: 0.5, ease: 'back.out(1.7)', startAt: { y: 22, opacity: 0 } })
+          .to('.hero-line', { y: 0, opacity: 1, stagger: 0.1, duration: 0.62, ease: 'power3.out', startAt: { y: 65, opacity: 0 } }, '-=0.22')
+          .to('.hero-btns > *', { y: 0, opacity: 1, stagger: 0.1, duration: 0.38, ease: 'power2.out', startAt: { y: 14, opacity: 0 } }, '-=0.18')
+          .to('.hero-sub', { y: 0, opacity: 1, duration: 0.36, ease: 'power2.out', startAt: { y: 12, opacity: 0 } }, '-=0.12')
+          .to('.hero-mini-stat', { y: 0, opacity: 1, stagger: 0.06, duration: 0.3, ease: 'power2.out', startAt: { y: 10, opacity: 0 } }, '-=0.1')
+          .to('.hero-img-back', { x: 36, opacity: 1, duration: 0.75, ease: 'power3.out', startAt: { x: 70, opacity: 0 } }, 0.38)
+          .to('.hero-img-main', { x: 0, opacity: 1, duration: 0.7, ease: 'power3.out', startAt: { x: 50, opacity: 0 } }, 0.52)
+          .to('.hero-float-1', { y: 0, opacity: 1, duration: 0.5, ease: 'back.out(2)', startAt: { y: 24, opacity: 0 } }, 0.72)
+          .to('.hero-float-2', { y: 0, opacity: 1, duration: 0.5, ease: 'back.out(2)', startAt: { y: -24, opacity: 0 } }, 0.84)
+
+        // Stats — visible in initial viewport below hero, animate + counter on load
+        gsap.to('.stat-item', { y: 0, opacity: 1, stagger: 0.09, duration: 0.5, ease: 'power2.out', delay: 0.9, startAt: { y: 28, opacity: 0 } })
+        gsap.delayedCall(0.9, () => {
+          document.querySelectorAll('.stat-number').forEach((el, i) => {
+            const stat = STATS[i]
+            if (!stat) return
+            const proxy = { val: 0 }
+            gsap.to(proxy, {
+              val: stat.value, duration: 2, ease: 'power2.out',
+              onUpdate() {
+                ;(el as HTMLElement).textContent = stat.decimal
+                  ? proxy.val.toFixed(1)
+                  : Math.floor(proxy.val).toString()
+              },
+            })
           })
         })
-      })
 
-      // Pre-hide per-section elements — animated in by doStep on arrival
-      gsap.set('.tours-heading > *', { opacity: 0, y: 20 })
-      gsap.set('.step-card', { opacity: 0, y: 50 })
-      gsap.set('.cta-item', { opacity: 0, y: 32 })
+        // Pre-hide per-section elements — animated in by doStep on arrival
+        gsap.set('.tours-heading > *', { opacity: 0, y: 20 })
+        gsap.set('.step-card', { opacity: 0, y: 50 })
+        gsap.set('.cta-item', { opacity: 0, y: 32 })
 
-    }, mainRef)
+      }, mainRef)
+    }
 
-    return () => ctx.revert()
+    const onSplashFinished = () => {
+      startAnims()
+      window.removeEventListener('splashFinished', onSplashFinished)
+    }
+
+    if ((window as any).__splashFinished) {
+      startAnims()
+    } else {
+      window.addEventListener('splashFinished', onSplashFinished)
+    }
+
+    return () => {
+      ctx?.revert()
+      window.removeEventListener('splashFinished', onSplashFinished)
+    }
   }, [])
 
   // ── Fully controlled single-step scroll — entire homepage ──
@@ -569,7 +585,7 @@ export default function Home() {
             {/* ── Left: text + CTAs ── */}
             <div className="flex flex-col justify-start">
               {/* Badge */}
-              <div className="hero-badge inline-flex items-center gap-2 px-4 py-2 rounded-full border border-secondary-500/25 bg-secondary-500/8 text-secondary-400 text-xs font-semibold tracking-widest uppercase mb-4">
+              <div className="hero-badge opacity-0 inline-flex items-center gap-2 px-4 py-2 rounded-full border border-secondary-500/25 bg-secondary-500/8 text-secondary-400 text-xs font-semibold tracking-widest uppercase mb-4">
                 <span className="w-1.5 h-1.5 rounded-full bg-secondary-500 animate-pulse" />
                 Hollongi Airport #1 Service
               </div>
@@ -577,17 +593,17 @@ export default function Home() {
               {/* Headline */}
               <div className="overflow-hidden mb-4">
                 <h1 className="font-black leading-[0.95] tracking-tight">
-                  <span className="hero-line block text-4xl md:text-5xl lg:text-6xl text-white">Explore</span>
-                  <span className="hero-line block text-5xl md:text-6xl lg:text-7xl text-secondary-500">Arunachal</span>
-                  <span className="hero-line block text-4xl md:text-5xl lg:text-6xl text-white">Your Way</span>
+                  <span className="hero-line opacity-0 block text-4xl md:text-5xl lg:text-6xl text-white">Explore</span>
+                  <span className="hero-line opacity-0 block text-5xl md:text-6xl lg:text-7xl text-secondary-500">Arunachal</span>
+                  <span className="hero-line opacity-0 block text-4xl md:text-5xl lg:text-6xl text-white">Your Way</span>
                 </h1>
               </div>
 
               {/* CTAs — immediately after headline, always visible */}
-              <div className="hero-btns flex flex-wrap gap-2.5 mb-5 md:mb-6 opacity-100">
+              <div className="hero-btns flex flex-wrap gap-2.5 mb-5 md:mb-6">
                 <Link
                   href="/book-taxi"
-                  className="group flex items-center gap-2.5 px-6 py-3 bg-secondary-500 text-primary-950 font-black rounded-xl hover:bg-secondary-400 active:scale-[0.97] transition-all duration-200 shadow-2xl shadow-secondary-500/25 text-sm md:text-base will-change-transform"
+                  className="opacity-0 group flex items-center gap-2.5 px-6 py-3 bg-secondary-500 text-primary-950 font-black rounded-xl hover:bg-secondary-400 active:scale-[0.97] transition-all duration-200 shadow-2xl shadow-secondary-500/25 text-sm md:text-base will-change-transform"
                 >
                   Book Taxi Now
                   <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform duration-200" />
@@ -595,14 +611,14 @@ export default function Home() {
                 <Link
                   href="/tours"
                   className="group flex items-center gap-2.5 px-6 py-3 border border-white/20 text-white font-semibold rounded-xl hover:bg-white/[0.07] hover:border-white/35 transition-all duration-200 text-sm md:text-base will-change-transform"
-                >
+                > 
                   Explore Tours
                   <ChevronRight size={16} className="group-hover:translate-x-1 transition-transform duration-200" />
                 </Link>
               </div>
 
               {/* Subtitle */}
-              <p className="hero-sub text-gray-500 text-xs md:text-sm mb-5 leading-relaxed max-w-md">
+              <p className="hero-sub opacity-0 text-gray-500 text-xs md:text-sm mb-5 leading-relaxed max-w-md">
                 Pre-book airport taxis and curated tours from Hollongi. Transparent pricing, verified drivers — no surprises.
               </p>
 
@@ -614,7 +630,7 @@ export default function Home() {
                   { Icon: Zap, label: 'Book in 2 min', color: 'text-blue-400', bg: 'bg-blue-500/10 border-blue-500/20' },
                 ].map(({ Icon, label, color, bg }, i) => (
                   <div key={i} className={`hero-mini-stat flex items-center gap-1.5 px-3 py-1.5 rounded-full border ${bg}`}>
-                    <Icon size={12} className={color} />
+                    <Icon size={12} className={`opacity-0 ${color}`} />
                     <span className="text-gray-300 text-xs font-medium">{label}</span>
                   </div>
                 ))}
@@ -625,7 +641,7 @@ export default function Home() {
             <div className="hidden lg:flex relative items-center justify-center h-[380px]">
               {/* Back card */}
               <div
-                className="hero-img-back absolute rounded-2xl overflow-hidden"
+                className="hero-img-back opacity-0 absolute rounded-2xl overflow-hidden"
                 style={{
                   width: '240px', height: '320px',
                   boxShadow: '0 30px 80px rgba(0,0,0,0.6)',
@@ -638,7 +654,7 @@ export default function Home() {
 
               {/* Main card */}
               <div
-                className="hero-img-main relative rounded-2xl overflow-hidden"
+                className="hero-img-main opacity-0 relative rounded-2xl overflow-hidden"
                 style={{
                   width: '240px', height: '320px',
                   boxShadow: '0 0 0 1px rgba(255,218,0,0.18), 0 40px 90px rgba(0,0,0,0.65), 0 0 80px rgba(255,218,0,0.06)',
@@ -664,7 +680,7 @@ export default function Home() {
 
               {/* Floating badge 1 — verified */}
               <div
-                className="hero-float-1 absolute top-8 -left-4 bg-white rounded-2xl p-3 flex items-center gap-2"
+                className="hero-float-1 opacity-0 absolute top-8 -left-4 bg-white rounded-2xl p-3 flex items-center gap-2"
                 style={{ boxShadow: '0 20px 60px rgba(0,0,0,0.25)', minWidth: '140px' }}
               >
                 <div className="w-8 h-8 bg-green-50 rounded-xl flex items-center justify-center shrink-0">
@@ -678,7 +694,7 @@ export default function Home() {
 
               {/* Floating badge 2 — instant */}
               <div
-                className="hero-float-2 absolute -bottom-2 -right-4 bg-secondary-500 rounded-2xl p-3 flex items-center gap-2"
+                className="hero-float-2 opacity-0 absolute -bottom-2 -right-4 bg-secondary-500 rounded-2xl p-3 flex items-center gap-2"
                 style={{ boxShadow: '0 20px 50px rgba(255,218,0,0.35)', minWidth: '130px' }}
               >
                 <div className="w-8 h-8 bg-primary-950/15 rounded-xl flex items-center justify-center shrink-0">
@@ -709,7 +725,7 @@ export default function Home() {
         <div className="container mx-auto px-4 relative z-10">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-6 sm:gap-6">
             {STATS.map((stat, i) => (
-              <div key={i} className="stat-item text-center min-w-0">
+              <div key={i} className="stat-item opacity-0 text-center min-w-0">
                 <div className="flex items-baseline justify-center gap-1 mb-1 sm:mb-1.5">
                   <span className="stat-number text-[2rem] leading-none sm:text-3xl md:text-4xl font-black text-secondary-500">
                     {stat.decimal ? stat.value.toFixed(1) : stat.value}
