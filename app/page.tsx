@@ -184,14 +184,14 @@ export default function Home() {
       const group = groups[gIdx]
       if (!group) return
       const startX = fromRight ? window.innerWidth : -window.innerWidth
-      group.forEach((cardIdx) => {
+      group.forEach((cardIdx, i) => {
         const card = cardsRef.current[cardIdx]
         if (!card) return
         gsap.killTweensOf(card)
-        gsap.set(card, { pointerEvents: 'auto' })
+        gsap.set(card, { pointerEvents: 'auto', zIndex: 1 }) // Ensure cards are clickable and on top
         gsap.fromTo(card,
           { x: startX, opacity: 0 },
-          { x: 0, opacity: 1, duration: 0.8, ease: 'power3.out' }
+          { x: 0, opacity: 1, duration: 0.65, delay: i * 0.15, ease: 'power3.out' }
         )
       })
     }
@@ -206,7 +206,7 @@ export default function Home() {
         if (!card) return
         gsap.killTweensOf(card)
         gsap.set(card, { pointerEvents: 'none' })
-        gsap.to(card, { x: endX, opacity: 0, duration: 0.7, ease: 'power3.in' })
+        gsap.to(card, { x: endX, opacity: 0, duration: 0.46, ease: 'power3.in' })
       })
     }
 
@@ -293,7 +293,7 @@ export default function Home() {
     const moveToSection = (offsetY: number, instant: boolean, onDone?: () => void) => {
       if (!mainEl) { onDone?.(); return }
       if (instant) { gsap.set(mainEl, { y: -offsetY }); onDone?.() }
-      else gsap.to(mainEl, { y: -offsetY, duration: 0.75, ease: 'power3.inOut', onComplete: onDone })
+      else gsap.to(mainEl, { y: -offsetY, duration: 0.49, ease: 'power3.inOut', onComplete: onDone })
     }
 
     // ── SVG wipe helper ──
@@ -302,19 +302,19 @@ export default function Home() {
       trY[0] = forward ? 100 : 0; trY[1] = forward ? 100 : 0
       renderTr(forward)
       if (svg) gsap.set(svg, { opacity: 1 })
-      const tl = gsap.timeline({ onUpdate: () => renderTr(forward), defaults: { ease: 'power3.inOut', duration: 1.4 } })
+      const tl = gsap.timeline({ onUpdate: () => renderTr(forward), defaults: { ease: 'power3.inOut', duration: 0.9 } })
       if (!forward && header) {
         gsap.killTweensOf(header)
         gsap.set(header, { opacity: 1, yPercent: -110 })
-        tl.to(header, { yPercent: 0, duration: 1.64, ease: 'power3.out' }, 0)
+        tl.to(header, { yPercent: 0, duration: 1.07, ease: 'power3.out' }, 0)
       }
       tl.to(trY, { 0: forward ? 0 : 100 }, 0)
-      tl.to(trY, { 1: forward ? 0 : 100 }, 0.24)
+      tl.to(trY, { 1: forward ? 0 : 100 }, 0.16)
       tl.call(() => {
         onMid()
-        if (svg) gsap.to(svg, { opacity: 0, duration: 0.5, ease: 'power2.out', onComplete: () => {
+        if (svg) gsap.to(svg, { opacity: 0, duration: 0.35, ease: 'power2.out', onComplete: () => {
           trY[0] = 100; trY[1] = 100; renderTr(true); gsap.set(svg, { opacity: 1 })
-          if (!forward) gsap.delayedCall(1, playHeaderFlashRay)
+          if (!forward) gsap.delayedCall(0.65, playHeaderFlashRay)
           onDone()
         }})
         else onDone()
@@ -331,26 +331,26 @@ export default function Home() {
         playSvgWipe(true,
           () => {
             gsap.set('.tours-heading > *', { opacity: 0, y: 20 })
-            moveToSection(toursEl?.offsetTop ?? 0, true)
+            moveToSection(toursEl?.offsetTop ?? 0, true) // Instant move to tours section
             hideHeader()
           },
           () => {
             gsap.to('.tours-heading > *', { opacity: 1, y: 0, stagger: 0.1, duration: 0.5, ease: 'power2.out' })
             resetAllCards()
-            gsap.delayedCall(0.3, () => { showGroup(0); gsap.delayedCall(0.85, () => { transitioning = false }) })
+            gsap.delayedCall(0.2, () => { showGroup(0); gsap.delayedCall(0.9, () => { transitioning = false }) })
           }
         )
       } else if (from.t === 'tours' && to.t === 'hero') {
         playSvgWipe(false,
-          () => { moveToSection(0, true); resetAllCards() },
+          () => { moveToSection(0, true); resetAllCards() }, // Instant move to hero section
           () => { transitioning = false }
         )
       } else if (from.t === 'tours' && to.t === 'tours') {
         const fromGi = (from as { t: 'tours'; gi: number }).gi
         const toGi   = (to   as { t: 'tours'; gi: number }).gi
         hideGroup(fromGi, fwd)
-        showGroup(toGi, fwd)
-        gsap.delayedCall(0.85, () => { transitioning = false })
+        showGroup(toGi, fwd) // showGroup handles its own stagger
+        gsap.delayedCall(1.3, () => { transitioning = false }) // hide (0.46) + show (0.65 + 0.15) = 1.26s
       } else if (from.t === 'tours' && to.t === 'steps') {
         gsap.set('.step-card', { y: 50, opacity: 0 })
         moveToSection(stepsEl?.offsetTop ?? 0, false, () => {
@@ -368,8 +368,8 @@ export default function Home() {
           resetAllCards()
           moveToSection(toursEl?.offsetTop ?? 0, false, () => {
             gsap.to('.tours-heading > *', { opacity: 1, y: 0, stagger: 0.1, duration: 0.5, ease: 'power2.out' })
-            showGroup(groups.length - 1, false)
-            gsap.delayedCall(0.85, () => { transitioning = false })
+            showGroup(groups.length - 1, false) // showGroup handles its own stagger
+            gsap.delayedCall(0.9, () => { transitioning = false }) // showGroup duration + stagger
           })
         })
       } else if (from.t === 'steps' && to.t === 'cta') {

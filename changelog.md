@@ -9,6 +9,7 @@ All notable changes to TaxiHollongi will be documented in this file.
 **Author:** Yami
 
 ### Changes
+- fix: tours and book taxi screen UI
 - fix: Dynamic mobile height
 - fix: Loader optimization
 - update: Loader
