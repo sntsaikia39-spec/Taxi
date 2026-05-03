@@ -542,7 +542,7 @@ export default function Home() {
     <div ref={mainRef} className="flex flex-col bg-primary-950" style={{ willChange: 'transform' }}>
 
       {/* ════════════════════ HERO + STATS = exactly 100vh ════════════════════ */}
-      <div className="h-screen flex flex-col overflow-hidden">
+      <div className="min-h-[100svh] md:min-h-[100dvh] lg:h-screen flex flex-col overflow-visible lg:overflow-hidden">
 
       {/* ════════════════════ HERO ════════════════════ */}
       <section className="hero-section relative bg-primary-950 overflow-hidden flex-1 flex flex-col pt-16 md:pt-20">
@@ -697,7 +697,7 @@ export default function Home() {
       </section>
 
       {/* ════════════════════ STATS ════════════════════ */}
-      <section className="stats-section shrink-0 py-4 sm:py-5 md:py-6 relative" style={{
+      <section className="stats-section relative z-20 shrink-0 -mt-10 sm:mt-0 py-4 sm:py-5 md:py-6" style={{
         background: 'linear-gradient(135deg, #0a0a0a 0%, #1a1410 50%, #0f0c0a 100%)',
         boxShadow: 'inset 0 1px 0 rgba(255,218,0,0.1), inset 0 -1px 0 rgba(0,0,0,0.8), 0 10px 40px rgba(0,0,0,0.8), 0 0 100px rgba(255,218,0,0.05)',
         border: '1px solid',
@@ -936,7 +936,7 @@ export default function Home() {
       </section>
 
       {/* ════════════════════ CTA ════════════════════ */}
-      <section className="cta-section pt-14 pb-6 max-[760px]:pt-9 max-[760px]:pb-3 md:pt-32 md:pb-32 bg-secondary-500 relative overflow-hidden">
+      <section className="cta-section pt-[6.6rem] pb-32 bg-secondary-500 relative overflow-hidden">
         <div
           className="absolute inset-0 opacity-[0.06] pointer-events-none"
           style={{ backgroundImage: 'radial-gradient(circle, #1a1512 1.5px, transparent 1.5px)', backgroundSize: '26px 26px' }}

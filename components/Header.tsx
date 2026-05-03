@@ -166,7 +166,7 @@ export default function Header() {
   return (
     <header
       ref={headerRef}
-      className={`fixed top-0 left-0 right-0 w-full z-50 overflow-x-hidden md:overflow-visible text-white border-b border-white/[0.08] transition-all duration-500 ${
+      className={`fixed top-0 left-0 right-0 w-full z-50 overflow-visible text-white border-b border-white/[0.08] transition-all duration-500 ${
         scrolled
           ? 'bg-primary-950/96 backdrop-blur-md shadow-[0_12px_28px_rgba(8,6,5,0.38)]'
           : 'bg-primary-950/98 shadow-[0_8px_20px_rgba(8,6,5,0.24)]'
