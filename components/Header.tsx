@@ -226,12 +226,15 @@ export default function Header() {
                     {user.email?.[0].toUpperCase()}
                   </button>
                   {accountMenuOpen && (
-                    <div className="absolute right-0 top-[calc(100%+10px)] w-44 rounded-2xl border border-white/10 bg-primary-900/95 backdrop-blur-xl shadow-[0_18px_44px_rgba(0,0,0,0.45)] p-2 z-[70]">
+                    <div className="absolute right-0 top-[calc(100%+10px)] w-40 rounded-2xl border border-white/10 bg-primary-900/95 backdrop-blur-xl shadow-[0_18px_44px_rgba(0,0,0,0.45)] p-1.5 z-[70] text-center">
+                      <p className="text-gray-500 text-[11px] mb-0.5 px-2 pt-1 truncate font-bold uppercase tracking-wider">
+                        {user.user_metadata?.full_name || user.email}
+                      </p>
                       <button
                         onClick={handleLogout}
-                        className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm text-red-300 hover:bg-red-600 hover:text-white transition-colors"
+                        className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-xs text-red-400 hover:bg-red-500/10 transition-colors"
                       >
-                        <LogOut size={14} />
+                        <LogOut size={13} />
                         Logout
                       </button>
                     </div>
