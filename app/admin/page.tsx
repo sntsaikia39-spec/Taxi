@@ -202,6 +202,8 @@ export default function AdminDashboard() {
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const [activeTab, setActiveTab] = useState('overview')
   const [statusFilter, setStatusFilter] = useState('all')
+  const [assignmentFilter, setAssignmentFilter] = useState('all')
+  const [bookingSearchQuery, setBookingSearchQuery] = useState('')
   const [bookings, setBookings] = useState<Booking[]>([])
   const [payments, setPayments] = useState<Payment[]>([])
   const [vehicleAssignments, setVehicleAssignments] = useState<VehicleAssignment[]>([])
@@ -952,12 +954,35 @@ export default function AdminDashboard() {
   const recentBookings = useMemo(() => bookings.slice(0, 5), [bookings])
 
   const filteredBookings = useMemo(() => {
-    if (statusFilter === 'all') {
-      return bookings
+    let result = bookings
+
+    if (statusFilter !== 'all') {
+      result = result.filter((booking) => booking.booking_status === statusFilter)
     }
 
-    return bookings.filter((booking) => booking.booking_status === statusFilter)
-  }, [bookings, statusFilter])
+    if (assignmentFilter !== 'all') {
+      result = result.filter((booking) => {
+        const isAssigned = vehicleAssignments.some(
+          (va) => va.booking_id === (booking.booking_id || booking.id)
+        )
+        return assignmentFilter === 'assigned' ? isAssigned : !isAssigned
+      })
+    }
+
+    if (bookingSearchQuery.trim()) {
+      const q = bookingSearchQuery.toLowerCase()
+      result = result.filter((booking) => {
+        const idToMatch = (booking.booking_id || booking.id).toLowerCase()
+        return (
+          booking.user_name?.toLowerCase().includes(q) ||
+          booking.phone?.includes(q) ||
+          idToMatch.includes(q)
+        )
+      })
+    }
+
+    return result
+  }, [bookings, statusFilter, assignmentFilter, vehicleAssignments, bookingSearchQuery])
 
   const stats = useMemo(() => {
     const totalRevenue = bookings.reduce((sum, booking) => sum + toNum(booking.amount_total), 0)
@@ -1360,21 +1385,49 @@ export default function AdminDashboard() {
   const renderBookings = () => (
     <div className="space-y-4 md:space-y-6">
       <div className="bg-white rounded-lg shadow-lg p-4 md:p-8">
-        <div className="flex justify-between items-center mb-4 md:mb-6 gap-3">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between mb-4 md:mb-6 gap-4">
           <h3 className="text-lg md:text-2xl font-bold">
             Bookings <span className="text-sm text-gray-500 font-normal">({filteredBookings.length})</span>
           </h3>
-          <select
-            className="input-field max-w-[160px] md:max-w-xs text-sm"
-            value={statusFilter}
-            onChange={(event) => setStatusFilter(event.target.value)}
-          >
-            <option value="all">All Status</option>
-            <option value="pending">Pending</option>
-            <option value="confirmed">Confirmed</option>
-            <option value="completed">Completed</option>
-            <option value="cancelled">Cancelled</option>
-          </select>
+          <div className="flex flex-col sm:flex-row gap-2 w-full lg:w-auto">
+            <div className="relative flex-1 min-w-0">
+              <input
+                type="text"
+                placeholder="Search name, phone, ID..."
+                className="input-field w-full pl-9 text-sm"
+                value={bookingSearchQuery}
+                onChange={(e) => setBookingSearchQuery(e.target.value)}
+              />
+              <svg
+                className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"
+                fill="none" stroke="currentColor" viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </div>
+            <div className="flex gap-2">
+              <select
+                className="input-field text-sm flex-1 sm:w-auto"
+                value={assignmentFilter}
+                onChange={(e) => setAssignmentFilter(e.target.value)}
+              >
+                <option value="all">All Assignments</option>
+                <option value="assigned">Assigned</option>
+                <option value="unassigned">Not Assigned</option>
+              </select>
+              <select
+                className="input-field text-sm flex-1 sm:w-auto"
+                value={statusFilter}
+                onChange={(event) => setStatusFilter(event.target.value)}
+              >
+                <option value="all">All Status</option>
+                <option value="pending">Pending</option>
+                <option value="confirmed">Confirmed</option>
+                <option value="completed">Completed</option>
+                <option value="cancelled">Cancelled</option>
+              </select>
+            </div>
+          </div>
         </div>
 
         {loadingBookings ? (
@@ -1391,6 +1444,13 @@ export default function AdminDashboard() {
               const isExpanded = expandedBookingId === booking.id
               // display the application booking_id if present, otherwise fall back to table id
               const displayId = (booking.booking_id || booking.id).slice(0, 12)
+
+              // Check vehicle assignment for confirmed bookings
+              const assignment = vehicleAssignments.find(
+                (va) => va.booking_id === (booking.booking_id || booking.id)
+              )
+              const assignedCar = assignment ? cars.find((c) => c.id === assignment.car_id) : null
+              const isCarAssigned = !!assignedCar
 
               return (
                 <div key={booking.id} className="border rounded-lg overflow-hidden hover:shadow-md transition-shadow">
@@ -1413,12 +1473,17 @@ export default function AdminDashboard() {
                               ? booking.booking_status.charAt(0).toUpperCase() + booking.booking_status.slice(1)
                               : 'Pending'}
                           </span>
+                          {booking.booking_status === 'confirmed' && (
+                            <p className={`text-xs font-semibold mb-1 ${isCarAssigned ? 'text-green-700' : 'text-orange-600'}`}>
+                              {isCarAssigned ? '✓ Car Assigned' : '⚠ No Car'}
+                            </p>
+                          )}
                           <p className="text-xs font-semibold text-green-700">Rs. {toNum(booking.amount_total).toFixed(0)}</p>
                           <p className="text-xs text-gray-500">{booking.start_datetime ? formatDate(booking.start_datetime) : '-'}</p>
                         </div>
                       </div>
                       {/* Desktop: grid layout */}
-                      <div className="hidden md:grid grid-cols-6 gap-3 items-center">
+                      <div className="hidden md:grid grid-cols-7 gap-3 items-center">
                         <div>
                           <p className="text-xs text-gray-500 font-semibold mb-0.5">Booking ID</p>
                           <p className="font-mono text-xs text-blue-700">{displayId}…</p>
@@ -1453,6 +1518,14 @@ export default function AdminDashboard() {
                               : 'Pending'}
                           </span>
                         </div>
+                        {booking.booking_status === 'confirmed' && (
+                          <div>
+                            <p className="text-xs text-gray-500 font-semibold mb-0.5">Vehicle</p>
+                            <span className={`px-2 py-1 rounded-full text-xs font-semibold inline-block ${isCarAssigned ? 'bg-green-100 text-green-800' : 'bg-orange-100 text-orange-800'}`}>
+                              {isCarAssigned ? '✓ Assigned' : '⚠ Not Assigned'}
+                            </span>
+                          </div>
+                        )}
                       </div>
                     </div>
                     <svg
