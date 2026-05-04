@@ -2,6 +2,10 @@
 
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import toast from 'react-hot-toast'
+import { useRouter } from 'next/navigation'
+import { useAdmin } from '@/context/AdminContext'
+import { ProtectedAdminPage } from '@/components/ProtectedAdminPage'
+import { LogOut } from 'lucide-react'
 import type { Booking } from '@/lib/db'
 
 type AdminApiResponse = {
@@ -193,6 +197,9 @@ function findSimilarModels(input: string, candidates: string[]): string[] {
 }
 
 export default function AdminDashboard() {
+  const router = useRouter()
+  const { logout, adminEmail } = useAdmin()
+  const scrollRef = useRef<HTMLDivElement | null>(null)
   const [activeTab, setActiveTab] = useState('overview')
   const [statusFilter, setStatusFilter] = useState('all')
   const [bookings, setBookings] = useState<Booking[]>([])
@@ -284,16 +291,33 @@ export default function AdminDashboard() {
     document.body.style.overflowY = 'auto'
     document.documentElement.style.overflowX = 'hidden'
     document.body.style.overflowX = 'hidden'
+
+    // Smooth wheel scrolling for the admin scroll container
+    const scroller = scrollRef.current
+    if (!scroller) return
+    let targetTop = scroller.scrollTop
+    const onWheel = (e: WheelEvent) => {
+      // only handle vertical scroll
+      if (Math.abs(e.deltaY) < Math.abs(e.deltaX)) return
+      e.preventDefault()
+      const max = Math.max(0, scroller.scrollHeight - scroller.clientHeight)
+      targetTop = Math.min(max, Math.max(0, targetTop + e.deltaY))
+      gsap.to(scroller, { scrollTop: targetTop, duration: 0.65, ease: 'power3.out', overwrite: true })
+    }
+    scroller.addEventListener('wheel', onWheel, { passive: false })
+    return () => scroller.removeEventListener('wheel', onWheel)
   }, [])
 
   // ── Clear cache and logout on admin page load ─────────────────────────────
   useEffect(() => {
     // Clear all browser storage (cache, session, local data)
-    // Preserve admin UI preferences before clearing
+    // Preserve admin UI preferences and auth token before clearing
     const adminDarkMode = localStorage.getItem('adminDarkMode')
+    const adminToken = localStorage.getItem('adminToken')
     localStorage.clear()
     sessionStorage.clear()
     if (adminDarkMode !== null) localStorage.setItem('adminDarkMode', adminDarkMode)
+    if (adminToken !== null) localStorage.setItem('adminToken', adminToken)
     
     // Clear IndexedDB
     if (window.indexedDB) {
@@ -318,6 +342,19 @@ export default function AdminDashboard() {
     
     signOutFromAuth()
   }, [])
+
+  const handleAdminLogout = async () => {
+    toast.loading('Logging out...')
+    try {
+      await logout()
+      toast.dismiss()
+      toast.success('Logged out successfully')
+      router.push('/admin-login')
+    } catch (error) {
+      toast.dismiss()
+      toast.error('Error logging out')
+    }
+  }
 
   useEffect(() => {
     loadBookings()
@@ -1244,72 +1281,76 @@ export default function AdminDashboard() {
         ) : recentBookings.length === 0 ? (
           <p className="text-gray-600">No bookings found.</p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b">
-                  <th className="text-left py-3 px-4 font-semibold">Booking ID</th>
-                  <th className="text-left py-3 px-4 font-semibold">Customer</th>
-                  <th className="text-left py-3 px-4 font-semibold">Phone</th>
-                  <th className="text-left py-3 px-4 font-semibold">Type</th>
-                  <th className="text-left py-3 px-4 font-semibold">Passengers</th>
-                  <th className="text-left py-3 px-4 font-semibold">Date & Time</th>
-                  <th className="text-left py-3 px-4 font-semibold">Amount</th>
-                  <th className="text-left py-3 px-4 font-semibold">Booking Status</th>
-                  <th className="text-left py-3 px-4 font-semibold">Payment Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {recentBookings.map((booking) => {
-                  const bookingPayment = payments.find(
-                    (p) => p.booking_id === (booking.booking_id || booking.id)
-                  )
-                  return (
-                    <tr
-                      key={booking.id}
-                      onClick={() => openBookingDetails(booking.id)}
-                      className="border-b hover:bg-blue-50 cursor-pointer transition-colors"
-                    >
-                      <td className="py-3 px-4 font-mono text-xs text-blue-700">
-                        {(booking.booking_id || booking.id).slice(0, 8)}…
-                      </td>
-                      <td className="py-3 px-4">
-                        <div>{booking.user_name || '-'}</div>
-                        <div className="text-xs text-gray-500">{booking.user_email || ''}</div>
-                      </td>
-                      <td className="py-3 px-4">{booking.phone || '-'}</td>
-                      <td className="py-3 px-4">{bookingTypeLabel(booking.booking_type)}</td>
-                      <td className="py-3 px-4">{booking.passenger_count ?? '-'}</td>
-                      <td className="py-3 px-4">
-                        <div className="text-xs">
-                          <div>{booking.start_datetime ? formatDate(booking.start_datetime) : '-'}</div>
-                          <div className="text-gray-500">
+          <div className="space-y-3">
+            {recentBookings.map((booking) => {
+              const bookingPayment = payments.find(
+                (p) => p.booking_id === (booking.booking_id || booking.id)
+              )
+              const displayId = (booking.booking_id || booking.id).slice(0, 12)
+
+              return (
+                <div key={booking.id} className="border rounded-lg overflow-hidden hover:shadow-md transition-shadow">
+                  {/* Summary row — click to view details */}
+                  <button
+                    onClick={() => openBookingDetails(booking.id)}
+                    className="w-full text-left p-3 md:p-4 hover:bg-gray-50 transition-colors flex items-center justify-between gap-2"
+                  >
+                    <div className="flex-1 min-w-0 text-sm">
+                      {/* Mobile: stacked layout */}
+                      <div className="flex items-start justify-between gap-2 md:hidden">
+                        <div className="min-w-0">
+                          <p className="font-medium truncate">{booking.user_name || '-'}</p>
+                          <p className="text-xs text-gray-500">{booking.phone || '-'}</p>
+                          <p className="text-xs text-gray-400 font-mono mt-0.5">{displayId}…</p>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${getStatusClass(booking.booking_status)} inline-block mb-1`}>
+                            {booking.booking_status || 'pending'}
+                          </span>
+                          <p className="text-xs font-semibold text-green-700">Rs. {toNum(booking.amount_total).toFixed(0)}</p>
+                          <p className="text-xs text-gray-500">{booking.start_datetime ? formatDate(booking.start_datetime) : '-'}</p>
+                        </div>
+                      </div>
+                      {/* Desktop: grid layout */}
+                      <div className="hidden md:grid grid-cols-6 gap-3 items-center">
+                        <div>
+                          <p className="text-xs text-gray-500 font-semibold mb-0.5">Booking ID</p>
+                          <p className="font-mono text-xs text-blue-700">{displayId}…</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500 font-semibold mb-0.5">Customer</p>
+                          <p className="font-medium">{booking.user_name || '-'}</p>
+                          <p className="text-xs text-gray-500">{booking.phone || '-'}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500 font-semibold mb-0.5">Type</p>
+                          <p>{bookingTypeLabel(booking.booking_type)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500 font-semibold mb-0.5">Start Date</p>
+                          <p>{booking.start_datetime ? formatDate(booking.start_datetime) : '-'}</p>
+                          <p className="text-xs text-gray-500">
                             {booking.start_datetime
                               ? new Date(booking.start_datetime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
                               : ''}
-                          </div>
+                          </p>
                         </div>
-                      </td>
-                      <td className="py-3 px-4 font-semibold text-green-700">Rs. {toNum(booking.amount_total).toFixed(2)}</td>
-                      <td className="py-3 px-4">
-                        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getStatusClass(booking.booking_status)}`}>
-                          {booking.booking_status || 'pending'}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4">
-                        {bookingPayment ? (
-                          <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getPaymentStatusClass(bookingPayment.payment_status)}`}>
-                            {bookingPayment.payment_status}
+                        <div>
+                          <p className="text-xs text-gray-500 font-semibold mb-0.5">Amount</p>
+                          <p className="font-semibold text-green-700">Rs. {toNum(booking.amount_total).toFixed(2)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500 font-semibold mb-0.5">Status</p>
+                          <span className={`px-2 py-1 rounded-full text-xs font-semibold ${getStatusClass(booking.booking_status)} inline-block`}>
+                            {booking.booking_status || 'pending'}
                           </span>
-                        ) : (
-                          <span className="px-3 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-800">no payment</span>
-                        )}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+                        </div>
+                      </div>
+                    </div>
+                  </button>
+                </div>
+              )
+            })}
           </div>
         )}
       </div>
@@ -1764,15 +1805,15 @@ export default function AdminDashboard() {
     const hasActiveScheduleFilters = scheduleSearchQuery.trim() || scheduleFilterStatus !== 'all' || scheduleFilterClass
 
     return (
-    <div className="space-y-8">
+    <div className="space-y-4 md:space-y-6 lg:space-y-8">
       {/* Add/Edit Car Form */}
       {(showAddCar || editingCar) && (
-        <div className="bg-white rounded-lg shadow-lg p-8">
-          <h3 className="text-2xl font-bold mb-6">{editingCar ? 'Edit Car' : 'Add New Car'}</h3>
-          <form onSubmit={editingCar ? handleUpdateCar : handleAddCar} className="space-y-6">
+        <div className="bg-white rounded-lg shadow-lg p-4 md:p-8">
+          <h3 className="text-xl md:text-2xl font-bold mb-4 md:mb-6">{editingCar ? 'Edit Car' : 'Add New Car'}</h3>
+          <form onSubmit={editingCar ? handleUpdateCar : handleAddCar} className="space-y-4 md:space-y-6">
             {/* Car Details */}
             <div>
-              <h4 className="text-lg font-semibold mb-4 text-gray-700">Car Details</h4>
+              <h4 className="text-base md:text-lg font-semibold mb-3 md:mb-4 text-gray-700">Car Details</h4>
               {/* Datalist of existing model names for autocomplete */}
               <datalist id="car-model-names">
                 {[...new Set(cars.map(c => c.model_name))].sort().map(name => (
@@ -1881,7 +1922,7 @@ export default function AdminDashboard() {
 
             {/* Driver Details */}
             <div>
-              <h4 className="text-lg font-semibold mb-4 text-gray-700">Driver Details</h4>
+              <h4 className="text-base md:text-lg font-semibold mb-3 md:mb-4 text-gray-700">Driver Details</h4>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <input
                   type="text"
@@ -1951,11 +1992,11 @@ export default function AdminDashboard() {
       )}
 
       {/* Cars List */}
-      <div className="bg-white rounded-lg shadow-lg p-8">
-        <div className="flex justify-between items-center mb-6">
-          <h3 className="text-2xl font-bold">Manage Cars</h3>
+      <div className="bg-white rounded-lg shadow-lg p-4 md:p-8">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 md:gap-4 mb-4 md:mb-6">
+          <h3 className="text-xl md:text-2xl font-bold">Manage Cars</h3>
           {!showAddCar && !editingCar && (
-            <button onClick={() => setShowAddCar(true)} className="btn-primary">
+            <button onClick={() => setShowAddCar(true)} className="btn-primary text-sm md:text-base">
               Add New Car
             </button>
           )}
@@ -2008,171 +2049,284 @@ export default function AdminDashboard() {
         ) : filteredCars.length === 0 ? (
           <p className="text-gray-500 text-sm py-4">No cars match the current filters.</p>
         ) : (
-          <div className="overflow-x-auto">
-            <p className="text-xs text-gray-400 mb-3">
+          <>
+            <p className="text-xs text-gray-400 mb-4">
               Showing {filteredCars.length} of {cars.length} car{cars.length !== 1 ? 's' : ''}
             </p>
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b">
-                  <th className="text-left py-3 px-4 font-semibold w-8"></th>
-                  <th className="text-left py-3 px-4 font-semibold">Model</th>
-                  <th className="text-left py-3 px-4 font-semibold">Class</th>
-                  <th className="text-left py-3 px-4 font-semibold">Number Plate</th>
-                  <th className="text-left py-3 px-4 font-semibold">Capacity</th>
-                  <th className="text-left py-3 px-4 font-semibold">Per KM</th>
-                  <th className="text-left py-3 px-4 font-semibold">Per Hour</th>
-                  <th className="text-left py-3 px-4 font-semibold">Driver Name</th>
-                  <th className="text-left py-3 px-4 font-semibold">Driver Phone</th>
-                  <th className="text-left py-3 px-4 font-semibold">Status</th>
-                  <th className="text-left py-3 px-4 font-semibold">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredCars.map((car) => {
-                  const isExpanded = expandedCarId === car.id
-                  return (
-                    <Fragment key={car.id}>
-                      <tr
-                        className={`border-b hover:bg-gray-50 cursor-pointer ${!car.is_active ? 'bg-gray-100 opacity-70' : ''}`}
-                        onClick={() => setExpandedCarId(isExpanded ? null : car.id)}
-                      >
-                        <td className="py-3 px-4 text-gray-400">
-                          <span className="text-xs">{isExpanded ? '▲' : '▼'}</span>
-                        </td>
-                        <td className="py-3 px-4 font-medium">{car.model_name}</td>
-                        <td className="py-3 px-4">{car.class}</td>
-                        <td className="py-3 px-4 font-mono">{car.number_plate}</td>
-                        <td className="py-3 px-4">{car.capacity} seats</td>
-                        <td className="py-3 px-4">Rs. {car.per_km_charge}</td>
-                        <td className="py-3 px-4">Rs. {car.per_hr_charge}</td>
-                        <td className="py-3 px-4">{car.driver_name}</td>
-                        <td className="py-3 px-4">{car.driver_phone}</td>
-                        <td className="py-3 px-4">
-                          <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                            car.is_active
-                              ? 'bg-green-100 text-green-800'
-                              : 'bg-red-100 text-red-800'
-                          }`}>
-                            {car.is_active ? 'Active' : 'Inactive'}
-                          </span>
-                        </td>
-                        <td className="py-3 px-4" onClick={(e) => e.stopPropagation()}>
-                          <div className="flex gap-2 flex-wrap">
-                            <button
-                              onClick={() => startEditCar(car)}
-                              className="text-sm text-secondary-500 hover:text-secondary-600"
-                            >
-                              Edit
-                            </button>
-                            <button
-                              onClick={() => handleToggleCarActive(car)}
-                              className={`text-sm ${car.is_active ? 'text-orange-500 hover:text-orange-600' : 'text-green-500 hover:text-green-600'}`}
-                            >
-                              {car.is_active ? 'Deactivate' : 'Activate'}
-                            </button>
-                            <button
-                              onClick={() => handleDeleteCar(car.id)}
-                              className="text-sm text-red-500 hover:text-red-600"
-                            >
-                              Delete
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                      {isExpanded && (
-                        <tr key={`${car.id}-details`} className={`border-b ${!car.is_active ? 'bg-gray-100 opacity-70' : 'bg-gray-50'}`}>
-                          <td colSpan={11} className="px-6 py-4">
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                              <div>
-                                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Driver Email</p>
-                                <p className="text-gray-800">{car.driver_email || '—'}</p>
-                              </div>
-                              <div>
-                                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">License Number</p>
-                                <p className="text-gray-800 font-mono">{car.driver_license_number || '—'}</p>
-                              </div>
-                              <div>
-                                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">License Expiry</p>
-                                <p className="text-gray-800">
-                                  {car.driver_license_expiry
-                                    ? new Date(car.driver_license_expiry).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
-                                    : '—'}
-                                </p>
-                              </div>
-                              <div>
-                                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Driver Verified</p>
-                                <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
-                                  car.driver_verified ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
-                                }`}>
-                                  {car.driver_verified ? 'Verified' : 'Unverified'}
-                                </span>
-                              </div>
-                              <div>
-                                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Car ID</p>
-                                <p className="text-gray-500 font-mono text-xs">{car.id}</p>
-                              </div>
-                              <div>
-                                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Added On</p>
-                                <p className="text-gray-800">
-                                  {new Date(car.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
-                                </p>
-                              </div>
+            {/* Desktop Table View */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-sm admin-table">
+                <thead>
+                  <tr className="border-b">
+                    <th className="text-left py-3 px-4 font-semibold w-8"></th>
+                    <th className="text-left py-3 px-4 font-semibold">Model</th>
+                    <th className="text-left py-3 px-4 font-semibold">Class</th>
+                    <th className="text-left py-3 px-4 font-semibold">Number Plate</th>
+                    <th className="text-left py-3 px-4 font-semibold">Capacity</th>
+                    <th className="text-left py-3 px-4 font-semibold">Per KM</th>
+                    <th className="text-left py-3 px-4 font-semibold">Per Hour</th>
+                    <th className="text-left py-3 px-4 font-semibold">Driver Name</th>
+                    <th className="text-left py-3 px-4 font-semibold">Driver Phone</th>
+                    <th className="text-left py-3 px-4 font-semibold">Status</th>
+                    <th className="text-left py-3 px-4 font-semibold">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredCars.map((car) => {
+                    const isExpanded = expandedCarId === car.id
+                    return (
+                      <Fragment key={car.id}>
+                        <tr
+                          className={`border-b hover:bg-gray-50 cursor-pointer ${!car.is_active ? 'bg-gray-100 opacity-70' : ''}`}
+                          onClick={() => setExpandedCarId(isExpanded ? null : car.id)}
+                        >
+                          <td className="py-3 px-4 text-gray-400">
+                            <span className="text-xs">{isExpanded ? '▲' : '▼'}</span>
+                          </td>
+                          <td className="py-3 px-4 font-medium">{car.model_name}</td>
+                          <td className="py-3 px-4">{car.class}</td>
+                          <td className="py-3 px-4 font-mono">{car.number_plate}</td>
+                          <td className="py-3 px-4">{car.capacity} seats</td>
+                          <td className="py-3 px-4">Rs. {car.per_km_charge}</td>
+                          <td className="py-3 px-4">Rs. {car.per_hr_charge}</td>
+                          <td className="py-3 px-4">{car.driver_name}</td>
+                          <td className="py-3 px-4">{car.driver_phone}</td>
+                          <td className="py-3 px-4">
+                            <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                              car.is_active
+                                ? 'bg-green-100 text-green-800'
+                                : 'bg-red-100 text-red-800'
+                            }`}>
+                              {car.is_active ? 'Active' : 'Inactive'}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex gap-2 flex-wrap">
+                              <button
+                                onClick={() => startEditCar(car)}
+                                className="text-sm text-secondary-500 hover:text-secondary-600"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                onClick={() => handleToggleCarActive(car)}
+                                className={`text-sm ${car.is_active ? 'text-orange-500 hover:text-orange-600' : 'text-green-500 hover:text-green-600'}`}
+                              >
+                                {car.is_active ? 'Deactivate' : 'Activate'}
+                              </button>
+                              <button
+                                onClick={() => handleDeleteCar(car.id)}
+                                className="text-sm text-red-500 hover:text-red-600"
+                              >
+                                Delete
+                              </button>
                             </div>
                           </td>
                         </tr>
-                      )}
-                    </Fragment>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
+                        {isExpanded && (
+                          <tr key={`${car.id}-details`} className={`border-b ${!car.is_active ? 'bg-gray-100 opacity-70' : 'bg-gray-50'}`}>
+                            <td colSpan={11} className="px-6 py-4">
+                              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                                <div>
+                                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Driver Email</p>
+                                  <p className="text-gray-800">{car.driver_email || '—'}</p>
+                                </div>
+                                <div>
+                                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">License Number</p>
+                                  <p className="text-gray-800 font-mono">{car.driver_license_number || '—'}</p>
+                                </div>
+                                <div>
+                                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">License Expiry</p>
+                                  <p className="text-gray-800">
+                                    {car.driver_license_expiry
+                                      ? new Date(car.driver_license_expiry).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+                                      : '—'}
+                                  </p>
+                                </div>
+                                <div>
+                                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Driver Verified</p>
+                                  <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                                    car.driver_verified ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                                  }`}>
+                                    {car.driver_verified ? 'Verified' : 'Unverified'}
+                                  </span>
+                                </div>
+                                <div>
+                                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Car ID</p>
+                                  <p className="text-gray-500 font-mono text-xs">{car.id}</p>
+                                </div>
+                                <div>
+                                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Added On</p>
+                                  <p className="text-gray-800">
+                                    {new Date(car.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                  </p>
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile Card View */}
+            <div className="md:hidden grid grid-cols-1 gap-4">
+              {filteredCars.map((car) => {
+                const isExpanded = expandedCarId === car.id
+                return (
+                  <div key={car.id} className={`rounded-lg border transition-all ${!car.is_active ? 'bg-gray-50 border-gray-200' : 'bg-white border-gray-200'} shadow-sm hover:shadow-md`}>
+                    {/* Card Header */}
+                    <button
+                      onClick={() => setExpandedCarId(isExpanded ? null : car.id)}
+                      className="w-full p-4 text-left flex items-start justify-between gap-3 active:bg-gray-50"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <h4 className="font-semibold text-base text-gray-900 truncate">{car.model_name}</h4>
+                        <p className="text-xs text-gray-500 mt-0.5">{car.class}</p>
+                        <p className="text-xs font-mono text-gray-400 mt-1">{car.number_plate}</p>
+                      </div>
+                      <div className="flex flex-col items-end gap-2 shrink-0">
+                        <span className={`px-2.5 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${
+                          car.is_active
+                            ? 'bg-green-100 text-green-800'
+                            : 'bg-red-100 text-red-800'
+                        }`}>
+                          {car.is_active ? 'Active' : 'Inactive'}
+                        </span>
+                        <span className="text-xs text-gray-400">{isExpanded ? '▲' : '▼'}</span>
+                      </div>
+                    </button>
+
+                    {/* Card Body */}
+                    {isExpanded && (
+                      <>
+                        <div className="px-4 py-3 border-t border-gray-100 space-y-3">
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Capacity</p>
+                              <p className="text-sm font-medium">{car.capacity} seats</p>
+                            </div>
+                            <div>
+                              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Per KM</p>
+                              <p className="text-sm font-medium">Rs. {car.per_km_charge}</p>
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Per Hour</p>
+                              <p className="text-sm font-medium">Rs. {car.per_hr_charge}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Driver Verified</p>
+                              <span className={`inline-block px-2 py-0.5 rounded text-xs font-semibold ${
+                                car.driver_verified ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                              }`}>
+                                {car.driver_verified ? 'Yes' : 'No'}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="pt-2 border-t border-gray-100">
+                            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Driver</p>
+                            <p className="text-sm font-medium">{car.driver_name}</p>
+                            <p className="text-xs text-gray-500 mt-0.5">{car.driver_phone}</p>
+                            {car.driver_email && <p className="text-xs text-gray-500">{car.driver_email}</p>}
+                          </div>
+                          {car.driver_license_number && (
+                            <div className="pt-2 border-t border-gray-100">
+                              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">License</p>
+                              <p className="text-xs font-mono text-gray-600">{car.driver_license_number}</p>
+                              {car.driver_license_expiry && (
+                                <p className="text-xs text-gray-500 mt-1">
+                                  Expires: {new Date(car.driver_license_expiry).toLocaleDateString('en-IN')}
+                                </p>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Card Actions */}
+                        <div className="px-4 py-3 border-t border-gray-100 flex gap-2">
+                          <button
+                            onClick={() => startEditCar(car)}
+                            className="flex-1 py-2 text-sm font-medium text-secondary-600 hover:bg-secondary-50 rounded active:bg-secondary-100 transition-colors"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleToggleCarActive(car)}
+                            className={`flex-1 py-2 text-sm font-medium rounded transition-colors active:opacity-70 ${
+                              car.is_active
+                                ? 'text-orange-600 hover:bg-orange-50'
+                                : 'text-green-600 hover:bg-green-50'
+                            }`}
+                          >
+                            {car.is_active ? 'Deactivate' : 'Activate'}
+                          </button>
+                          <button
+                            onClick={() => handleDeleteCar(car.id)}
+                            className="flex-1 py-2 text-sm font-medium text-red-600 hover:bg-red-50 rounded active:bg-red-100 transition-colors"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </>
         )}
       </div>
 
       {/* Fleet Schedule Visualizer */}
-      <div className="bg-white rounded-lg shadow-lg p-8">
-        <div className="flex flex-wrap items-center justify-between gap-4 mb-5">
+      <div className="bg-white rounded-lg shadow-lg p-4 md:p-8">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 md:gap-4 mb-4 md:mb-5">
           <div>
-            <h3 className="text-2xl font-bold">Fleet Schedule</h3>
-            <p className="text-sm text-gray-500 mt-0.5 font-medium">
+            <h3 className="text-xl md:text-2xl font-bold">Fleet Schedule</h3>
+            <p className="text-xs md:text-sm text-gray-500 mt-0.5 md:mt-1 font-medium">
               {scheduleWeekStart.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
               {' – '}
               {new Date(scheduleWeekEnd.getTime() - 1).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-1.5 md:gap-2">
             <button
               onClick={() => { setScheduleWeekOffset(o => o - 1); setScheduleFocusDate('') }}
-              className="px-3 py-1.5 border rounded-lg text-sm hover:bg-gray-50"
+              className="px-2.5 md:px-3 py-1.5 md:py-2 border rounded-lg text-xs md:text-sm hover:bg-gray-50 font-medium"
             >
               ← Prev
             </button>
             <button
               onClick={() => { setScheduleWeekOffset(0); setScheduleFocusDate('') }}
-              className="px-3 py-1.5 border rounded-lg text-sm hover:bg-gray-50 font-medium"
+              className="px-2.5 md:px-3 py-1.5 md:py-2 border rounded-lg text-xs md:text-sm hover:bg-gray-50 font-bold"
             >
               Today
             </button>
             <button
               onClick={() => { setScheduleWeekOffset(o => o + 1); setScheduleFocusDate('') }}
-              className="px-3 py-1.5 border rounded-lg text-sm hover:bg-gray-50"
+              className="px-2.5 md:px-3 py-1.5 md:py-2 border rounded-lg text-xs md:text-sm hover:bg-gray-50 font-medium"
             >
               Next →
             </button>
-            <div className="w-px h-6 bg-gray-200 mx-1" />
+            <div className="w-px h-5 md:h-6 bg-gray-200 mx-0.5 md:mx-1 hidden md:block" />
             <button
               type="button"
               onClick={() => scheduleDateInputRef.current?.showPicker()}
-              className="flex items-center gap-1.5 text-sm text-gray-500 border rounded-lg px-3 py-1.5 hover:bg-gray-50"
+              className="flex items-center gap-1 text-xs md:text-sm text-gray-500 border rounded-lg px-2.5 md:px-3 py-1.5 md:py-2 hover:bg-gray-50 whitespace-nowrap"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-3 md:w-4 h-3 md:h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
               </svg>
-              {scheduleFocusDate
-                ? new Date(scheduleFocusDate + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
-                : 'Jump to date'}
+              <span className="hidden sm:inline">
+                {scheduleFocusDate
+                  ? new Date(scheduleFocusDate + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+                  : 'Jump to date'}
+              </span>
+              <span className="sm:hidden">📅</span>
             </button>
             <input
               ref={scheduleDateInputRef}
@@ -2184,7 +2338,7 @@ export default function AdminDashboard() {
             {scheduleFocusDate && (
               <button
                 onClick={() => setScheduleFocusDate('')}
-                className="text-xs text-gray-400 hover:text-gray-600 px-2 py-1.5 border rounded-lg hover:bg-gray-50"
+                className="text-xs text-gray-400 hover:text-gray-600 px-1.5 md:px-2 py-1.5 md:py-2 border rounded-lg hover:bg-gray-50"
                 title="Clear focus date"
               >
                 ✕
@@ -2193,7 +2347,8 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        <div className="overflow-x-auto">
+        {/* Desktop Schedule View */}
+        <div className="hidden md:block overflow-x-auto">
           <div style={{ minWidth: '700px' }}>
             {/* Day headers */}
             <div className="flex border-b pb-2 mb-1">
@@ -2351,6 +2506,121 @@ export default function AdminDashboard() {
             </div>
           </div>
         </div>
+
+        {/* Mobile Schedule View - Simplified Day View */}
+        <div className="md:hidden space-y-2">
+          {/* Schedule filters */}
+          {cars.length > 0 && (
+            <div className="flex flex-col gap-2 py-2 pb-3 border-b mb-2">
+              <input
+                type="text"
+                placeholder="Filter by model, driver…"
+                value={scheduleSearchQuery}
+                onChange={e => setScheduleSearchQuery(e.target.value)}
+                className="input-field !py-2 !text-xs"
+              />
+              <div className="flex gap-1.5">
+                <select
+                  value={scheduleFilterClass}
+                  onChange={e => setScheduleFilterClass(e.target.value)}
+                  className="input-field !py-2 !text-xs flex-1"
+                >
+                  <option value="">All Classes</option>
+                  {carClasses.map(cls => (
+                    <option key={cls} value={cls}>{cls}</option>
+                  ))}
+                </select>
+                <select
+                  value={scheduleFilterStatus}
+                  onChange={e => setScheduleFilterStatus(e.target.value as 'all' | 'active' | 'inactive')}
+                  className="input-field !py-2 !text-xs flex-1"
+                >
+                  <option value="all">All</option>
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                </select>
+              </div>
+              {hasActiveScheduleFilters && (
+                <button
+                  onClick={() => { setScheduleSearchQuery(''); setScheduleFilterStatus('all'); setScheduleFilterClass('') }}
+                  className="px-2 py-1.5 text-xs text-gray-400 hover:text-gray-600 border rounded-lg hover:bg-gray-50 text-center"
+                >
+                  Clear Filters
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Cars list - Mobile card view */}
+          {cars.length === 0 ? (
+            <p className="text-gray-500 text-sm py-4 text-center">No cars to display.</p>
+          ) : filteredScheduleCars.length === 0 ? (
+            <p className="text-gray-500 text-sm py-4 text-center">No cars match the filters.</p>
+          ) : (
+            filteredScheduleCars.map((car) => {
+              const carAssignments = vehicleAssignments.filter(a => a.car_id === car.id)
+              const weekAssignments = carAssignments.filter(a => {
+                const aStart = new Date(a.start_datetime)
+                const aEnd = new Date(a.end_datetime)
+                return aEnd > scheduleWeekStart && aStart < scheduleWeekEnd
+              })
+              return (
+                <div key={car.id} className="rounded-lg border border-gray-200 bg-white overflow-hidden shadow-sm">
+                  {/* Card Header */}
+                  <div className="bg-gradient-to-r from-gray-900 to-gray-800 text-white p-3">
+                    <p className="font-semibold text-sm">{car.model_name}</p>
+                    <p className="text-xs text-gray-300 mt-0.5">{car.driver_name} • {car.number_plate}</p>
+                    {!car.is_active && <p className="text-xs text-red-300 mt-1">● Inactive</p>}
+                  </div>
+
+                  {/* Week's assignments */}
+                  <div className="p-3">
+                    {weekAssignments.length > 0 ? (
+                      <div className="space-y-2">
+                        <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">This Week's Schedule</p>
+                        {weekAssignments.map((assignment) => {
+                          const booking = bookings.find(b => b.booking_id === assignment.booking_id)
+                          const startDate = new Date(assignment.start_datetime).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
+                          const startTime = new Date(assignment.start_datetime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false })
+                          const endTime = new Date(assignment.end_datetime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false })
+                          const typeColor = booking?.booking_type === 'airport' ? 'bg-blue-100 text-blue-800' :
+                                           booking?.booking_type === 'tour' ? 'bg-emerald-100 text-emerald-800' :
+                                           'bg-purple-100 text-purple-800'
+                          return (
+                            <button
+                              key={assignment.id}
+                              onClick={() => setSelectedScheduleAssignment({ assignment, booking, car })}
+                              className="w-full text-left p-2 rounded border border-gray-200 hover:bg-gray-50 active:bg-gray-100 transition-colors"
+                            >
+                              <div className="flex items-start gap-2">
+                                <div className={`px-2 py-0.5 rounded text-xs font-semibold ${typeColor} shrink-0 whitespace-nowrap`}>
+                                  {booking?.booking_type || 'booking'}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-xs font-medium text-gray-900 truncate">{booking?.user_name || assignment.booking_id}</p>
+                                  <p className="text-xs text-gray-500">{startDate} • {startTime}–{endTime}</p>
+                                </div>
+                              </div>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-gray-500 py-2 text-center">No bookings this week</p>
+                    )}
+                  </div>
+                </div>
+              )
+            })
+          )}
+
+          {/* Legend */}
+          <div className="flex gap-3 mt-3 pt-3 border-t text-xs text-gray-500 justify-center">
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded bg-blue-500 inline-block" /> Airport</span>
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded bg-emerald-500 inline-block" /> Tour</span>
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded bg-purple-500 inline-block" /> Hourly</span>
+          </div>
+        </div>
       </div>
 
       {/* Assignment detail popup */}
@@ -2437,11 +2707,11 @@ export default function AdminDashboard() {
   }
 
   const renderDestinations = () => (
-    <div className="space-y-8">
+    <div className="space-y-4 md:space-y-6 lg:space-y-8">
       {/* Add/Edit Destination Form */}
       {(showAddDestination || editingDestination) && (
-        <div className="bg-white rounded-lg shadow-lg p-8">
-          <h3 className="text-2xl font-bold mb-6">{editingDestination ? 'Edit Destination' : 'Add New Destination'}</h3>
+        <div className="bg-white rounded-lg shadow-lg p-4 md:p-8">
+          <h3 className="text-xl md:text-2xl font-bold mb-4 md:mb-6">{editingDestination ? 'Edit Destination' : 'Add New Destination'}</h3>
           <form onSubmit={editingDestination ? handleUpdateDestination : handleAddDestination} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <input
@@ -2515,11 +2785,11 @@ export default function AdminDashboard() {
       )}
 
       {/* Destinations List */}
-      <div className="bg-white rounded-lg shadow-lg p-8">
-        <div className="flex justify-between items-center mb-6">
-          <h3 className="text-2xl font-bold">Manage Destinations</h3>
+      <div className="bg-white rounded-lg shadow-lg p-4 md:p-8">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 md:gap-4 mb-4 md:mb-6">
+          <h3 className="text-xl md:text-2xl font-bold">Manage Destinations</h3>
           {!showAddDestination && !editingDestination && (
-            <button onClick={() => setShowAddDestination(true)} className="btn-primary">
+            <button onClick={() => setShowAddDestination(true)} className="btn-primary text-sm md:text-base">
               Add New Destination
             </button>
           )}
@@ -2530,56 +2800,94 @@ export default function AdminDashboard() {
         ) : destinations.length === 0 ? (
           <p className="text-gray-600">No destinations available. Add a new destination to get started.</p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b">
-                  <th className="text-left py-3 px-4 font-semibold">Name</th>
-                  <th className="text-left py-3 px-4 font-semibold">Distance (KM)</th>
-                  <th className="text-left py-3 px-4 font-semibold">Estimated Duration</th>
-                  <th className="text-left py-3 px-4 font-semibold">Description</th>
-                  <th className="text-left py-3 px-4 font-semibold">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {destinations.map((destination) => (
-                  <tr key={destination.id} className="border-b hover:bg-gray-50">
-                    <td className="py-3 px-4 font-semibold">{destination.name}</td>
-                    <td className="py-3 px-4">{destination.distance_km}</td>
-                    <td className="py-3 px-4">{formatDurationMinutes(destination.estimated_duration_minutes)}</td>
-                    <td className="py-3 px-4">{destination.description || '-'}</td>
-                    <td className="py-3 px-4">
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => startEditDestination(destination)}
-                          className="text-sm text-secondary-500 hover:text-secondary-600"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => handleDeleteDestination(destination.id)}
-                          className="text-sm text-red-500 hover:text-red-600"
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </td>
+          <>
+            {/* Desktop Table View */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b">
+                    <th className="text-left py-3 px-4 font-semibold">Name</th>
+                    <th className="text-left py-3 px-4 font-semibold">Distance (KM)</th>
+                    <th className="text-left py-3 px-4 font-semibold">Estimated Duration</th>
+                    <th className="text-left py-3 px-4 font-semibold">Description</th>
+                    <th className="text-left py-3 px-4 font-semibold">Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {destinations.map((destination) => (
+                    <tr key={destination.id} className="border-b hover:bg-gray-50">
+                      <td className="py-3 px-4 font-semibold">{destination.name}</td>
+                      <td className="py-3 px-4">{destination.distance_km}</td>
+                      <td className="py-3 px-4">{formatDurationMinutes(destination.estimated_duration_minutes)}</td>
+                      <td className="py-3 px-4">{destination.description || '-'}</td>
+                      <td className="py-3 px-4">
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => startEditDestination(destination)}
+                            className="text-sm text-secondary-500 hover:text-secondary-600"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleDeleteDestination(destination.id)}
+                            className="text-sm text-red-500 hover:text-red-600"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile Card View */}
+            <div className="md:hidden grid grid-cols-1 gap-3">
+              {destinations.map((destination) => (
+                <div key={destination.id} className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm hover:shadow-md transition-shadow">
+                  <div className="flex items-start justify-between gap-3 mb-3">
+                    <div className="flex-1">
+                      <h4 className="font-semibold text-base text-gray-900">{destination.name}</h4>
+                      <p className="text-xs text-gray-500 mt-1">
+                        {destination.distance_km} km • {formatDurationMinutes(destination.estimated_duration_minutes)}
+                      </p>
+                    </div>
+                  </div>
+                  
+                  {destination.description && (
+                    <p className="text-sm text-gray-600 mb-4 line-clamp-2">{destination.description}</p>
+                  )}
+                  
+                  <div className="pt-3 border-t border-gray-100 flex gap-2">
+                    <button
+                      onClick={() => startEditDestination(destination)}
+                      className="flex-1 py-2 text-sm font-medium text-secondary-600 hover:bg-secondary-50 rounded active:bg-secondary-100 transition-colors"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => handleDeleteDestination(destination.id)}
+                      className="flex-1 py-2 text-sm font-medium text-red-600 hover:bg-red-50 rounded active:bg-red-100 transition-colors"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
         )}
       </div>
     </div>
   )
 
   const renderTours = () => (
-    <div className="space-y-8">
+    <div className="space-y-4 md:space-y-6 lg:space-y-8">
       {/* Add/Edit Tour Form */}
       {(showAddTour || editingTour) && (
-        <div className="bg-white rounded-lg shadow-lg p-8">
-          <h3 className="text-2xl font-bold mb-6">{editingTour ? 'Edit Tour' : 'Add New Tour'}</h3>
+        <div className="bg-white rounded-lg shadow-lg p-4 md:p-8">
+          <h3 className="text-xl md:text-2xl font-bold mb-4 md:mb-6">{editingTour ? 'Edit Tour' : 'Add New Tour'}</h3>
           <form onSubmit={editingTour ? handleUpdateTour : handleAddTour} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <input
@@ -2676,11 +2984,11 @@ export default function AdminDashboard() {
       )}
 
       {/* Tours List */}
-      <div className="bg-white rounded-lg shadow-lg p-8">
-        <div className="flex justify-between items-center mb-6">
-          <h3 className="text-2xl font-bold">Manage Tours</h3>
+      <div className="bg-white rounded-lg shadow-lg p-4 md:p-8">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 md:gap-4 mb-4 md:mb-6">
+          <h3 className="text-xl md:text-2xl font-bold">Manage Tours</h3>
           {!showAddTour && !editingTour && (
-            <button onClick={() => setShowAddTour(true)} className="btn-primary">
+            <button onClick={() => setShowAddTour(true)} className="btn-primary text-sm md:text-base">
               Add New Tour
             </button>
           )}
@@ -2691,56 +2999,127 @@ export default function AdminDashboard() {
         ) : tours.length === 0 ? (
           <p className="text-gray-600">No tours available. Add a new tour to get started.</p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b">
-                  <th className="text-left py-3 px-4 font-semibold">Name</th>
-                  <th className="text-left py-3 px-4 font-semibold">Price</th>
-                  <th className="text-left py-3 px-4 font-semibold">Arrival Time</th>
-                  <th className="text-left py-3 px-4 font-semibold">Duration</th>
-                  <th className="text-left py-3 px-4 font-semibold">Max Pax</th>
-                  <th className="text-left py-3 px-4 font-semibold">Car Model</th>
-                  <th className="text-left py-3 px-4 font-semibold">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {tours.map((tour) => (
-                  <tr key={tour.id} className="border-b hover:bg-gray-50">
-                    <td className="py-3 px-4 font-semibold">{tour.name}</td>
-                    <td className="py-3 px-4">Rs. {toNum(tour.price).toFixed(2)}</td>
-                    <td className="py-3 px-4 text-sm">
-                      {tour.arrival_time
-                        ? new Date(tour.arrival_time).toLocaleString('en-IN', {
-                            day: 'numeric', month: 'short', year: 'numeric',
-                            hour: '2-digit', minute: '2-digit', hour12: false,
-                          })
-                        : '-'}
-                    </td>
-                    <td className="py-3 px-4">{tour.duration_hours ? `${tour.duration_hours}h` : '-'}</td>
-                    <td className="py-3 px-4">{tour.max_passengers || '-'}</td>
-                    <td className="py-3 px-4">{tour.car_model || '-'}</td>
-                    <td className="py-3 px-4">
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => startEditTour(tour)}
-                          className="text-sm text-secondary-500 hover:text-secondary-600"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => handleDeleteTour(tour.id)}
-                          className="text-sm text-red-500 hover:text-red-600"
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </td>
+          <>
+            {/* Desktop Table View */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b">
+                    <th className="text-left py-3 px-4 font-semibold">Name</th>
+                    <th className="text-left py-3 px-4 font-semibold">Price</th>
+                    <th className="text-left py-3 px-4 font-semibold">Arrival Time</th>
+                    <th className="text-left py-3 px-4 font-semibold">Duration</th>
+                    <th className="text-left py-3 px-4 font-semibold">Max Pax</th>
+                    <th className="text-left py-3 px-4 font-semibold">Car Model</th>
+                    <th className="text-left py-3 px-4 font-semibold">Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {tours.map((tour) => (
+                    <tr key={tour.id} className="border-b hover:bg-gray-50">
+                      <td className="py-3 px-4 font-semibold">{tour.name}</td>
+                      <td className="py-3 px-4">Rs. {toNum(tour.price).toFixed(2)}</td>
+                      <td className="py-3 px-4 text-sm">
+                        {tour.arrival_time
+                          ? new Date(tour.arrival_time).toLocaleString('en-IN', {
+                              day: 'numeric', month: 'short', year: 'numeric',
+                              hour: '2-digit', minute: '2-digit', hour12: false,
+                            })
+                          : '-'}
+                      </td>
+                      <td className="py-3 px-4">{tour.duration_hours ? `${tour.duration_hours}h` : '-'}</td>
+                      <td className="py-3 px-4">{tour.max_passengers || '-'}</td>
+                      <td className="py-3 px-4">{tour.car_model || '-'}</td>
+                      <td className="py-3 px-4">
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => startEditTour(tour)}
+                            className="text-sm text-secondary-500 hover:text-secondary-600"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleDeleteTour(tour.id)}
+                            className="text-sm text-red-500 hover:text-red-600"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile Card View */}
+            <div className="md:hidden grid grid-cols-1 gap-3">
+              {tours.map((tour) => (
+                <div key={tour.id} className="rounded-lg border border-gray-200 bg-white overflow-hidden shadow-sm hover:shadow-md transition-shadow">
+                  {/* Card Image/Header */}
+                  <div className="bg-gradient-to-r from-secondary-500 to-secondary-600 p-4 text-white">
+                    <h4 className="font-semibold text-base line-clamp-2">{tour.name}</h4>
+                    <p className="text-2xl font-bold mt-2">Rs. {toNum(tour.price).toLocaleString('en-IN')}</p>
+                  </div>
+
+                  {/* Card Body */}
+                  <div className="p-4 space-y-3">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Arrival Time</p>
+                        <p className="text-sm text-gray-900">
+                          {tour.arrival_time
+                            ? new Date(tour.arrival_time).toLocaleString('en-IN', {
+                                day: 'numeric', month: 'short',
+                                hour: '2-digit', minute: '2-digit', hour12: false,
+                              })
+                            : '-'}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Duration</p>
+                        <p className="text-sm text-gray-900">{tour.duration_hours ? `${tour.duration_hours} hrs` : '-'}</p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Max Passengers</p>
+                        <p className="text-sm text-gray-900">{tour.max_passengers || '-'}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Car Model</p>
+                        <p className="text-sm text-gray-900">{tour.car_model || '-'}</p>
+                      </div>
+                    </div>
+
+                    {tour.description && (
+                      <div className="pt-2 border-t border-gray-100">
+                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Description</p>
+                        <p className="text-sm text-gray-600 line-clamp-2">{tour.description}</p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Card Actions */}
+                  <div className="px-4 py-3 border-t border-gray-100 flex gap-2 bg-gray-50">
+                    <button
+                      onClick={() => startEditTour(tour)}
+                      className="flex-1 py-2 text-sm font-medium text-secondary-600 hover:bg-secondary-50 rounded active:bg-secondary-100 transition-colors"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => handleDeleteTour(tour.id)}
+                      className="flex-1 py-2 text-sm font-medium text-red-600 hover:bg-red-50 rounded active:bg-red-100 transition-colors"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
         )}
       </div>
     </div>
@@ -2842,31 +3221,45 @@ export default function AdminDashboard() {
   }
 
   const renderMisc = () => (
-    <div className="space-y-6">
-      <div className="bg-white rounded-lg shadow-lg p-6">
-        <h2 className="text-xl font-bold mb-1">Settings</h2>
-        <p className="text-sm text-gray-500 mb-6">Admin panel configuration and utilities</p>
+    <div className="space-y-4 md:space-y-6">
+      <div className="bg-white rounded-lg shadow-lg p-4 md:p-6">
+        <h2 className="text-lg md:text-xl font-bold mb-1">Settings</h2>
+        <p className="text-xs md:text-sm text-gray-500 mb-4 md:mb-6">Admin panel configuration and utilities</p>
 
-        <div className="space-y-3">
+        <div className="space-y-2 md:space-y-3">
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-widest">Appearance</p>
 
-          <div className="flex items-center justify-between px-4 py-4 rounded-lg border border-gray-200 hover:bg-gray-50 transition-smooth cursor-default">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-lg bg-gray-100 flex items-center justify-center text-lg select-none">
+          <div className="flex items-center justify-between gap-3 px-3 md:px-4 py-3 md:py-4 rounded-lg border border-gray-200 hover:bg-gray-50 transition-smooth cursor-default active:bg-gray-100">
+            <div className="flex items-center gap-2 md:gap-3 flex-1">
+              <div className="w-8 md:w-9 h-8 md:h-9 rounded-lg bg-gray-100 flex items-center justify-center text-base md:text-lg select-none shrink-0">
                 {darkMode ? '🌙' : '☀️'}
               </div>
-              <div>
-                <p className="font-semibold">Dark Mode</p>
-                <p className="text-sm text-gray-500">Switch admin panel to {darkMode ? 'light' : 'dark'} theme</p>
+              <div className="min-w-0">
+                <p className="font-semibold text-sm md:text-base">Dark Mode</p>
+                <p className="text-xs md:text-sm text-gray-500">Switch admin panel to {darkMode ? 'light' : 'dark'} theme</p>
               </div>
             </div>
             <button
               onClick={toggleDarkMode}
               aria-label={darkMode ? 'Disable dark mode' : 'Enable dark mode'}
-              className={`relative inline-flex items-center w-12 h-6 rounded-full transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-secondary-500 focus:ring-offset-2 shrink-0 ${darkMode ? 'bg-secondary-500' : 'bg-gray-300'}`}
+              className={`relative inline-flex items-center w-12 md:w-14 h-6 md:h-7 rounded-full transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-secondary-500 focus:ring-offset-2 shrink-0 ${darkMode ? 'bg-secondary-500' : 'bg-gray-300'}`}
             >
-              <span className={`inline-block w-5 h-5 bg-white rounded-full shadow transform transition-transform duration-300 ${darkMode ? 'translate-x-6' : 'translate-x-0.5'}`} />
+              <span className={`inline-block w-5 md:w-6 h-5 md:h-6 bg-white rounded-full shadow transform transition-transform duration-300 ${darkMode ? 'translate-x-6 md:translate-x-7' : 'translate-x-0.5'}`} />
             </button>
+          </div>
+
+          <div className="pt-2 md:pt-4 border-t border-gray-100">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3">About</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4 text-xs md:text-sm">
+              <div className="p-3 md:p-4 rounded-lg border border-gray-200 bg-gray-50">
+                <p className="text-gray-500 font-medium mb-1">Admin Panel Version</p>
+                <p className="font-semibold text-gray-900">v2.0</p>
+              </div>
+              <div className="p-3 md:p-4 rounded-lg border border-gray-200 bg-gray-50">
+                <p className="text-gray-500 font-medium mb-1">Last Updated</p>
+                <p className="font-semibold text-gray-900">{new Date().toLocaleDateString('en-IN')}</p>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -2874,122 +3267,122 @@ export default function AdminDashboard() {
   )
 
   const renderAnalytics = () => (
-    <div className="space-y-8">
+    <div className="space-y-6 md:space-y-8">
       {/* Key Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="card p-6 bg-gradient-to-br from-blue-50 to-blue-100">
-          <p className="text-gray-600 text-sm font-semibold mb-2">Total Revenue</p>
-          <p className="text-3xl font-bold text-blue-700">Rs. {analytics.totalRevenue.toLocaleString('en-IN')}</p>
-          <p className="text-xs text-gray-500 mt-2">All bookings combined</p>
+      <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6">
+        <div className="card p-4 md:p-6 bg-gradient-to-br from-blue-50 to-blue-100">
+          <p className="text-gray-600 text-xs md:text-sm font-semibold mb-2">Total Revenue</p>
+          <p className="text-xl md:text-3xl font-bold text-blue-700">Rs. {analytics.totalRevenue.toLocaleString('en-IN', { notation: 'compact', maximumFractionDigits: 1 })}</p>
+          <p className="text-xs text-gray-500 mt-1 md:mt-2">All bookings combined</p>
         </div>
 
-        <div className="card p-6 bg-gradient-to-br from-green-50 to-green-100">
-          <p className="text-gray-600 text-sm font-semibold mb-2">Completed Bookings</p>
-          <p className="text-3xl font-bold text-green-700">{analytics.completedBookings}</p>
-          <p className="text-xs text-gray-500 mt-2">Successfully delivered</p>
+        <div className="card p-4 md:p-6 bg-gradient-to-br from-green-50 to-green-100">
+          <p className="text-gray-600 text-xs md:text-sm font-semibold mb-2">Completed Bookings</p>
+          <p className="text-xl md:text-3xl font-bold text-green-700">{analytics.completedBookings}</p>
+          <p className="text-xs text-gray-500 mt-1 md:mt-2">Successfully delivered</p>
         </div>
 
-        <div className="card p-6 bg-gradient-to-br from-yellow-50 to-yellow-100">
-          <p className="text-gray-600 text-sm font-semibold mb-2">Avg Booking Value</p>
-          <p className="text-3xl font-bold text-yellow-700">Rs. {analytics.averageBookingValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</p>
-          <p className="text-xs text-gray-500 mt-2">Per booking average</p>
+        <div className="card p-4 md:p-6 bg-gradient-to-br from-yellow-50 to-yellow-100">
+          <p className="text-gray-600 text-xs md:text-sm font-semibold mb-2">Avg Booking Value</p>
+          <p className="text-xl md:text-3xl font-bold text-yellow-700">Rs. {analytics.averageBookingValue.toLocaleString('en-IN', { notation: 'compact', maximumFractionDigits: 1 })}</p>
+          <p className="text-xs text-gray-500 mt-1 md:mt-2">Per booking average</p>
         </div>
 
-        <div className="card p-6 bg-gradient-to-br from-purple-50 to-purple-100">
-          <p className="text-gray-600 text-sm font-semibold mb-2">Fleet Utilization</p>
-          <p className="text-3xl font-bold text-purple-700">{analytics.fleetUtilization.toFixed(1)}%</p>
-          <p className="text-xs text-gray-500 mt-2">Cars in active use</p>
+        <div className="card p-4 md:p-6 bg-gradient-to-br from-purple-50 to-purple-100">
+          <p className="text-gray-600 text-xs md:text-sm font-semibold mb-2">Fleet Utilization</p>
+          <p className="text-xl md:text-3xl font-bold text-purple-700">{analytics.fleetUtilization.toFixed(1)}%</p>
+          <p className="text-xs text-gray-500 mt-1 md:mt-2">Cars in active use</p>
         </div>
       </div>
 
       {/* Status Overview */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white rounded-lg shadow-lg p-6">
-          <h3 className="text-lg font-semibold mb-4">Booking Status</h3>
-          <div className="space-y-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
+        <div className="bg-white rounded-lg shadow-lg p-4 md:p-6">
+          <h3 className="text-base md:text-lg font-semibold mb-4">Booking Status</h3>
+          <div className="space-y-2 md:space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
-                <span className="text-sm text-gray-600">Pending</span>
+                <span className="text-xs md:text-sm text-gray-600">Pending</span>
               </div>
-              <span className="font-semibold">{analytics.pendingBookings}</span>
+              <span className="font-semibold text-sm md:text-base">{analytics.pendingBookings}</span>
             </div>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 rounded-full bg-green-500"></div>
-                <span className="text-sm text-gray-600">Completed</span>
+                <span className="text-xs md:text-sm text-gray-600">Completed</span>
               </div>
-              <span className="font-semibold">{analytics.completedBookings}</span>
+              <span className="font-semibold text-sm md:text-base">{analytics.completedBookings}</span>
             </div>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 rounded-full bg-red-500"></div>
-                <span className="text-sm text-gray-600">Cancelled</span>
+                <span className="text-xs md:text-sm text-gray-600">Cancelled</span>
               </div>
-              <span className="font-semibold">{analytics.cancelledBookings}</span>
+              <span className="font-semibold text-sm md:text-base">{analytics.cancelledBookings}</span>
             </div>
-            <hr className="my-3" />
-            <div className="flex items-center justify-between font-semibold">
+            <hr className="my-2 md:my-3" />
+            <div className="flex items-center justify-between font-semibold text-sm md:text-base">
               <span>Total</span>
               <span>{bookings.length}</span>
             </div>
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow-lg p-6">
-          <h3 className="text-lg font-semibold mb-4">Fleet Information</h3>
-          <div className="space-y-3">
+        <div className="bg-white rounded-lg shadow-lg p-4 md:p-6">
+          <h3 className="text-base md:text-lg font-semibold mb-4">Fleet Information</h3>
+          <div className="space-y-2 md:space-y-3">
             <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-600">Total Cars</span>
-              <span className="font-semibold">{cars.length}</span>
+              <span className="text-xs md:text-sm text-gray-600">Total Cars</span>
+              <span className="font-semibold text-sm md:text-base">{cars.length}</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-600">Available Destinations</span>
-              <span className="font-semibold">{destinations.length}</span>
+              <span className="text-xs md:text-sm text-gray-600">Destinations</span>
+              <span className="font-semibold text-sm md:text-base">{destinations.length}</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-600">Active Tours</span>
-              <span className="font-semibold">{tours.length}</span>
+              <span className="text-xs md:text-sm text-gray-600">Active Tours</span>
+              <span className="font-semibold text-sm md:text-base">{tours.length}</span>
             </div>
-            <hr className="my-3" />
+            <hr className="my-2 md:my-3" />
             <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-600">Total Services</span>
-              <span className="font-semibold">{cars.length + destinations.length + tours.length}</span>
+              <span className="text-xs md:text-sm text-gray-600">Total Services</span>
+              <span className="font-semibold text-sm md:text-base">{cars.length + destinations.length + tours.length}</span>
             </div>
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow-lg p-6">
-          <h3 className="text-lg font-semibold mb-4">Revenue Breakdown</h3>
-          <div className="space-y-3">
+        <div className="bg-white rounded-lg shadow-lg p-4 md:p-6">
+          <h3 className="text-base md:text-lg font-semibold mb-4">Revenue Breakdown</h3>
+          <div className="space-y-2 md:space-y-3">
             <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-600">Online Collected</span>
-              <span className="font-semibold">Rs. {analytics.totalPaid.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
+              <span className="text-xs md:text-sm text-gray-600">Online Collected</span>
+              <span className="font-semibold text-xs md:text-sm">Rs. {analytics.totalPaid.toLocaleString('en-IN', { notation: 'compact' })}</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-600">Cash Collected</span>
-              <span className="font-semibold">Rs. {analytics.totalCashCollected.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
+              <span className="text-xs md:text-sm text-gray-600">Cash Collected</span>
+              <span className="font-semibold text-xs md:text-sm">Rs. {analytics.totalCashCollected.toLocaleString('en-IN', { notation: 'compact' })}</span>
             </div>
-            <hr className="my-3" />
-            <div className="flex items-center justify-between font-semibold">
+            <hr className="my-2 md:my-3" />
+            <div className="flex items-center justify-between font-semibold text-xs md:text-sm">
               <span>Total Collected</span>
-              <span className="text-lg">Rs. {(analytics.totalPaid + analytics.totalCashCollected).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
+              <span className="md:text-base">Rs. {(analytics.totalPaid + analytics.totalCashCollected).toLocaleString('en-IN', { notation: 'compact' })}</span>
             </div>
           </div>
         </div>
       </div>
 
       {/* Weekly Booking Trend */}
-      <div className="bg-white rounded-lg shadow-lg p-8">
-        <h3 className="text-2xl font-bold mb-6">Weekly Booking Trend</h3>
+      <div className="bg-white rounded-lg shadow-lg p-4 md:p-8">
+        <h3 className="text-lg md:text-2xl font-bold mb-4 md:mb-6">Weekly Booking Trend</h3>
         <div className="overflow-x-auto">
           <div className="min-w-full">
-            <div className="grid grid-cols-7 gap-4">
+            <div className="grid grid-cols-7 gap-2 md:gap-4">
               {analytics.bookingTrend.map((day) => (
                 <div key={day.date} className="text-center">
-                  <div className="text-sm font-semibold text-gray-600 mb-2">{day.date}</div>
-                  <div className="bg-blue-100 rounded-lg p-4 mb-2">
-                    <div className="h-24 flex items-end justify-center gap-1">
+                  <div className="text-xs md:text-sm font-semibold text-gray-600 mb-1 md:mb-2">{day.date}</div>
+                  <div className="bg-blue-100 rounded-lg p-2 md:p-4 mb-1 md:mb-2">
+                    <div className="h-16 md:h-24 flex items-end justify-center gap-1">
                       <div
                         className="bg-secondary-500 rounded"
                         style={{
@@ -3000,8 +3393,8 @@ export default function AdminDashboard() {
                     </div>
                   </div>
                   <div className="text-xs text-gray-600">
-                    <p className="font-semibold">{day.bookings} bookings</p>
-                    <p>Rs. {day.revenue.toLocaleString('en-IN')}</p>
+                    <p className="font-semibold">{day.bookings}</p>
+                    <p className="text-gray-500">Rs. {(day.revenue / 1000).toFixed(0)}k</p>
                   </div>
                 </div>
               ))}
@@ -3011,48 +3404,48 @@ export default function AdminDashboard() {
       </div>
 
       {/* Top Destinations and Tours */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <div className="bg-white rounded-lg shadow-lg p-8">
-          <h3 className="text-2xl font-bold mb-6">Top Destinations</h3>
-          <div className="space-y-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-8">
+        <div className="bg-white rounded-lg shadow-lg p-4 md:p-8">
+          <h3 className="text-lg md:text-2xl font-bold mb-4 md:mb-6">Top Destinations</h3>
+          <div className="space-y-2 md:space-y-4">
             {analytics.topDestinations.length > 0 ? (
               analytics.topDestinations.map((dest, idx) => (
-                <div key={idx} className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-secondary-100 flex items-center justify-center text-sm font-semibold text-secondary-700">
+                <div key={idx} className="flex items-center justify-between p-2 md:p-3 border rounded-lg hover:bg-gray-50">
+                  <div className="flex items-center gap-2 md:gap-3 flex-1 min-w-0">
+                    <div className="w-6 md:w-8 h-6 md:h-8 rounded-full bg-secondary-100 flex items-center justify-center text-xs md:text-sm font-semibold text-secondary-700 shrink-0">
                       {idx + 1}
                     </div>
-                    <span className="font-semibold">{dest.name}</span>
+                    <span className="font-semibold text-sm md:text-base truncate">{dest.name}</span>
                   </div>
-                  <div className="text-right">
-                    <p className="font-semibold text-secondary-600">{dest.bookings}</p>
+                  <div className="text-right shrink-0 ml-2">
+                    <p className="font-semibold text-secondary-600 text-xs md:text-base">{dest.bookings}</p>
                     <p className="text-xs text-gray-500">bookings</p>
                   </div>
                 </div>
               ))
             ) : (
-              <p className="text-gray-500 text-center py-4">No destination data available</p>
+              <p className="text-gray-500 text-center py-4 text-sm">No destination data available</p>
             )}
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow-lg p-8">
-          <h3 className="text-2xl font-bold mb-6">Top Tours</h3>
-          <div className="space-y-4">
+        <div className="bg-white rounded-lg shadow-lg p-4 md:p-8">
+          <h3 className="text-lg md:text-2xl font-bold mb-4 md:mb-6">Top Tours</h3>
+          <div className="space-y-2 md:space-y-4">
             {analytics.topTours.length > 0 ? (
               analytics.topTours.map((tour, idx) => (
-                <div key={idx} className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center text-sm font-semibold text-green-700">
+                <div key={idx} className="flex items-center justify-between p-2 md:p-3 border rounded-lg hover:bg-gray-50">
+                  <div className="flex items-center gap-2 md:gap-3 flex-1 min-w-0">
+                    <div className="w-6 md:w-8 h-6 md:h-8 rounded-full bg-green-100 flex items-center justify-center text-xs md:text-sm font-semibold text-green-700 shrink-0">
                       {idx + 1}
                     </div>
-                    <div>
-                      <p className="font-semibold">{tour.name}</p>
-                      <p className="text-xs text-gray-500">{tour.bookings} bookings</p>
+                    <div className="min-w-0">
+                      <p className="font-semibold text-sm md:text-base truncate">{tour.name}</p>
+                      <p className="text-xs text-gray-500 truncate">{tour.bookings} bookings</p>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <p className="font-semibold text-green-600">Rs. {tour.revenue.toLocaleString('en-IN')}</p>
+                  <div className="text-right shrink-0 ml-2">
+                    <p className="font-semibold text-green-600 text-xs md:text-base">Rs. {(tour.revenue / 1000).toFixed(0)}k</p>
                     <p className="text-xs text-gray-500">revenue</p>
                   </div>
                 </div>
@@ -3067,7 +3460,8 @@ export default function AdminDashboard() {
   )
 
   return (
-    <div className="scrollbar-thin-modern flex h-[100dvh] flex-col overflow-y-auto overflow-x-hidden" data-admin-theme={darkMode ? 'dark' : 'light'}>
+    <ProtectedAdminPage>
+      <div className="scrollbar-thin-modern flex h-[100dvh] flex-col overflow-y-auto overflow-x-hidden" data-admin-theme={darkMode ? 'dark' : 'light'}>
       {/* Admin Panel Header */}
       <header className="sticky top-0 z-50 bg-primary-950 text-white shadow-lg">
         <div className="container mx-auto px-4">
@@ -3075,25 +3469,34 @@ export default function AdminDashboard() {
             <div className="flex items-center gap-3">
               <span className="text-3xl">🛡️</span>
               <div>
-                <h2 className="text-sm font-semibold text-secondary-500">Admin Panel</h2>
-                <p className="text-xl font-bold">Hello! Yami</p>
+                
+                <h2 className="text-xl font-bold">Hello! Admin</h2>
+                {adminEmail && <p className="text-xs text-gray-300">Logged in as: {adminEmail}</p>}
               </div>
             </div>
+            <button
+              onClick={handleAdminLogout}
+              className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition font-semibold"
+              title="Logout from Admin Panel"
+            >
+              <LogOut size={18} />
+              <span className="hidden sm:inline">Logout</span>
+            </button>
           </div>
         </div>
       </header>
 
-      <main className="flex-1 py-4 md:py-12 bg-gray-50">
-        <div className="container mx-auto px-3 md:px-4">
-          <div className="flex items-center justify-between mb-4 md:mb-8 gap-3">
-            <h1 className="text-xl md:text-4xl font-bold">Dashboard</h1>
-            <button onClick={loadBookings} className="btn-secondary text-sm px-3 py-2 md:px-4 md:py-2">
+      <main className="flex-1 py-3 md:py-4 lg:py-12 bg-gray-50">
+        <div className="container mx-auto px-3 md:px-4 lg:px-6">
+          <div className="flex items-center justify-between mb-3 md:mb-4 lg:mb-8 gap-3">
+            <h1 className="text-lg md:text-3xl lg:text-4xl font-bold">Dashboard</h1>
+            <button onClick={loadBookings} className="btn-secondary text-xs md:text-sm px-2.5 md:px-4 py-1.5 md:py-2">
               Refresh
             </button>
           </div>
 
-          {/* Tab bar — scrollable on mobile */}
-          <div className={`sticky top-[72px] md:top-[88px] z-40 flex overflow-x-auto gap-2 mb-4 md:mb-8 rounded-lg border backdrop-blur-sm shadow-[0_12px_30px_rgba(15,23,42,0.14)] p-3 md:p-4 scrollbar-hide ${
+          {/* Tab bar — responsive wrapping on mobile, no scroll needed */}
+          <div className={`sticky top-[60px] md:top-[72px] z-40 flex flex-wrap gap-1 md:gap-2 mb-4 md:mb-6 lg:mb-8 rounded-lg border backdrop-blur-sm shadow-[0_12px_30px_rgba(15,23,42,0.14)] p-2 md:p-3 lg:p-4 ${
             darkMode
               ? 'border-primary-700/70 bg-primary-900/92'
               : 'border-gray-200/80 bg-white/95'
@@ -3110,9 +3513,11 @@ export default function AdminDashboard() {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`shrink-0 px-4 py-2 md:px-6 md:py-3 rounded-lg font-semibold transition-smooth text-sm md:text-base ${
+                className={`px-2 sm:px-3 md:px-5 lg:px-6 py-1.5 sm:py-2 md:py-2.5 lg:py-3 rounded-lg font-semibold transition-smooth text-xs sm:text-sm md:text-base whitespace-nowrap ${
                   activeTab === tab.id
                     ? 'bg-secondary-500 text-primary-950'
+                    : darkMode
+                    ? 'text-gray-300 hover:bg-primary-800'
                     : 'text-gray-700 hover:bg-gray-100'
                 }`}
               >
@@ -3134,7 +3539,7 @@ export default function AdminDashboard() {
       {/* Cash Collection Modal */}
       {showCashCollectionModal && selectedPaymentForCash && selectedBookingForCash && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto mx-3 sm:mx-auto">
             {/* Modal Header */}
             <div className="sticky top-0 bg-white border-b p-6 flex items-center justify-between">
               <div>
@@ -3756,6 +4161,7 @@ export default function AdminDashboard() {
         </div>
       )}
 
-    </div>
+      </div>
+    </ProtectedAdminPage>
   )
 }

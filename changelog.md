@@ -9,6 +9,7 @@ All notable changes to TaxiHollongi will be documented in this file.
 **Author:** Yami
 
 ### Changes
+- fix: homescreen button link
 - update: footer pages
 - fix: Form input text color correction
 - fix: Landing animation

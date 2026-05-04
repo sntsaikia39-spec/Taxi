@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { Toaster } from 'react-hot-toast'
 import { AuthProvider } from '@/context/AuthContext'
+import { AdminProvider } from '@/context/AdminContext'
 import RouteScrollUnlocker from '@/components/RouteScrollUnlocker'
 import AppSplashLoader from '@/components/AppSplashLoader'
 import './globals.css'
@@ -35,10 +36,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body>
         <AuthProvider>
-          <AppSplashLoader />
-          <RouteScrollUnlocker />
-          <Toaster position="top-center" />
-          {children}
+          <AdminProvider>
+            <AppSplashLoader />
+            <RouteScrollUnlocker />
+            <Toaster position="top-center" />
+            {children}
+          </AdminProvider>
         </AuthProvider>
       </body>
     </html>
