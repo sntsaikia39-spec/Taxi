@@ -105,18 +105,18 @@ export default function Home() {
         gsap.set('.hero-img-main', { transformPerspective: 1200, rotateY: -8, rotateX: 2, z: 0 })
         gsap.set('.hero-img-back', { transformPerspective: 1200, rotateY: -16, rotateX: 4, x: 36, y: 22, z: -50 })
         
-        // Initially hide all hero and stats elements
-        gsap.set('.hero-badge, .hero-line, .hero-btns > *, .hero-sub, .hero-mini-stat, .hero-img-back, .hero-img-main, .hero-float-1, .hero-float-2, .stat-item', { opacity: 0 })
+        // Initially hide all hero and stats elements and disable interaction
+        gsap.set('.hero-badge, .hero-line, .hero-btns > *, .hero-sub, .hero-mini-stat, .hero-img-back, .hero-img-main, .hero-float-1, .hero-float-2, .stat-item', { opacity: 0, pointerEvents: 'none' })
 
         // Hero entrance — animate TO visible state
         const tl = gsap.timeline({ delay: 0.08 })
         tl
           .to('.hero-badge', { y: 0, opacity: 1, duration: 0.5, ease: 'back.out(1.7)' }, 0)
           .to('.hero-line', { y: 0, opacity: 1, stagger: 0.1, duration: 0.62, ease: 'power3.out' }, 0.28)
-          .to('.hero-btns > *', { y: 0, opacity: 1, stagger: 0.1, duration: 0.38, ease: 'power2.out' }, 0.4)
+          .to('.hero-btns > *', { y: 0, opacity: 1, pointerEvents: 'auto', stagger: 0.1, duration: 0.38, ease: 'power2.out' }, 0.4)
           .to('.hero-sub', { y: 0, opacity: 1, duration: 0.36, ease: 'power2.out' }, 0.58)
-          .to('.hero-mini-stat', { y: 0, opacity: 1, stagger: 0.06, duration: 0.3, ease: 'power2.out' }, 0.7)
-          .to('.hero-img-back', { x: 0, opacity: 1, duration: 0.75, ease: 'power3.out' }, 0.38)
+          .to('.hero-mini-stat', { y: 0, opacity: 1, pointerEvents: 'auto', stagger: 0.06, duration: 0.3, ease: 'power2.out' }, 0.7)
+          .to('.hero-img-back', { x: 0, opacity: 1, pointerEvents: 'auto', duration: 0.75, ease: 'power3.out' }, 0.38)
           .to('.hero-img-main', { x: 0, opacity: 1, duration: 0.7, ease: 'power3.out' }, 0.52)
           .to('.hero-float-1', { y: 0, opacity: 1, duration: 0.5, ease: 'back.out(2)' }, 0.72)
           .to('.hero-float-2', { y: 0, opacity: 1, duration: 0.5, ease: 'back.out(2)' }, 0.84)

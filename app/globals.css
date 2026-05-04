@@ -149,6 +149,34 @@ html, body {
     opacity: 1;
   }
 
+  /* Admin table adjustments */
+  .admin-table th,
+  .admin-table td {
+    padding: 0.75rem 0.75rem;
+  }
+
+
+@media (max-width: 768px) {
+  /* Larger tap targets on mobile for admin actions */
+  .btn-primary, .btn-secondary {
+    padding-left: 1rem;
+    padding-right: 1rem;
+    padding-top: 0.75rem;
+    padding-bottom: 0.75rem;
+    font-size: 0.95rem;
+  }
+
+  .input-field {
+    padding-top: 0.875rem;
+    padding-bottom: 0.875rem;
+  }
+
+  /* Ensure admin tables are scrollable and readable on small screens */
+  .admin-table th, .admin-table td {
+    padding: 0.9rem 0.75rem;
+    font-size: 0.95rem;
+  }
+}
   .scrollbar-hide {
     -ms-overflow-style: none;
     scrollbar-width: none;

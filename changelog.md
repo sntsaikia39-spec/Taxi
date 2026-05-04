@@ -9,6 +9,9 @@ All notable changes to TaxiHollongi will be documented in this file.
 **Author:** Yami
 
 ### Changes
+- update: footer pages
+- fix: Form input text color correction
+- fix: Landing animation
 - update: Splash and Landing animation
 
 ## [2026-05-03]
