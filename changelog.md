@@ -4,6 +4,15 @@ All notable changes to TaxiHollongi will be documented in this file.
 
 ---
 
+## [2026-05-05]
+
+**Author:** Yami
+
+### Changes
+- UpdateL Admin CRU
+- Update: Admin adds new Admin
+- update: Admin Panel - Destinations
+
 ## [2026-05-04]
 
 **Author:** Yami

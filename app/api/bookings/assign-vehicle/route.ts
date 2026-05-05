@@ -1,6 +1,21 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { isValidEmail, sendAdminDriverEmailAlert, sendDriverAssignment, sendVehicleAssignment } from '@/lib/resend-notifications'
 
+// Helper function to get current time in IST format
+function getCurrentTimeIST(): string {
+  const now = new Date()
+  const istTime = new Date(now.getTime() + 5.5 * 60 * 60 * 1000) // Add 5:30 hours for IST
+
+  const year = istTime.getUTCFullYear()
+  const month = String(istTime.getUTCMonth() + 1).padStart(2, '0')
+  const day = String(istTime.getUTCDate()).padStart(2, '0')
+  const hour = String(istTime.getUTCHours()).padStart(2, '0')
+  const minute = String(istTime.getUTCMinutes()).padStart(2, '0')
+  const second = String(istTime.getUTCSeconds()).padStart(2, '0')
+
+  return `${year}-${month}-${day}T${hour}:${minute}:${second}+05:30`
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json()
@@ -52,6 +67,9 @@ export async function POST(request: Request) {
 
     console.log('✅ Booking and Car verified')
 
+    // Get current time in IST
+    const currentTimeIST = getCurrentTimeIST()
+
     // Create vehicle assignment record
     const { data: assignment, error: assignmentError } = await supabaseAdmin
       .from('vehicle_assignments')
@@ -61,7 +79,8 @@ export async function POST(request: Request) {
           car_id: car_id,
           start_datetime: start_datetime,
           end_datetime: end_datetime,
-          assigned_at: new Date().toISOString(),
+          assigned_at: currentTimeIST,
+          created_at: currentTimeIST,
         },
       ])
       .select()
