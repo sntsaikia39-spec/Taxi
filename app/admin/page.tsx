@@ -291,6 +291,14 @@ export default function AdminDashboard() {
     if (typeof window === 'undefined') return false
     return localStorage.getItem('adminDarkMode') === '1'
   })
+  const [showAddAdmin, setShowAddAdmin] = useState(false)
+  const [adminFormData, setAdminFormData] = useState({
+    email: '',
+    password: '',
+    confirmPassword: '',
+    full_name: '',
+  })
+  const [submittingAdmin, setSubmittingAdmin] = useState(false)
 
   useEffect(() => {
     document.documentElement.style.overflowY = 'auto'
@@ -3487,6 +3495,81 @@ export default function AdminDashboard() {
     }
   }, [bookings, payments, tours, cars, destinations])
 
+  const handleCreateAdmin = async () => {
+    // Validate form
+    if (!adminFormData.email || !adminFormData.password || !adminFormData.full_name) {
+      toast.error('Please fill in all required fields')
+      return
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(adminFormData.email)) {
+      toast.error('Please enter a valid email address')
+      return
+    }
+
+    // Validate password length
+    if (adminFormData.password.length < 8) {
+      toast.error('Password must be at least 8 characters long')
+      return
+    }
+
+    // Validate password match
+    if (adminFormData.password !== adminFormData.confirmPassword) {
+      toast.error('Passwords do not match')
+      return
+    }
+
+    setSubmittingAdmin(true)
+
+    try {
+      const token = localStorage.getItem('adminToken')
+      if (!token) {
+        toast.error('Not authenticated. Please log in again.')
+        setSubmittingAdmin(false)
+        return
+      }
+
+      const response = await fetch('/api/admin/create-admin', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          email: adminFormData.email,
+          password: adminFormData.password,
+          full_name: adminFormData.full_name,
+          role: 'admin',
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        toast.error(data.error || 'Failed to create admin account')
+        return
+      }
+
+      toast.success(`Admin account created successfully for ${data.admin.email}`)
+      
+      // Reset form
+      setAdminFormData({
+        email: '',
+        password: '',
+        confirmPassword: '',
+        full_name: '',
+      })
+      setShowAddAdmin(false)
+    } catch (error: any) {
+      console.error('Error creating admin:', error)
+      toast.error(error.message || 'Failed to create admin account')
+    } finally {
+      setSubmittingAdmin(false)
+    }
+  }
+
   const toggleDarkMode = () => {
     const next = !darkMode
     setDarkMode(next)
@@ -3536,6 +3619,122 @@ export default function AdminDashboard() {
           </div>
         </div>
       </div>
+
+      {/* Admin Management */}
+      <div className="bg-white rounded-lg shadow-lg p-4 md:p-6">
+        <h2 className="text-lg md:text-xl font-bold mb-1">Admin Management</h2>
+        <p className="text-xs md:text-sm text-gray-500 mb-4 md:mb-6">Create and manage admin accounts</p>
+
+        <button
+          onClick={() => setShowAddAdmin(true)}
+          className="w-full md:w-auto px-4 md:px-6 py-2.5 md:py-3 bg-gradient-to-r from-secondary-400 to-secondary-600 hover:from-secondary-500 hover:to-secondary-700 text-primary-950 font-semibold rounded-lg transition-smooth shadow-md text-sm md:text-base"
+        >
+          + Add New Admin
+        </button>
+      </div>
+
+      {/* Add Admin Modal */}
+      {showAddAdmin && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto mx-3 sm:mx-auto">
+            {/* Modal Header */}
+            <div className="sticky top-0 bg-white border-b p-6 flex items-center justify-between">
+              <h2 className="text-2xl font-bold">Add New Admin</h2>
+              <button
+                onClick={() => setShowAddAdmin(false)}
+                disabled={submittingAdmin}
+                className="text-gray-500 hover:text-gray-700 text-2xl disabled:opacity-50"
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Full Name *</label>
+                <input
+                  type="text"
+                  placeholder="e.g., John Doe"
+                  value={adminFormData.full_name}
+                  onChange={(e) => setAdminFormData({ ...adminFormData, full_name: e.target.value })}
+                  disabled={submittingAdmin}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-secondary-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Email *</label>
+                <input
+                  type="email"
+                  placeholder="e.g., admin@example.com"
+                  value={adminFormData.email}
+                  onChange={(e) => setAdminFormData({ ...adminFormData, email: e.target.value })}
+                  disabled={submittingAdmin}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-secondary-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                />
+                <p className="text-xs text-gray-500 mt-1">Must be a valid email address</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Password *</label>
+                <input
+                  type="password"
+                  placeholder="Minimum 8 characters"
+                  value={adminFormData.password}
+                  onChange={(e) => setAdminFormData({ ...adminFormData, password: e.target.value })}
+                  disabled={submittingAdmin}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-secondary-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                />
+                <p className="text-xs text-gray-500 mt-1">Must be at least 8 characters long with a mix of letters, numbers, and symbols</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Confirm Password *</label>
+                <input
+                  type="password"
+                  placeholder="Re-enter password"
+                  value={adminFormData.confirmPassword}
+                  onChange={(e) => setAdminFormData({ ...adminFormData, confirmPassword: e.target.value })}
+                  disabled={submittingAdmin}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-secondary-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                />
+              </div>
+
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <p className="text-sm text-blue-900">
+                  <strong>Security Note:</strong> The new admin will be able to log in immediately with the provided email and password. Make sure to use a strong password.
+                </p>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="sticky bottom-0 bg-gray-50 border-t p-6 flex justify-end gap-3">
+              <button
+                onClick={() => setShowAddAdmin(false)}
+                disabled={submittingAdmin}
+                className="px-6 py-2.5 border border-gray-300 text-gray-700 font-semibold rounded-lg hover:bg-gray-100 transition-smooth disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateAdmin}
+                disabled={submittingAdmin}
+                className="px-6 py-2.5 bg-gradient-to-r from-secondary-400 to-secondary-600 hover:from-secondary-500 hover:to-secondary-700 text-primary-950 font-semibold rounded-lg transition-smooth disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {submittingAdmin ? (
+                  <>
+                    <span className="inline-block w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                    Creating...
+                  </>
+                ) : (
+                  'Create Admin'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 
