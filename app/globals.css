@@ -321,9 +321,13 @@ html, body {
 .app-splash__taxi-lottie {
   width: 100%;
   height: auto;
-  filter: drop-shadow(0 16px 20px rgba(0, 0, 0, 0.55));
+  filter: saturate(1.45) hue-rotate(2deg) brightness(1.14) contrast(1.08) drop-shadow(0 16px 20px rgba(0, 0, 0, 0.55));
   position: relative;
   z-index: 2;
+}
+
+.app-lottie-brand-yellow {
+  filter: saturate(1.45) hue-rotate(2deg) brightness(1.14) contrast(1.08);
 }
 
 .app-splash__trail {

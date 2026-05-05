@@ -376,6 +376,7 @@ export default function MyBookings() {
                 src="/assets/yellow taxi.lottie"
                 loop
                 autoplay
+                className="app-lottie-brand-yellow"
               />
             </div>
             <p className="text-gray-400 text-sm font-medium animate-pulse -mt-4 md:-mt-6">Loading your bookings...</p>
