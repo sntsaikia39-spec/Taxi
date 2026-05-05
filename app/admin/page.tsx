@@ -299,6 +299,15 @@ export default function AdminDashboard() {
     full_name: '',
   })
   const [submittingAdmin, setSubmittingAdmin] = useState(false)
+  const [showEditProfile, setShowEditProfile] = useState(false)
+  const [editProfileData, setEditProfileData] = useState({
+    full_name: adminFullName || '',
+    email: adminEmail || '',
+    currentPassword: '',
+    newPassword: '',
+    confirmNewPassword: '',
+  })
+  const [submittingProfile, setSubmittingProfile] = useState(false)
 
   useEffect(() => {
     document.documentElement.style.overflowY = 'auto'
@@ -3570,6 +3579,90 @@ export default function AdminDashboard() {
     }
   }
 
+  const handleUpdateProfile = async () => {
+    // Validate form
+    if (!editProfileData.full_name || !editProfileData.email) {
+      toast.error('Full name and email are required')
+      return
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(editProfileData.email)) {
+      toast.error('Please enter a valid email address')
+      return
+    }
+
+    // If changing password, validate
+    if (editProfileData.newPassword) {
+      if (!editProfileData.currentPassword) {
+        toast.error('Current password is required to change password')
+        return
+      }
+
+      if (editProfileData.newPassword.length < 8) {
+        toast.error('New password must be at least 8 characters long')
+        return
+      }
+
+      if (editProfileData.newPassword !== editProfileData.confirmNewPassword) {
+        toast.error('New passwords do not match')
+        return
+      }
+    }
+
+    setSubmittingProfile(true)
+
+    try {
+      const token = localStorage.getItem('adminToken')
+      if (!token) {
+        toast.error('Not authenticated. Please log in again.')
+        setSubmittingProfile(false)
+        return
+      }
+
+      const response = await fetch('/api/admin/update-profile', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          full_name: editProfileData.full_name,
+          email: editProfileData.email,
+          ...(editProfileData.newPassword && {
+            currentPassword: editProfileData.currentPassword,
+            newPassword: editProfileData.newPassword,
+          }),
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        toast.error(data.error || 'Failed to update profile')
+        return
+      }
+
+      toast.success('Profile updated successfully')
+      setShowEditProfile(false)
+
+      // Reset form
+      setEditProfileData({
+        full_name: data.admin.full_name || '',
+        email: data.admin.email || '',
+        currentPassword: '',
+        newPassword: '',
+        confirmNewPassword: '',
+      })
+    } catch (error: any) {
+      console.error('Error updating profile:', error)
+      toast.error(error.message || 'Failed to update profile')
+    } finally {
+      setSubmittingProfile(false)
+    }
+  }
+
   const toggleDarkMode = () => {
     const next = !darkMode
     setDarkMode(next)
@@ -3617,6 +3710,48 @@ export default function AdminDashboard() {
               </div>
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Profile Management */}
+      <div className="bg-white rounded-lg shadow-lg p-4 md:p-6">
+        <h2 className="text-lg md:text-xl font-bold mb-1">Your Profile</h2>
+        <p className="text-xs md:text-sm text-gray-500 mb-4 md:mb-6">Manage your account information</p>
+
+        <div className="space-y-3 md:space-y-4">
+          <div className="p-4 rounded-lg border border-gray-200 bg-gray-50">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3">Current Information</p>
+            <div className="space-y-3">
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="text-xs text-gray-600 font-medium">Full Name</p>
+                  <p className="text-sm md:text-base font-semibold text-gray-900">{adminFullName || '-'}</p>
+                </div>
+              </div>
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="text-xs text-gray-600 font-medium">Email</p>
+                  <p className="text-sm md:text-base font-semibold text-gray-900">{adminEmail || '-'}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <button
+            onClick={() => {
+              setEditProfileData({
+                full_name: adminFullName || '',
+                email: adminEmail || '',
+                currentPassword: '',
+                newPassword: '',
+                confirmNewPassword: '',
+              })
+              setShowEditProfile(true)
+            }}
+            className="w-full md:w-auto px-4 md:px-6 py-2.5 md:py-3 bg-gradient-to-r from-secondary-400 to-secondary-600 hover:from-secondary-500 hover:to-secondary-700 text-primary-950 font-semibold rounded-lg transition-smooth shadow-md text-sm md:text-base"
+          >
+            ✎ Edit Profile
+          </button>
         </div>
       </div>
 
@@ -3729,6 +3864,125 @@ export default function AdminDashboard() {
                   </>
                 ) : (
                   'Create Admin'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Profile Modal */}
+      {showEditProfile && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto mx-3 sm:mx-auto">
+            {/* Modal Header */}
+            <div className="sticky top-0 bg-white border-b p-6 flex items-center justify-between">
+              <h2 className="text-2xl font-bold">Edit Profile</h2>
+              <button
+                onClick={() => setShowEditProfile(false)}
+                disabled={submittingProfile}
+                className="text-gray-500 hover:text-gray-700 text-2xl disabled:opacity-50"
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Full Name *</label>
+                <input
+                  type="text"
+                  placeholder="Your full name"
+                  value={editProfileData.full_name}
+                  onChange={(e) => setEditProfileData({ ...editProfileData, full_name: e.target.value })}
+                  disabled={submittingProfile}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-secondary-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Email *</label>
+                <input
+                  type="email"
+                  placeholder="Your email address"
+                  value={editProfileData.email}
+                  onChange={(e) => setEditProfileData({ ...editProfileData, email: e.target.value })}
+                  disabled={submittingProfile}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-secondary-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                />
+              </div>
+
+              <div className="border-t border-gray-200 pt-4">
+                <p className="text-sm font-semibold text-gray-700 mb-4">Change Password (Optional)</p>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Current Password</label>
+                    <input
+                      type="password"
+                      placeholder="Enter current password"
+                      value={editProfileData.currentPassword}
+                      onChange={(e) => setEditProfileData({ ...editProfileData, currentPassword: e.target.value })}
+                      disabled={submittingProfile}
+                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-secondary-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">New Password</label>
+                    <input
+                      type="password"
+                      placeholder="Enter new password (min 8 characters)"
+                      value={editProfileData.newPassword}
+                      onChange={(e) => setEditProfileData({ ...editProfileData, newPassword: e.target.value })}
+                      disabled={submittingProfile}
+                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-secondary-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Confirm New Password</label>
+                    <input
+                      type="password"
+                      placeholder="Re-enter new password"
+                      value={editProfileData.confirmNewPassword}
+                      onChange={(e) => setEditProfileData({ ...editProfileData, confirmNewPassword: e.target.value })}
+                      disabled={submittingProfile}
+                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-secondary-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <p className="text-sm text-blue-900">
+                  <strong>Note:</strong> Leave password fields empty if you don&apos;t want to change your password.
+                </p>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="sticky bottom-0 bg-gray-50 border-t p-6 flex justify-end gap-3">
+              <button
+                onClick={() => setShowEditProfile(false)}
+                disabled={submittingProfile}
+                className="px-6 py-2.5 border border-gray-300 text-gray-700 font-semibold rounded-lg hover:bg-gray-100 transition-smooth disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleUpdateProfile}
+                disabled={submittingProfile}
+                className="px-6 py-2.5 bg-gradient-to-r from-secondary-400 to-secondary-600 hover:from-secondary-500 hover:to-secondary-700 text-primary-950 font-semibold rounded-lg transition-smooth disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {submittingProfile ? (
+                  <>
+                    <span className="inline-block w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                    Updating...
+                  </>
+                ) : (
+                  'Update Profile'
                 )}
               </button>
             </div>
