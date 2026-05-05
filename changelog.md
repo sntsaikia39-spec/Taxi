@@ -9,6 +9,7 @@ All notable changes to TaxiHollongi will be documented in this file.
 **Author:** Yami
 
 ### Changes
+- update: Admin Panel - Bookings
 - update: Admin tabs mobile resp. Admin Auth and session
 - fix: homescreen button link
 - update: footer pages

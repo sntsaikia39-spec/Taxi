@@ -840,7 +840,7 @@ export default function Home() {
                     {/* Image */}
                     <div className={`tour-img relative transition-all duration-500 ease-in-out overflow-hidden ${isExpanded ? 'h-[140px]' : 'h-[274.2px] md:h-[290px]'}`}>
                       <Image
-                        src={TOUR_IMAGES[index % TOUR_IMAGES.length]}
+                        src={tour.image_url || TOUR_IMAGES[index % TOUR_IMAGES.length]}
                         alt={tour.name}
                         fill
                         className="object-cover group-hover:scale-105 transition-transform duration-700"

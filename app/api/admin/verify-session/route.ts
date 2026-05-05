@@ -22,6 +22,7 @@ export async function GET(request: NextRequest) {
       {
         success: true,
         email: decoded.email,
+        full_name: decoded.full_name || null,
         id: decoded.id,
         role: decoded.role,
       },

@@ -260,7 +260,7 @@ export default function Tours() {
                     {/* Image */}
                     <div className={`relative transition-all duration-500 ease-in-out w-full overflow-hidden shrink-0 ${isExpanded ? 'h-[129px] md:h-[140px]' : 'h-[clamp(230px,35svh,254px)] md:h-[228px]'}`}>
                       <Image
-                        src={TOUR_IMAGES[index % TOUR_IMAGES.length]}
+                        src={tour.image_url || TOUR_IMAGES[index % TOUR_IMAGES.length]}
                         alt={tour.name}
                         fill
                         className="object-cover w-full h-full hover:scale-105 transition-transform duration-500"
@@ -279,12 +279,12 @@ export default function Tours() {
                     </div>
 
                     {/* Content Wrapper */}
-                    <div className="flex flex-col flex-1 overflow-hidden"> {/* flex-1 will automatically take up remaining height */}
+                    <div className="flex flex-col flex-1 overflow-hidden">
                       {/* Fixed-height middle content to avoid nested scroll on touch devices */}
-                      <div className={`flex-1 p-4 pb-2 transition-all duration-500 ${isExpanded ? 'overflow-y-auto' : 'overflow-hidden'}`}>
+                      <div className={`flex-1 p-4 pb-2 transition-all duration-500 scrollbar-hide ${isExpanded ? 'overflow-y-auto bg-primary-900/50' : 'overflow-hidden'}`}>
                         <h3 className="text-lg font-black text-white mb-1.5">{tour.name}</h3>
                         {tour.description && (
-                          <p className={`text-gray-400 mb-2.5 text-xs leading-relaxed ${isExpanded ? '' : 'line-clamp-2'}`}>{tour.description}</p>
+                          <p className={`text-gray-400 mb-2.5 text-xs leading-relaxed transition-all duration-500 ${isExpanded ? '' : 'line-clamp-2'}`}>{tour.description}</p>
                         )}
 
                         {/* Key Details */}
@@ -317,11 +317,11 @@ export default function Tours() {
 
                         {/* Highlights */}
                         {tour.highlights && tour.highlights.length > 0 && (
-                          <div className="mb-3">
-                            <h4 className="font-bold text-[10px] text-gray-500 uppercase tracking-wider mb-1.5">Includes</h4>
+                          <div className={`mb-3 transition-all duration-500 ${isExpanded ? 'mt-4' : ''}`}>
+                            <h4 className="font-bold text-[10px] text-gray-500 uppercase tracking-wider mb-1.5">{isExpanded ? 'Everything Included' : 'Includes'}</h4>
                             <ul className="text-xs text-gray-400 space-y-0.5">
-                              {tour.highlights.slice(0, 3).map((highlight, i) => (
-                                <li key={i} className="flex items-center gap-1.5">
+                              {(isExpanded ? tour.highlights : tour.highlights.slice(0, 3)).map((highlight, i) => (
+                                <li key={i} className={`flex items-center gap-1.5 ${isExpanded ? 'animate-in fade-in slide-in-from-left-2' : ''}`} style={{ animationDelay: isExpanded ? `${i * 50}ms` : '0ms' }}>
                                   <span className="text-secondary-500 font-bold text-sm leading-none">✓</span>
                                   {highlight}
                                 </li>
@@ -332,7 +332,8 @@ export default function Tours() {
 
                         {/* Itinerary Preview */}
                         {tour.itinerary && (
-                          <div className={`mb-1 bg-primary-950/50 border border-primary-800 rounded-xl px-3 py-2 text-xs text-gray-500 transition-all ${isExpanded ? '' : 'line-clamp-3'}`}>
+                          <div className={`mb-1 bg-primary-950/50 border border-primary-800 rounded-xl px-3 py-2 text-xs text-gray-500 transition-all duration-500 ${isExpanded ? 'animate-in fade-in slide-in-from-top-2 mt-4' : 'line-clamp-3'}`}>
+                            {isExpanded && <h4 className="font-bold text-[10px] text-gray-400 uppercase tracking-wider mb-2 border-b border-white/5 pb-1">Full Itinerary</h4>}
                             {tour.itinerary}
                           </div>
                         )}

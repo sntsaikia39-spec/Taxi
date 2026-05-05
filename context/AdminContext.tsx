@@ -5,6 +5,7 @@ import { createContext, useContext, useEffect, useState, ReactNode } from 'react
 interface AdminContextType {
   isAdmin: boolean
   adminEmail: string | null
+  adminFullName: string | null
   isLoading: boolean
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>
   logout: () => Promise<void>
@@ -15,6 +16,7 @@ const AdminContext = createContext<AdminContextType | undefined>(undefined)
 export function AdminProvider({ children }: { children: ReactNode }) {
   const [isAdmin, setIsAdmin] = useState(false)
   const [adminEmail, setAdminEmail] = useState<string | null>(null)
+  const [adminFullName, setAdminFullName] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
   // Check if admin is already logged in on mount
@@ -41,16 +43,19 @@ export function AdminProvider({ children }: { children: ReactNode }) {
         const data = await response.json()
         setIsAdmin(true)
         setAdminEmail(data.email)
+        setAdminFullName(data.full_name || null)
       } else {
         // Token is invalid, clear it
         localStorage.removeItem('adminToken')
         setIsAdmin(false)
         setAdminEmail(null)
+        setAdminFullName(null)
       }
     } catch (error) {
       console.error('Error checking admin session:', error)
       setIsAdmin(false)
       setAdminEmail(null)
+      setAdminFullName(null)
     } finally {
       setIsLoading(false)
     }
@@ -74,6 +79,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
       localStorage.setItem('adminToken', data.token)
       setIsAdmin(true)
       setAdminEmail(email)
+      setAdminFullName(data?.admin?.full_name || null)
 
       return { success: true }
     } catch (error: any) {
@@ -98,16 +104,18 @@ export function AdminProvider({ children }: { children: ReactNode }) {
       localStorage.removeItem('adminToken')
       setIsAdmin(false)
       setAdminEmail(null)
+      setAdminFullName(null)
     } catch (error) {
       console.error('Error logging out:', error)
       localStorage.removeItem('adminToken')
       setIsAdmin(false)
       setAdminEmail(null)
+      setAdminFullName(null)
     }
   }
 
   return (
-    <AdminContext.Provider value={{ isAdmin, adminEmail, isLoading, login, logout }}>
+    <AdminContext.Provider value={{ isAdmin, adminEmail, adminFullName, isLoading, login, logout }}>
       {children}
     </AdminContext.Provider>
   )

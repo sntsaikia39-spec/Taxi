@@ -2,6 +2,7 @@
 
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import toast from 'react-hot-toast'
+import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { useAdmin } from '@/context/AdminContext'
 import { ProtectedAdminPage } from '@/components/ProtectedAdminPage'
@@ -198,7 +199,7 @@ function findSimilarModels(input: string, candidates: string[]): string[] {
 
 export default function AdminDashboard() {
   const router = useRouter()
-  const { logout, adminEmail } = useAdmin()
+  const { logout, adminEmail, adminFullName } = useAdmin()
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const [activeTab, setActiveTab] = useState('overview')
   const [statusFilter, setStatusFilter] = useState('all')
@@ -217,6 +218,7 @@ export default function AdminDashboard() {
   const [loadingTours, setLoadingTours] = useState(true)
   const [expandedBookingId, setExpandedBookingId] = useState<string | null>(null)
   const [expandedCarId, setExpandedCarId] = useState<string | null>(null)
+  const [expandedTourId, setExpandedTourId] = useState<string | null>(null)
   const [scheduleWeekOffset, setScheduleWeekOffset] = useState(0)
   const [scheduleFocusDate, setScheduleFocusDate] = useState<string>('')
   const [selectedScheduleAssignment, setSelectedScheduleAssignment] = useState<{ assignment: VehicleAssignment; booking: Booking | undefined; car: Car } | null>(null)
@@ -267,6 +269,8 @@ export default function AdminDashboard() {
     highlights: '',
     image_url: '',
   })
+  const [tourImageUploading, setTourImageUploading] = useState(false)
+  const [tourImagePreview, setTourImagePreview] = useState<string>('')
   const [showCashCollectionModal, setShowCashCollectionModal] = useState(false)
   const [selectedPaymentForCash, setSelectedPaymentForCash] = useState<Payment | null>(null)
   const [selectedBookingForCash, setSelectedBookingForCash] = useState<Booking | null>(null)
@@ -502,6 +506,36 @@ export default function AdminDashboard() {
     }
   }
 
+  const handleTourImageUpload = async (file: File) => {
+    try {
+      setTourImageUploading(true)
+
+      const formData = new FormData()
+      formData.append('file', file)
+
+      const response = await fetch('/api/tours/upload-image', {
+        method: 'POST',
+        body: formData,
+      })
+
+      const result = await response.json()
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'Failed to upload image')
+      }
+
+      // Update tour data with the uploaded image URL
+      setTourData({ ...tourData, image_url: result.url })
+      setTourImagePreview(result.url)
+      toast.success('Image uploaded successfully!')
+    } catch (error) {
+      console.error('Error uploading image:', error)
+      toast.error(error instanceof Error ? error.message : 'Failed to upload image')
+    } finally {
+      setTourImageUploading(false)
+    }
+  }
+
   const handleAddTour = async (e: React.FormEvent) => {
     e.preventDefault()
 
@@ -540,6 +574,7 @@ export default function AdminDashboard() {
         highlights: '',
         image_url: '',
       })
+      setTourImagePreview('')
       setShowAddTour(false)
       loadTours()
     } catch (error) {
@@ -588,6 +623,7 @@ export default function AdminDashboard() {
         highlights: '',
         image_url: '',
       })
+      setTourImagePreview('')
       setEditingTour(null)
       loadTours()
     } catch (error) {
@@ -639,6 +675,7 @@ export default function AdminDashboard() {
       highlights: tour.highlights?.join(', ') || '',
       image_url: tour.image_url || '',
     })
+    setTourImagePreview(tour.image_url || '')
     setShowAddTour(false)
   }
 
@@ -656,6 +693,7 @@ export default function AdminDashboard() {
       highlights: '',
       image_url: '',
     })
+    setTourImagePreview('')
     setShowAddTour(false)
   }
 
@@ -3010,13 +3048,75 @@ export default function AdminDashboard() {
                 value={tourData.car_model}
                 onChange={(e) => setTourData({ ...tourData, car_model: e.target.value })}
               />
-              <input
-                type="text"
-                placeholder="Image URL"
-                className="input-field"
-                value={tourData.image_url}
-                onChange={(e) => setTourData({ ...tourData, image_url: e.target.value })}
-              />
+              {/* Image Upload Section */}
+              <div className="border rounded-lg p-4 bg-gray-50">
+                <label className="text-xs text-gray-600 font-semibold mb-3 block">Tour Image</label>
+                <div className="space-y-3">
+                  {/* Preview */}
+                  {tourImagePreview && (
+                    <div className="relative w-full h-48 bg-gray-200 rounded-lg overflow-hidden">
+                      <img
+                        src={tourImagePreview}
+                        alt="Tour preview"
+                        className="w-full h-full object-cover"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTourImagePreview('')
+                          setTourData({ ...tourData, image_url: '' })
+                        }}
+                        className="absolute top-2 right-2 bg-red-500 text-white rounded-full w-8 h-8 flex items-center justify-center hover:bg-red-600 transition-colors"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  )}
+                  {/* File Upload Input */}
+                  <div className="relative">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      disabled={tourImageUploading}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0]
+                        if (file) {
+                          handleTourImageUpload(file)
+                        }
+                      }}
+                      className="hidden"
+                      id="tour-image-upload"
+                    />
+                    <label
+                      htmlFor="tour-image-upload"
+                      className={`block w-full p-3 text-center border-2 border-dashed rounded-lg cursor-pointer transition-colors ${
+                        tourImageUploading
+                          ? 'bg-gray-100 border-gray-300 text-gray-400'
+                          : 'border-blue-300 hover:bg-blue-50 text-gray-700'
+                      }`}
+                    >
+                      {tourImageUploading ? '⏳ Uploading...' : '📁 Click to upload or drag image'}
+                    </label>
+                  </div>
+                  {/* OR Divider */}
+                  <div className="relative flex items-center gap-2 py-2">
+                    <div className="flex-1 border-t border-gray-300"></div>
+                    <span className="text-xs text-gray-500 font-medium">OR</span>
+                    <div className="flex-1 border-t border-gray-300"></div>
+                  </div>
+                  {/* URL Input */}
+                  <input
+                    type="text"
+                    placeholder="Enter Image URL (https://...)"
+                    className="input-field"
+                    value={tourData.image_url}
+                    onChange={(e) => {
+                      setTourData({ ...tourData, image_url: e.target.value })
+                      setTourImagePreview(e.target.value)
+                    }}
+                  />
+                </div>
+              </div>
             </div>
             <textarea
               placeholder="Description"
@@ -3061,7 +3161,13 @@ export default function AdminDashboard() {
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 md:gap-4 mb-4 md:mb-6">
           <h3 className="text-xl md:text-2xl font-bold">Manage Tours</h3>
           {!showAddTour && !editingTour && (
-            <button onClick={() => setShowAddTour(true)} className="btn-primary text-sm md:text-base">
+            <button
+              onClick={() => {
+                setShowAddTour(true)
+                setTourImagePreview('')
+              }}
+              className="btn-primary text-sm md:text-base"
+            >
               Add New Tour
             </button>
           )}
@@ -3089,37 +3195,91 @@ export default function AdminDashboard() {
                 </thead>
                 <tbody>
                   {tours.map((tour) => (
-                    <tr key={tour.id} className="border-b hover:bg-gray-50">
-                      <td className="py-3 px-4 font-semibold">{tour.name}</td>
-                      <td className="py-3 px-4">Rs. {toNum(tour.price).toFixed(2)}</td>
-                      <td className="py-3 px-4 text-sm">
-                        {tour.arrival_time
-                          ? new Date(tour.arrival_time).toLocaleString('en-IN', {
-                              day: 'numeric', month: 'short', year: 'numeric',
-                              hour: '2-digit', minute: '2-digit', hour12: false,
-                            })
-                          : '-'}
-                      </td>
-                      <td className="py-3 px-4">{tour.duration_hours ? `${tour.duration_hours}h` : '-'}</td>
-                      <td className="py-3 px-4">{tour.max_passengers || '-'}</td>
-                      <td className="py-3 px-4">{tour.car_model || '-'}</td>
-                      <td className="py-3 px-4">
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => startEditTour(tour)}
-                            className="text-sm text-secondary-500 hover:text-secondary-600"
-                          >
-                            Edit
-                          </button>
-                          <button
-                            onClick={() => handleDeleteTour(tour.id)}
-                            className="text-sm text-red-500 hover:text-red-600"
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
+                    <Fragment key={tour.id}>
+                      <tr 
+                        className="border-b hover:bg-gray-50 cursor-pointer transition-colors"
+                        onClick={() => setExpandedTourId(expandedTourId === tour.id ? null : tour.id)}
+                      >
+                        <td className="py-3 px-4">
+                          <div className="flex items-center gap-3">
+                            {tour.image_url ? (
+                              <div className="relative w-8 h-8 rounded-full overflow-hidden shrink-0 border border-gray-200">
+                                <Image 
+                                  src={tour.image_url} 
+                                  alt={tour.name} 
+                                  fill 
+                                  className="object-cover" 
+                                />
+                              </div>
+                            ) : (
+                              <div className="w-8 h-8 rounded-full bg-secondary-100 flex items-center justify-center text-secondary-700 font-bold shrink-0 border border-secondary-200 uppercase">
+                                {tour.name.charAt(0)}
+                              </div>
+                            )}
+                            <span className="font-semibold">{tour.name}</span>
+                            <span className={`text-[10px] text-gray-400 ml-auto transition-transform ${expandedTourId === tour.id ? 'rotate-180' : ''}`}>
+                              ▼
+                            </span>
+                          </div>
+                        </td>
+                        <td className="py-3 px-4">Rs. {toNum(tour.price).toFixed(2)}</td>
+                        <td className="py-3 px-4 text-sm">
+                          {tour.arrival_time
+                            ? new Date(tour.arrival_time).toLocaleString('en-IN', {
+                                day: 'numeric', month: 'short', year: 'numeric',
+                                hour: '2-digit', minute: '2-digit', hour12: false,
+                              })
+                            : '-'}
+                        </td>
+                        <td className="py-3 px-4">{tour.duration_hours ? `${tour.duration_hours}h` : '-'}</td>
+                        <td className="py-3 px-4">{tour.max_passengers || '-'}</td>
+                        <td className="py-3 px-4">{tour.car_model || '-'}</td>
+                        <td className="py-3 px-4" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => startEditTour(tour)}
+                              className="text-sm text-secondary-500 hover:text-secondary-600 font-medium"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => handleDeleteTour(tour.id)}
+                              className="text-sm text-red-500 hover:text-red-600 font-medium"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                      {expandedTourId === tour.id && (
+                        <tr className="bg-gray-50 border-b">
+                          <td colSpan={7} className="p-6">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                              <div>
+                                <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Description</p>
+                                <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{tour.description || 'No description provided.'}</p>
+                              </div>
+                              <div className="space-y-6">
+                                <div>
+                                  <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Itinerary</p>
+                                  <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap italic">{tour.itinerary || 'No itinerary detailed.'}</p>
+                                </div>
+                                {tour.highlights && tour.highlights.length > 0 && (
+                                  <div>
+                                    <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Highlights</p>
+                                    <ul className="list-disc list-inside text-sm text-gray-700 space-y-1">
+                                      {tour.highlights.map((h, i) => (
+                                        <li key={i}>{h}</li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
                   ))}
                 </tbody>
               </table>
@@ -3128,11 +3288,34 @@ export default function AdminDashboard() {
             {/* Mobile Card View */}
             <div className="md:hidden grid grid-cols-1 gap-3">
               {tours.map((tour) => (
-                <div key={tour.id} className="rounded-lg border border-gray-200 bg-white overflow-hidden shadow-sm hover:shadow-md transition-shadow">
+                <div 
+                  key={tour.id} 
+                  className="rounded-lg border border-gray-200 bg-white overflow-hidden shadow-sm hover:shadow-md transition-shadow cursor-pointer"
+                  onClick={() => setExpandedTourId(expandedTourId === tour.id ? null : tour.id)}
+                >
                   {/* Card Image/Header */}
-                  <div className="bg-gradient-to-r from-secondary-500 to-secondary-600 p-4 text-white">
-                    <h4 className="font-semibold text-base line-clamp-2">{tour.name}</h4>
-                    <p className="text-2xl font-bold mt-2">Rs. {toNum(tour.price).toLocaleString('en-IN')}</p>
+                  <div className="bg-gradient-to-r from-secondary-500 to-secondary-600 p-4 text-white relative">
+                    <div className="flex items-center gap-3 mb-2">
+                      {tour.image_url ? (
+                        <div className="relative w-10 h-10 rounded-full overflow-hidden shrink-0 border-2 border-white/30 shadow-sm">
+                          <Image 
+                            src={tour.image_url} 
+                            alt={tour.name} 
+                            fill 
+                            className="object-cover" 
+                          />
+                        </div>
+                      ) : (
+                        <div className="w-10 h-10 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center text-white font-bold shrink-0 border-2 border-white/30 shadow-sm uppercase">
+                          {tour.name.charAt(0)}
+                        </div>
+                      )}
+                      <h4 className="font-semibold text-base line-clamp-2">{tour.name}</h4>
+                    </div>
+                    <p className="text-2xl font-bold">Rs. {toNum(tour.price).toLocaleString('en-IN')}</p>
+                    <div className={`absolute top-4 right-4 text-white/70 transition-transform ${expandedTourId === tour.id ? 'rotate-180' : ''}`}>
+                      ▼
+                    </div>
                   </div>
 
                   {/* Card Body */}
@@ -3167,15 +3350,32 @@ export default function AdminDashboard() {
                     </div>
 
                     {tour.description && (
-                      <div className="pt-2 border-t border-gray-100">
+                      <div className={`pt-2 border-t border-gray-100 transition-all ${expandedTourId === tour.id ? '' : 'line-clamp-2'}`}>
                         <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Description</p>
-                        <p className="text-sm text-gray-600 line-clamp-2">{tour.description}</p>
+                        <p className={`text-sm text-gray-600 ${expandedTourId === tour.id ? '' : 'line-clamp-2'}`}>{tour.description}</p>
+                      </div>
+                    )}
+
+                    {expandedTourId === tour.id && (
+                      <div className="space-y-3 pt-3 border-t border-gray-100 animate-in fade-in slide-in-from-top-2 duration-300">
+                        {tour.itinerary && (
+                          <div>
+                            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Itinerary</p>
+                            <p className="text-sm text-gray-700 italic">{tour.itinerary}</p>
+                          </div>
+                        )}
+                        {tour.highlights && tour.highlights.length > 0 && (
+                          <div>
+                            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Highlights</p>
+                            <p className="text-sm text-gray-700">{tour.highlights.join(' • ')}</p>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
 
                   {/* Card Actions */}
-                  <div className="px-4 py-3 border-t border-gray-100 flex gap-2 bg-gray-50">
+                  <div className="px-4 py-3 border-t border-gray-100 flex gap-2 bg-gray-50" onClick={(e) => e.stopPropagation()}>
                     <button
                       onClick={() => startEditTour(tour)}
                       className="flex-1 py-2 text-sm font-medium text-secondary-600 hover:bg-secondary-50 rounded active:bg-secondary-100 transition-colors"
@@ -3532,6 +3732,8 @@ export default function AdminDashboard() {
     </div>
   )
 
+  const adminFirstName = adminFullName?.trim().split(/\s+/)[0] || 'Admin'
+
   return (
     <ProtectedAdminPage>
       <div className="scrollbar-thin-modern flex h-[100dvh] flex-col overflow-y-auto overflow-x-hidden" data-admin-theme={darkMode ? 'dark' : 'light'}>
@@ -3543,7 +3745,7 @@ export default function AdminDashboard() {
               <span className="text-3xl">🛡️</span>
               <div>
                 
-                <h2 className="text-xl font-bold">Hello! Admin</h2>
+                <h2 className="text-xl font-bold">Hello! {adminFirstName}</h2>
                 {adminEmail && <p className="text-xs text-gray-300">Logged in as: {adminEmail}</p>}
               </div>
             </div>
