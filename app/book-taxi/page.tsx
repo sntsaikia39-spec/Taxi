@@ -739,7 +739,7 @@ export default function BookTaxi() {
                     <div className="flex items-center justify-between">
                       <div className="flex-1">
                         <p className="font-semibold text-lg">{model.model_name}</p>
-                        <p className="text-sm text-gray-400">Class: {model.class} · Capacity: {model.capacity} pax · Available: {model.available_count}</p>
+                        <p className="text-sm text-gray-400">Class: {model.class} · Capacity: {model.capacity} pax</p>
                         <p className="text-sm text-secondary-600 font-semibold mt-2">
                           Estimated: {estimate}
                         </p>

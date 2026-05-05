@@ -199,7 +199,7 @@ function findSimilarModels(input: string, candidates: string[]): string[] {
 
 export default function AdminDashboard() {
   const router = useRouter()
-  const { logout, adminEmail, adminFullName } = useAdmin()
+  const { logout, adminEmail, adminFullName, updateAdminProfile } = useAdmin()
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const [activeTab, setActiveTab] = useState('overview')
   const [statusFilter, setStatusFilter] = useState('all')
@@ -287,6 +287,7 @@ export default function AdminDashboard() {
   const [confirmBookedCarAssignment, setConfirmBookedCarAssignment] = useState<Car | null>(null)
   const [confirmLowCapacityCarAssignment, setConfirmLowCapacityCarAssignment] = useState<Car | null>(null)
   const [updatingStatusId, setUpdatingStatusId] = useState<string | null>(null)
+  const [deletingBookingId, setDeletingBookingId] = useState<string | null>(null)
   const [darkMode, setDarkMode] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false
     return localStorage.getItem('adminDarkMode') === '1'
@@ -1335,6 +1336,44 @@ export default function AdminDashboard() {
     }
   }
 
+  const handleDeleteBooking = async (booking: Booking) => {
+    const bookingId = booking.booking_id || booking.id
+    const shortId = bookingId.slice(0, 12)
+
+    const warningMessage =
+      `Delete booking ${shortId}...?\n\n` +
+      'This will permanently delete the booking and all related records, including:\n' +
+      '- vehicle assignments\n' +
+      '- payment records\n' +
+      '- any legacy assignment records\n\n' +
+      'This action cannot be undone.'
+
+    if (!window.confirm(warningMessage)) return
+
+    setDeletingBookingId(booking.id)
+    try {
+      const response = await fetch('/api/bookings/admin', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ booking_id: bookingId }),
+      })
+
+      const result = await response.json()
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'Failed to delete booking')
+      }
+
+      toast.success('Booking and associated records deleted successfully')
+      await Promise.all([loadBookings(), loadPayments(), loadVehicleAssignments()])
+    } catch (error) {
+      console.error('Error deleting booking:', error)
+      toast.error(error instanceof Error ? error.message : 'Failed to delete booking')
+    } finally {
+      setDeletingBookingId(null)
+    }
+  }
+
   const renderOverview = () => (
     <div className="space-y-4 md:space-y-8">
       <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-6">
@@ -1692,13 +1731,31 @@ export default function AdminDashboard() {
                             </div>
                           )}
                           {(booking.booking_status === 'completed' || booking.booking_status === 'cancelled') && (
-                            <div className="mt-4 pt-4 border-t">
+                            <div className="flex gap-2 mt-4 pt-4 border-t">
                               <button
                                 onClick={() => handleUpdateBookingStatus(booking, 'pending')}
                                 disabled={updatingStatusId === booking.id}
-                                className="w-full px-3 py-2 border border-gray-300 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors disabled:opacity-50"
+                                className="flex-1 px-3 py-2 border border-gray-300 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors disabled:opacity-50"
                               >
                                 {updatingStatusId === booking.id ? 'Updating…' : '↩ Revert to Pending'}
+                              </button>
+                              <button
+                                onClick={() => handleDeleteBooking(booking)}
+                                disabled={deletingBookingId === booking.id}
+                                className="flex-1 px-3 py-2 bg-red-700 text-white rounded-lg text-sm font-semibold hover:bg-red-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                {deletingBookingId === booking.id ? 'Deleting…' : 'Delete Booking'}
+                              </button>
+                            </div>
+                          )}
+                          {booking.booking_status !== 'completed' && booking.booking_status !== 'cancelled' && (
+                            <div className="mt-2">
+                              <button
+                                onClick={() => handleDeleteBooking(booking)}
+                                disabled={deletingBookingId === booking.id}
+                                className="w-full px-3 py-2 border border-red-300 text-red-700 rounded-lg text-sm font-semibold hover:bg-red-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                {deletingBookingId === booking.id ? 'Deleting…' : 'Delete Booking'}
                               </button>
                             </div>
                           )}
@@ -3645,6 +3702,10 @@ export default function AdminDashboard() {
       }
 
       toast.success('Profile updated successfully')
+      updateAdminProfile({
+        full_name: data?.admin?.full_name ?? null,
+        email: data?.admin?.email ?? null,
+      })
       setShowEditProfile(false)
 
       // Reset form
@@ -3661,6 +3722,11 @@ export default function AdminDashboard() {
     } finally {
       setSubmittingProfile(false)
     }
+  }
+
+  const handleDashboardRefresh = async () => {
+    await Promise.all([loadBookings(), loadPayments(), loadVehicleAssignments()])
+    toast.success('Dashboard refreshed')
   }
 
   const toggleDarkMode = () => {
@@ -4218,7 +4284,7 @@ export default function AdminDashboard() {
         <div className="container mx-auto px-3 md:px-4 lg:px-6">
           <div className="flex items-center justify-between mb-3 md:mb-4 lg:mb-8 gap-3">
             <h1 className="text-lg md:text-3xl lg:text-4xl font-bold">Dashboard</h1>
-            <button onClick={loadBookings} className="btn-secondary text-xs md:text-sm px-2.5 md:px-4 py-1.5 md:py-2">
+            <button onClick={handleDashboardRefresh} className="btn-secondary text-xs md:text-sm px-2.5 md:px-4 py-1.5 md:py-2">
               Refresh
             </button>
           </div>

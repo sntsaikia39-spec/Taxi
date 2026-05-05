@@ -9,6 +9,7 @@ interface AdminContextType {
   isLoading: boolean
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>
   logout: () => Promise<void>
+  updateAdminProfile: (profile: { email?: string | null; full_name?: string | null }) => void
 }
 
 const AdminContext = createContext<AdminContextType | undefined>(undefined)
@@ -114,8 +115,17 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  const updateAdminProfile = (profile: { email?: string | null; full_name?: string | null }) => {
+    if (typeof profile.email !== 'undefined') {
+      setAdminEmail(profile.email || null)
+    }
+    if (typeof profile.full_name !== 'undefined') {
+      setAdminFullName(profile.full_name || null)
+    }
+  }
+
   return (
-    <AdminContext.Provider value={{ isAdmin, adminEmail, adminFullName, isLoading, login, logout }}>
+    <AdminContext.Provider value={{ isAdmin, adminEmail, adminFullName, isLoading, login, logout, updateAdminProfile }}>
       {children}
     </AdminContext.Provider>
   )
