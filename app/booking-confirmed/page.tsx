@@ -50,7 +50,7 @@ function BookingConfirmedContent() {
     }
   }
 
-  const generateAndDownloadInvoice = () => {
+  const generateAndDownloadInvoice = async () => {
     if (!booking || !payment) return
     const invoiceData: InvoiceData = {
       bookingId: booking.bookingId,
@@ -61,7 +61,7 @@ function BookingConfirmedContent() {
       bookingType: booking.bookingType === 'tour' ? 'tour' : 'taxi',
       destination: booking.destination,
       tourPackageName: booking.tourName,
-      pickupLocation: 'Hollongi Airport',
+      pickupLocation: 'Donyi Polo Airport, Hollongi',
       pickupDate: booking.date,
       pickupTime: booking.time,
       passengers: booking.passengers,
@@ -73,7 +73,7 @@ function BookingConfirmedContent() {
       paymentMethod: payment.payment_type === 'full' ? 'Full Online Payment' : 'Partial Online + Cash',
       invoiceNumber: `INV-${Date.now()}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`,
     }
-    const doc = generateInvoicePDF(invoiceData)
+    const doc = await generateInvoicePDF(invoiceData)
     downloadInvoicePDF(doc, `Invoice-${booking.bookingId}.pdf`)
   }
 

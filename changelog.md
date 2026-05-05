@@ -9,6 +9,7 @@ All notable changes to TaxiHollongi will be documented in this file.
 **Author:** Yami
 
 ### Changes
+- fix: Car Assignment time UTC to IST
 - UpdateL Admin CRU
 - Update: Admin adds new Admin
 - update: Admin Panel - Destinations

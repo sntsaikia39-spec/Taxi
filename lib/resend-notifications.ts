@@ -6,8 +6,10 @@ const FROM_EMAIL = process.env.RESEND_FROM_EMAIL || 'noreply@rinastoursandtravel
 const BRAND_NAME = "Rina's Tours and Travels"
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@rinastoursandtravels.com'
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://rinastoursandtravels.in'
-
-// ─── Shared helpers ──────────────────────────────────────────────────────────
+const APP_LOGO_URL = 'https://hpobmsfwvrewpjqnmhsv.supabase.co/storage/v1/object/sign/internal/image-removebg-preview%20(1).png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV9iMjA1YjRkYi0wMDA4LTQyOWUtYTFmZi02NzBjZTE1OWJhOTkiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJpbnRlcm5hbC9pbWFnZS1yZW1vdmViZy1wcmV2aWV3ICgxKS5wbmciLCJpYXQiOjE3Nzc3NTQ5NzksImV4cCI6MTkzNTQzNDk3OX0.FR2fYD_zRiEMwQcrMja4J1PCZI6o6EFZ-_-8i6T0dy8'
+const SUPPORT_EMAIL = 'support@taxihollongi.com'
+const SUPPORT_PHONE = '+91-9876543210'
+const OFFICE_LOCATION = 'Donyi Polo Airport, Hollongi'
 
 function inr(amount: number) {
   return `&#8377;${amount.toLocaleString('en-IN')}`
@@ -26,29 +28,24 @@ function shell(title: string, preheader: string, body: string) {
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;padding:32px 16px;">
   <tr><td align="center">
     <table width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;">
-
-      <!-- Logo -->
-      <tr><td align="center" style="padding-bottom:20px;">
-        <div style="width:56px;height:56px;background:#ffda00;border-radius:50%;text-align:center;line-height:56px;font-family:Georgia,serif;font-weight:bold;font-size:32px;color:#1a1a2e;display:inline-block;">R</div>
-        <div style="font-size:14px;font-weight:700;color:#1a1a2e;margin-top:8px;">${BRAND_NAME}</div>
+      <tr><td align="center" style="padding-bottom:16px;">
+        <img src="${APP_LOGO_URL}" alt="${BRAND_NAME}" style="max-width:180px;width:100%;height:auto;display:block;margin:0 auto 8px;">
+        <div style="font-size:13px;font-weight:700;color:#111827;">${BRAND_NAME}</div>
       </td></tr>
 
-      <!-- Card -->
       <tr><td style="background:#fff;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,0.08);overflow:hidden;">
         <table width="100%" cellpadding="0" cellspacing="0">
-          <tr><td style="height:5px;background:#ffda00;"></td></tr>
-          <tr><td style="padding:36px 40px 40px;">
+          <tr><td style="height:5px;background:#f47d09;"></td></tr>
+          <tr><td style="padding:32px 32px 36px;">
             ${body}
           </td></tr>
         </table>
       </td></tr>
 
-      <!-- Footer -->
       <tr><td style="padding:24px 8px 8px;text-align:center;">
-        <p style="margin:0 0 4px;font-size:12px;color:#9ca3af;">&copy; 2026 ${BRAND_NAME} &nbsp;&middot;&nbsp; All rights reserved</p>
-        <p style="margin:0;font-size:11px;color:#d1d5db;">Hollongi Airport, Itanagar, Arunachal Pradesh</p>
+        <p style="margin:0 0 4px;font-size:12px;color:#9ca3af;">&copy; 2026 ${BRAND_NAME} &middot; All rights reserved</p>
+        <p style="margin:0;font-size:11px;color:#9ca3af;">${OFFICE_LOCATION} &middot; ${SUPPORT_PHONE}</p>
       </td></tr>
-
     </table>
   </td></tr>
 </table>
@@ -63,13 +60,36 @@ function row(label: string, value: string) {
   </tr>`
 }
 
-async function send(to: string | string[], subject: string, html: string) {
-  console.log(`[EMAIL] Attempting: "${subject}" → ${to}`)
-  console.log(`[EMAIL] From: ${BRAND_NAME} <${FROM_EMAIL}>`)
-  console.log(`[EMAIL] API key set: ${!!process.env.RESEND_API_KEY}`)
+function sectionTitle(text: string) {
+  return `<p style="margin:0 0 10px;font-size:13px;font-weight:700;color:#111827;letter-spacing:.2px;text-transform:uppercase;">${text}</p>`
+}
 
+function infoNote(text: string, tone: 'success' | 'warning' | 'info' = 'info') {
+  const palette =
+    tone === 'success'
+      ? { bg: '#ecfdf3', border: '#16a34a', text: '#166534' }
+      : tone === 'warning'
+      ? { bg: '#fff7ed', border: '#d97706', text: '#9a3412' }
+      : { bg: '#eff6ff', border: '#3b82f6', text: '#1e40af' }
+
+  return `<p style="margin:0 0 24px;padding:12px 16px;background:${palette.bg};border-left:4px solid ${palette.border};border-radius:4px;font-size:14px;color:${palette.text};font-weight:600;">${text}</p>`
+}
+
+function formatDate(value: string) {
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return value
+  return d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' })
+}
+
+function formatDateTime(value: string) {
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return value
+  return d.toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
+
+async function send(to: string | string[], subject: string, html: string) {
   if (!process.env.RESEND_API_KEY) {
-    console.error('[EMAIL] ❌ RESEND_API_KEY is not set — email not sent')
+    console.error('[EMAIL] RESEND_API_KEY is not set - email not sent')
     return { success: false, error: 'RESEND_API_KEY not configured' }
   }
 
@@ -80,20 +100,15 @@ async function send(to: string | string[], subject: string, html: string) {
       subject,
       html,
     })
-    console.log(`[EMAIL] Resend raw response:`, JSON.stringify(result))
+
     if (result.error) {
-      console.error(`[EMAIL] ❌ Resend returned error:`, result.error)
       return { success: false, error: result.error }
     }
-    console.log(`[EMAIL] ✅ Sent successfully. ID: ${result.data?.id}`)
     return { success: true, data: result }
   } catch (error: any) {
-    console.error(`[EMAIL] ❌ Exception thrown:`, error?.message, error)
     return { success: false, error }
   }
 }
-
-// ─── 1. Booking confirmation (after Razorpay payment) ────────────────────────
 
 export interface BookingConfirmationEmail {
   to: string
@@ -108,58 +123,60 @@ export interface BookingConfirmationEmail {
   totalAmount: number
   amountPaid: number
   amountDue: number
-  paymentMethod: string // 'full' | 'partial' | 'cash'
+  paymentMethod: string
 }
 
 export async function sendBookingConfirmation(data: BookingConfirmationEmail) {
   const isPaid = data.amountDue === 0
-  const statusColor = isPaid ? '#16a34a' : '#d97706'
-  const statusLabel = isPaid ? 'Fully Paid' : `Partially Paid — ${inr(data.amountDue)} due on arrival`
+  const statusLabel = isPaid ? 'Fully paid. No balance due.' : `${inr(data.amountDue)} due on arrival.`
   const tripLabel = data.bookingType === 'tour'
     ? (data.tourPackageName || 'Tour Package')
     : (data.destination || 'Taxi Booking')
 
   const body = `
-    <p style="margin:0 0 4px;font-size:22px;font-weight:700;color:#1a1a2e;">Booking Confirmed!</p>
-    <p style="margin:0 0 28px;font-size:15px;color:#6b7280;">Hi ${data.userName}, your booking is all set.</p>
+    <p style="margin:0 0 4px;font-size:22px;font-weight:700;color:#111827;">Booking Confirmed</p>
+    <p style="margin:0 0 24px;font-size:15px;color:#4b5563;">Hi ${data.userName}, your booking is confirmed and we are preparing your ride.</p>
 
+    ${sectionTitle('Booking Details')}
     <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
       ${row('Booking ID', `<span style="font-family:monospace;">${data.bookingId}</span>`)}
-      ${row('Type', data.bookingType === 'tour' ? 'Tour Package' : 'Taxi Booking')}
+      ${row('Service Type', data.bookingType === 'tour' ? 'Tour Package' : 'Taxi Booking')}
       ${row(data.bookingType === 'tour' ? 'Package' : 'Destination', tripLabel)}
-      ${row('Pickup Date', new Date(data.pickupDate).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' }))}
+      ${row('Pickup Location', OFFICE_LOCATION)}
+      ${row('Pickup Date', formatDate(data.pickupDate))}
       ${data.pickupTime ? row('Pickup Time', data.pickupTime) : ''}
       ${row('Vehicle', data.carType.charAt(0).toUpperCase() + data.carType.slice(1))}
     </table>
 
+    ${sectionTitle('Payment Summary')}
     <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
       ${row('Total Fare', inr(data.totalAmount))}
       ${row('Paid Online', inr(data.amountPaid))}
       ${data.amountDue > 0 ? row('Due on Arrival', inr(data.amountDue)) : ''}
     </table>
 
-    <p style="margin:0 0 20px;padding:12px 16px;background:${isPaid ? '#f0fdf4' : '#fffbeb'};border-left:4px solid ${statusColor};border-radius:4px;font-size:14px;color:${statusColor};font-weight:600;">${statusLabel}</p>
+    ${infoNote(statusLabel, isPaid ? 'success' : 'warning')}
 
-    <p style="margin:0 0 8px;font-size:14px;color:#374151;font-weight:600;">What happens next</p>
-    <ol style="margin:0 0 28px;padding-left:20px;color:#6b7280;font-size:14px;line-height:1.8;">
-      <li>We'll review your booking and assign a vehicle</li>
-      <li>You'll receive driver details before your pickup</li>
-      <li>Arrive 10 minutes early at the pickup point</li>
-      ${data.amountDue > 0 ? '<li>Pay the remaining amount in cash to the driver</li>' : ''}
+    ${sectionTitle('Next Steps')}
+    <ol style="margin:0 0 24px;padding-left:20px;color:#6b7280;font-size:14px;line-height:1.8;">
+      <li>We will assign your vehicle and driver shortly</li>
+      <li>You will receive driver details before pickup</li>
+      <li>Please be ready 10 minutes before pickup</li>
+      ${data.amountDue > 0 ? '<li>Pay remaining balance in cash at pickup</li>' : ''}
     </ol>
 
     <center>
-      <a href="${APP_URL}/bookings" style="display:inline-block;background:#ffda00;color:#1a1a2e;font-size:14px;font-weight:700;text-decoration:none;padding:12px 32px;border-radius:8px;">View My Booking</a>
+      <a href="${APP_URL}/bookings" style="display:inline-block;background:#f47d09;color:#ffffff;font-size:14px;font-weight:700;text-decoration:none;padding:12px 32px;border-radius:8px;">View My Booking</a>
     </center>
 
-    <p style="margin:24px 0 0;font-size:12px;color:#9ca3af;text-align:center;">
-      Questions? Reply to this email or contact <a href="mailto:support@rinastoursandtravels.com" style="color:#6b7280;">support@rinastoursandtravels.com</a>
-    </p>`
+    <p style="margin:24px 0 0;font-size:12px;color:#9ca3af;text-align:center;">Questions? Contact <a href="mailto:${SUPPORT_EMAIL}" style="color:#6b7280;">${SUPPORT_EMAIL}</a> or ${SUPPORT_PHONE}</p>`
 
-  return send(data.to, `Booking Confirmed — ${data.bookingId} | ${BRAND_NAME}`, shell(`Booking Confirmed — ${data.bookingId}`, `Your booking ${data.bookingId} is confirmed. ${isPaid ? 'Payment complete.' : `${inr(data.amountDue)} due on arrival.`}`, body))
+  return send(
+    data.to,
+    `Booking Confirmed - ${data.bookingId} | ${BRAND_NAME}`,
+    shell(`Booking Confirmed - ${data.bookingId}`, `Your booking ${data.bookingId} is confirmed.`, body)
+  )
 }
-
-// ─── 2. Cash payment invoice (after admin confirms cash collection) ───────────
 
 export interface CashPaymentInvoiceEmail {
   to: string
@@ -177,34 +194,34 @@ export async function sendCashPaymentInvoice(data: CashPaymentInvoiceEmail) {
   const isFullyPaid = totalCollected >= data.totalAmount
 
   const body = `
-    <p style="margin:0 0 4px;font-size:22px;font-weight:700;color:#1a1a2e;">Payment Receipt</p>
-    <p style="margin:0 0 28px;font-size:15px;color:#6b7280;">Hi ${data.userName}, here's your payment summary for booking <strong>${data.bookingId}</strong>.</p>
+    <p style="margin:0 0 4px;font-size:22px;font-weight:700;color:#111827;">Payment Receipt</p>
+    <p style="margin:0 0 24px;font-size:15px;color:#4b5563;">Hi ${data.userName}, payment update for booking <strong>${data.bookingId}</strong> is below.</p>
 
+    ${sectionTitle('Receipt Details')}
     <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
       ${row('Booking ID', `<span style="font-family:monospace;">${data.bookingId}</span>`)}
       ${row('Total Fare', inr(data.totalAmount))}
       ${data.amountOnlinePaid > 0 ? row('Online Payment', inr(data.amountOnlinePaid)) : ''}
       ${row('Cash Payment', inr(data.amountCashPaid))}
       ${row('Collected By', data.cashCollectedBy)}
-      ${row('Date', new Date(data.paidAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }))}
+      ${row('Collected On', formatDateTime(data.paidAt))}
     </table>
 
-    <p style="margin:0 0 24px;padding:12px 16px;background:${isFullyPaid ? '#f0fdf4' : '#fffbeb'};border-left:4px solid ${isFullyPaid ? '#16a34a' : '#d97706'};border-radius:4px;font-size:14px;color:${isFullyPaid ? '#16a34a' : '#d97706'};font-weight:600;">
-      ${isFullyPaid ? `Payment complete — ${inr(totalCollected)} received in full.` : `Partial payment received. Balance: ${inr(data.totalAmount - totalCollected)}`}
-    </p>
+    ${infoNote(
+      isFullyPaid ? `Payment complete - ${inr(totalCollected)} received in full.` : `Partial payment received. Balance due: ${inr(data.totalAmount - totalCollected)}`,
+      isFullyPaid ? 'success' : 'warning'
+    )}
 
     <center>
-      <a href="${APP_URL}/bookings" style="display:inline-block;background:#ffda00;color:#1a1a2e;font-size:14px;font-weight:700;text-decoration:none;padding:12px 32px;border-radius:8px;">View My Booking</a>
-    </center>
+      <a href="${APP_URL}/bookings" style="display:inline-block;background:#f47d09;color:#ffffff;font-size:14px;font-weight:700;text-decoration:none;padding:12px 32px;border-radius:8px;">View My Booking</a>
+    </center>`
 
-    <p style="margin:24px 0 0;font-size:12px;color:#9ca3af;text-align:center;">
-      Thank you for travelling with ${BRAND_NAME}. We hope to see you again!
-    </p>`
-
-  return send(data.to, `Payment Receipt — ${data.bookingId} | ${BRAND_NAME}`, shell(`Payment Receipt — ${data.bookingId}`, `Payment confirmed for booking ${data.bookingId}.`, body))
+  return send(
+    data.to,
+    `Payment Receipt - ${data.bookingId} | ${BRAND_NAME}`,
+    shell(`Payment Receipt - ${data.bookingId}`, `Payment confirmed for booking ${data.bookingId}.`, body)
+  )
 }
-
-// ─── 3. Vehicle assignment (when admin assigns a vehicle) ────────────────────
 
 export interface VehicleAssignmentEmail {
   to: string
@@ -220,54 +237,47 @@ export interface VehicleAssignmentEmail {
 }
 
 export async function sendVehicleAssignment(data: VehicleAssignmentEmail) {
-  const title = data.isReassignment ? 'Vehicle Reassigned' : 'Driver Assigned!'
+  const title = data.isReassignment ? 'Vehicle Reassigned' : 'Driver Assigned'
   const subtitle = data.isReassignment
-    ? `Hi ${data.userName}, your vehicle for booking <strong>${data.bookingId}</strong> has been <strong>changed</strong>. Here are your updated driver and vehicle details.`
-    : `Hi ${data.userName}, your vehicle has been assigned for booking <strong>${data.bookingId}</strong>.`
+    ? `Hi ${data.userName}, your vehicle for booking <strong>${data.bookingId}</strong> has been updated.`
+    : `Hi ${data.userName}, your driver and vehicle are now assigned for booking <strong>${data.bookingId}</strong>.`
 
   const body = `
-    <p style="margin:0 0 4px;font-size:22px;font-weight:700;color:#1a1a2e;">${title}</p>
-    <p style="margin:0 0 28px;font-size:15px;color:#6b7280;">${subtitle}</p>
+    <p style="margin:0 0 4px;font-size:22px;font-weight:700;color:#111827;">${title}</p>
+    <p style="margin:0 0 24px;font-size:15px;color:#4b5563;">${subtitle}</p>
 
-    <p style="margin:0 0 12px;font-size:14px;font-weight:600;color:#1a1a2e;">Driver & Vehicle Details</p>
+    ${sectionTitle('Driver and Vehicle Details')}
     <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
-      ${row('Driver', data.driverName)}
-      ${row('Contact', `<a href="tel:${data.driverPhone}" style="color:#1a1a2e;">${data.driverPhone}</a>`)}
-      ${row('Vehicle', data.vehicleModel)}
-      ${row('Registration', data.numberPlate)}
+      ${row('Driver Name', data.driverName)}
+      ${row('Driver Contact', `<a href="tel:${data.driverPhone}" style="color:#111827;">${data.driverPhone}</a>`)}
+      ${row('Vehicle Model', data.vehicleModel)}
+      ${row('Vehicle Number', data.numberPlate)}
     </table>
 
-    <p style="margin:0 0 12px;font-size:14px;font-weight:600;color:#1a1a2e;">Pickup Details</p>
+    ${sectionTitle('Pickup Details')}
     <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
-      ${row('Date', new Date(data.pickupDate).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' }))}
-      ${data.pickupTime ? row('Time', data.pickupTime) : ''}
+      ${row('Booking ID', `<span style="font-family:monospace;">${data.bookingId}</span>`)}
+      ${row('Pickup Location', OFFICE_LOCATION)}
+      ${row('Pickup Date', formatDate(data.pickupDate))}
+      ${data.pickupTime ? row('Pickup Time', data.pickupTime) : ''}
     </table>
 
-    <p style="margin:0 0 24px;padding:12px 16px;background:#eff6ff;border-left:4px solid #3b82f6;border-radius:4px;font-size:14px;color:#1e40af;">
-      Please be ready 10 minutes before pickup time. Save your driver's number in case you need to contact them.
-    </p>
+    ${infoNote("Please be ready 10 minutes before pickup and keep your phone reachable.")}
 
     <center>
-      <a href="${APP_URL}/bookings" style="display:inline-block;background:#ffda00;color:#1a1a2e;font-size:14px;font-weight:700;text-decoration:none;padding:12px 32px;border-radius:8px;">View My Booking</a>
+      <a href="${APP_URL}/bookings" style="display:inline-block;background:#f47d09;color:#ffffff;font-size:14px;font-weight:700;text-decoration:none;padding:12px 32px;border-radius:8px;">View My Booking</a>
     </center>`
 
   const subject = data.isReassignment
-    ? `Vehicle Reassigned — ${data.bookingId} | ${BRAND_NAME}`
-    : `Driver Assigned — ${data.bookingId} | ${BRAND_NAME}`
-  const preheader = data.isReassignment
-    ? `Your vehicle for booking ${data.bookingId} has been changed. New driver: ${data.driverName}.`
-    : `Your driver ${data.driverName} has been assigned for booking ${data.bookingId}.`
+    ? `Vehicle Reassigned - ${data.bookingId} | ${BRAND_NAME}`
+    : `Driver Assigned - ${data.bookingId} | ${BRAND_NAME}`
 
-  return send(data.to, subject, shell(subject, preheader, body))
+  return send(data.to, subject, shell(subject, `Driver details for booking ${data.bookingId}.`, body))
 }
-
-// ─── Email format validator ───────────────────────────────────────────────────
 
 export function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim())
 }
-
-// ─── 4. Admin notification (new booking received) ────────────────────────────
 
 export async function sendAdminNotification(data: {
   bookingId: string
@@ -279,26 +289,24 @@ export async function sendAdminNotification(data: {
   pickupDate?: string
 }) {
   const body = `
-    <p style="margin:0 0 4px;font-size:20px;font-weight:700;color:#1a1a2e;">New Booking Received</p>
-    <p style="margin:0 0 24px;font-size:14px;color:#6b7280;">A new booking has just been confirmed and needs vehicle assignment.</p>
+    <p style="margin:0 0 4px;font-size:20px;font-weight:700;color:#111827;">New Booking Received</p>
+    <p style="margin:0 0 24px;font-size:14px;color:#6b7280;">A new booking has been confirmed and requires assignment.</p>
 
     <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
       ${row('Booking ID', `<span style="font-family:monospace;">${data.bookingId}</span>`)}
       ${row('Customer', `${data.userName} &lt;${data.userEmail}&gt;`)}
       ${row('Type', data.bookingType === 'tour' ? 'Tour Package' : 'Taxi Booking')}
       ${data.destination ? row('Destination', data.destination) : ''}
-      ${data.pickupDate ? row('Pickup Date', new Date(data.pickupDate).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' })) : ''}
+      ${data.pickupDate ? row('Pickup Date', formatDate(data.pickupDate)) : ''}
       ${row('Amount', inr(data.totalAmount))}
     </table>
 
     <center>
-      <a href="${APP_URL}/admin" style="display:inline-block;background:#1a1a2e;color:#ffda00;font-size:14px;font-weight:700;text-decoration:none;padding:12px 32px;border-radius:8px;">Open Admin Panel</a>
+      <a href="${APP_URL}/admin" style="display:inline-block;background:#111827;color:#ffffff;font-size:14px;font-weight:700;text-decoration:none;padding:12px 32px;border-radius:8px;">Open Admin Panel</a>
     </center>`
 
-  return send(ADMIN_EMAIL, `New Booking: ${data.bookingId} — Action Required`, shell(`New Booking: ${data.bookingId}`, `New booking from ${data.userName} for ${inr(data.totalAmount)}.`, body))
+  return send(ADMIN_EMAIL, `New Booking: ${data.bookingId} - Action Required`, shell(`New Booking: ${data.bookingId}`, `New booking from ${data.userName} for ${inr(data.totalAmount)}.`, body))
 }
-
-// ─── 5. Driver assignment notification ───────────────────────────────────────
 
 export interface DriverAssignmentEmail {
   to: string
@@ -315,41 +323,39 @@ export interface DriverAssignmentEmail {
 
 export async function sendDriverAssignment(data: DriverAssignmentEmail) {
   const title = data.isReassignment ? 'Trip Reassigned to You' : 'New Trip Assigned'
+
   const body = `
-    <p style="margin:0 0 4px;font-size:22px;font-weight:700;color:#1a1a2e;">${title}</p>
-    <p style="margin:0 0 28px;font-size:15px;color:#6b7280;">Hi ${data.driverName}, you have been assigned a trip. Please review the details below.</p>
+    <p style="margin:0 0 4px;font-size:22px;font-weight:700;color:#111827;">${title}</p>
+    <p style="margin:0 0 24px;font-size:15px;color:#4b5563;">Hi ${data.driverName}, please review your assigned trip details below.</p>
 
-    <p style="margin:0 0 12px;font-size:14px;font-weight:600;color:#1a1a2e;">Customer Details</p>
+    ${sectionTitle('Customer Details')}
     <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
-      ${row('Name', data.customerName)}
-      ${row('Phone', `<a href="tel:${data.customerPhone}" style="color:#1a1a2e;">${data.customerPhone}</a>`)}
+      ${row('Customer Name', data.customerName)}
+      ${row('Customer Phone', `<a href="tel:${data.customerPhone}" style="color:#111827;">${data.customerPhone}</a>`)}
     </table>
 
-    <p style="margin:0 0 12px;font-size:14px;font-weight:600;color:#1a1a2e;">Pickup Details</p>
+    ${sectionTitle('Trip Details')}
     <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
-      ${row('Date', new Date(data.pickupDate).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' }))}
-      ${data.pickupTime ? row('Time', data.pickupTime) : ''}
       ${row('Booking ID', `<span style="font-family:monospace;">${data.bookingId}</span>`)}
+      ${row('Pickup Location', OFFICE_LOCATION)}
+      ${row('Pickup Date', formatDate(data.pickupDate))}
+      ${data.pickupTime ? row('Pickup Time', data.pickupTime) : ''}
     </table>
 
-    <p style="margin:0 0 12px;font-size:14px;font-weight:600;color:#1a1a2e;">Your Vehicle</p>
+    ${sectionTitle('Assigned Vehicle')}
     <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
-      ${row('Model', data.vehicleModel)}
-      ${row('Registration', data.numberPlate)}
+      ${row('Vehicle Model', data.vehicleModel)}
+      ${row('Vehicle Number', data.numberPlate)}
     </table>
 
-    <p style="margin:0 0 0;padding:12px 16px;background:#eff6ff;border-left:4px solid #3b82f6;border-radius:4px;font-size:14px;color:#1e40af;">
-      Please be ready with the vehicle at least 15 minutes before the scheduled pickup time.
-    </p>`
+    ${infoNote('Please be ready at least 15 minutes before pickup and keep customer contact reachable.')}`
 
   const subject = data.isReassignment
-    ? `Trip Reassigned — ${data.bookingId} | ${BRAND_NAME}`
-    : `New Trip Assigned — ${data.bookingId} | ${BRAND_NAME}`
+    ? `Trip Reassigned - ${data.bookingId} | ${BRAND_NAME}`
+    : `New Trip Assigned - ${data.bookingId} | ${BRAND_NAME}`
 
-  return send(data.to, subject, shell(subject, `Trip ${data.bookingId} assigned to you. Customer: ${data.customerName}.`, body))
+  return send(data.to, subject, shell(subject, `Trip ${data.bookingId} assigned. Customer: ${data.customerName}.`, body))
 }
-
-// ─── 6. Admin alert — invalid driver email ────────────────────────────────────
 
 export async function sendAdminDriverEmailAlert(data: {
   bookingId: string
@@ -360,31 +366,31 @@ export async function sendAdminDriverEmailAlert(data: {
   reason: 'invalid_format' | 'send_failed'
 }) {
   const reasonText = data.reason === 'invalid_format'
-    ? `The email address <strong>${data.driverEmail}</strong> is not a valid email format.`
-    : `An attempt to send to <strong>${data.driverEmail}</strong> failed (possibly undeliverable or rejected).`
+    ? `The email address <strong>${data.driverEmail}</strong> is not in a valid format.`
+    : `An attempt to send to <strong>${data.driverEmail}</strong> failed.`
 
   const body = `
-    <p style="margin:0 0 4px;font-size:20px;font-weight:700;color:#1a1a2e;">⚠️ Driver Email Issue</p>
-    <p style="margin:0 0 24px;font-size:14px;color:#6b7280;">The driver notification for booking <strong>${data.bookingId}</strong> could not be delivered. The customer has already been notified.</p>
+    <p style="margin:0 0 4px;font-size:20px;font-weight:700;color:#111827;">Driver Email Issue</p>
+    <p style="margin:0 0 24px;font-size:14px;color:#6b7280;">Driver notification for booking <strong>${data.bookingId}</strong> could not be delivered.</p>
 
     <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
       ${row('Booking ID', `<span style="font-family:monospace;">${data.bookingId}</span>`)}
       ${row('Driver', data.driverName)}
       ${row('Vehicle', `${data.carModel} (${data.numberPlate})`)}
-      ${row('Driver Email on File', `<span style="color:#dc2626;font-family:monospace;">${data.driverEmail || '(empty)'}</span>`)}
+      ${row('Driver Email', `<span style="color:#dc2626;font-family:monospace;">${data.driverEmail || '(empty)'}</span>`)}
     </table>
 
     <p style="margin:0 0 24px;padding:12px 16px;background:#fef2f2;border-left:4px solid #dc2626;border-radius:4px;font-size:14px;color:#dc2626;">
-      ${reasonText} Please update the driver's email address in the admin panel.
+      ${reasonText} Please update the driver's email in the admin panel.
     </p>
 
     <center>
-      <a href="${APP_URL}/admin" style="display:inline-block;background:#1a1a2e;color:#ffda00;font-size:14px;font-weight:700;text-decoration:none;padding:12px 32px;border-radius:8px;">Update Driver Email</a>
+      <a href="${APP_URL}/admin" style="display:inline-block;background:#111827;color:#ffffff;font-size:14px;font-weight:700;text-decoration:none;padding:12px 32px;border-radius:8px;">Update Driver Email</a>
     </center>`
 
   return send(
     ADMIN_EMAIL,
-    `Action Required: Invalid Driver Email — ${data.driverName} (${data.bookingId})`,
-    shell('Driver Email Issue', `Driver email for ${data.driverName} is invalid. Update needed.`, body)
+    `Action Required: Driver Email Issue - ${data.driverName} (${data.bookingId})`,
+    shell('Driver Email Issue', `Driver email for ${data.driverName} requires update.`, body)
   )
 }

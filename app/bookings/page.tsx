@@ -319,7 +319,7 @@ export default function MyBookings() {
         userEmail: booking.user_email || '-',
         userPhone: booking.phone || '-',
         bookingType: booking.booking_type === 'tour' ? 'tour' : 'taxi',
-        pickupLocation: 'Hollongi Airport',
+        pickupLocation: 'Donyi Polo Airport, Hollongi',
         pickupDate: booking.start_datetime,
         pickupTime: formatTime(booking.start_datetime),
         passengers: Number(booking.passenger_count || 1),
@@ -332,7 +332,7 @@ export default function MyBookings() {
         invoiceNumber: `INV-${bookingKey}-${Date.now()}`,
       }
 
-      const doc = generateInvoicePDF(invoiceData)
+      const doc = await generateInvoicePDF(invoiceData)
       downloadInvoicePDF(doc, `Invoice-${bookingKey}.pdf`)
       toast.success('Invoice downloaded successfully!')
     } catch (error) {
