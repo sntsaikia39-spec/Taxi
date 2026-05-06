@@ -105,7 +105,11 @@ export default function ToursReviewsPage() {
     <div ref={scrollRef} className="scrollbar-thin-modern h-[100dvh] overflow-y-auto overflow-x-hidden bg-primary-950 flex flex-col">
       <Header />
 
-      <main className="relative flex-1 pt-20 md:pt-28 pb-12 px-4">
+      <main
+        className={`relative flex-1 px-4 ${
+          isLoadingReviews ? 'flex items-center justify-center' : 'pt-20 md:pt-28 pb-12'
+        }`}
+      >
         {/* Dot grid overlay */}
         <div
           className="absolute inset-0 opacity-[0.03] pointer-events-none"
@@ -115,7 +119,7 @@ export default function ToursReviewsPage() {
           }}
         ></div>
         {isLoadingReviews ? (
-          <div className="max-w-3xl mx-auto min-h-[60dvh] flex items-center justify-center">
+          <div className="w-full max-w-3xl mx-auto flex items-center justify-center -translate-y-[15px]">
             <Loader />
           </div>
         ) : (
