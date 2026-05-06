@@ -13,7 +13,8 @@ export async function createRazorpayOrder(amount: number, bookingId: string) {
     const order = await getRazorpay().orders.create({
       amount: Math.round(amount * 100),
       currency: 'INR',
-      receipt: `booking_${bookingId}`,
+      receipt: `bk_${bookingId.replace(/-/g, '').slice(0, 37)}`,
+      payment_capture: true,
       notes: { booking_id: bookingId },
     })
     return order

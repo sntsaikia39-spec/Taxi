@@ -4,8 +4,8 @@ import { useSearchParams } from 'next/navigation'
 import { useState, useEffect, useRef, Suspense } from 'react'
 import Header from '@/components/Header'
 import toast from 'react-hot-toast'
+import PaymentTestAlert from '@/components/PaymentTestAlert'
 import gsap from 'gsap'
-import { calculatePaymentAmounts } from '@/lib/payment-utils'
 import { Shield, MapPin, Clock, Users, Car } from 'lucide-react'
 
 declare global {
@@ -91,60 +91,41 @@ function PaymentContent() {
               toast.success('Payment successful! Your booking is confirmed.')
               setTimeout(() => { window.location.href = `/booking-confirmed?bookingId=${bookingData.dbBookingId}` }, 2000)
             } else {
-              toast.error('Payment verification failed')
+              toast.error('Payment verification failed. Please contact support.')
+              setLoading(false)
             }
           } catch (error) {
             console.error('Verification error:', error)
-            toast.error('Error verifying payment')
+            toast.error('Error verifying payment. Please contact support.')
+            setLoading(false)
           }
         },
         prefill: { name: bookingData.name, email: bookingData.email, contact: bookingData.phone },
         theme: { color: '#ffda00' },
+        config: {
+          display: {
+            preferences: { show_default_blocks: true },
+          },
+        },
+        modal: {
+          ondismiss: () => {
+            toast.error('Payment cancelled.')
+            setLoading(false)
+          },
+          backdropclose: false,
+          escape: false,
+        },
       }
       const rzp = new window.Razorpay(options)
+      rzp.on('payment.failed', (response: any) => {
+        console.error('Razorpay payment failed:', response.error)
+        toast.error(`Payment failed: ${response.error.description || 'Please try again.'}`)
+        setLoading(false)
+      })
       rzp.open()
     } catch (error) {
       console.error('Payment error:', error)
       toast.error('Failed to initiate payment. Please try again.')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleDemoPayment = async (method: 'partial' | 'full') => {
-    if (!bookingData) { toast.error('Booking data not found'); return }
-    setLoading(true)
-    try {
-      const { amountOnlinePaid, amountCashPaid } = calculatePaymentAmounts(bookingData.totalPrice, method)
-      await new Promise((resolve) => setTimeout(resolve, 1500))
-      const demoTxnId = `DEMO_TXN_${Date.now()}`
-      const createPaymentResponse = await fetch('/api/payment/create-payment', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          bookingId: bookingData.dbBookingId,
-          paymentType: method,
-          amountTotal: bookingData.totalPrice,
-          amountOnlinePaid,
-          txnId: demoTxnId,
-          txnStatus: 'success',
-          gateway: 'razorpay',
-        }),
-      })
-      const paymentResult = await createPaymentResponse.json()
-      if (!createPaymentResponse.ok || !paymentResult.success) {
-        toast.error(paymentResult.error || 'Failed to process payment. Please try again.')
-        return
-      }
-      const message = method === 'full'
-        ? `Full payment of ₹${amountOnlinePaid.toFixed(2)} completed successfully!`
-        : `Advance payment of ₹${amountOnlinePaid.toFixed(2)} received. Remaining ₹${amountCashPaid.toFixed(2)} to be paid at airport.`
-      toast.success(message)
-      setTimeout(() => { window.location.href = `/booking-confirmed?bookingId=${bookingData.dbBookingId}` }, 2000)
-    } catch (error) {
-      console.error('Demo Payment Error:', error)
-      toast.error(error instanceof Error ? error.message : 'Demo payment failed')
-    } finally {
       setLoading(false)
     }
   }
@@ -224,13 +205,6 @@ function PaymentContent() {
                 >
                   💳 {loading ? 'Processing...' : `Pay ₹${bookingData.totalPrice.toFixed(2)} — Full Payment`}
                 </button>
-                <button
-                  onClick={() => handleDemoPayment('full')}
-                  disabled={loading}
-                  className="w-full px-6 py-3 border border-secondary-500/40 text-secondary-500 rounded-xl font-semibold hover:bg-secondary-500/10 transition-colors disabled:opacity-50 text-sm"
-                >
-                  {loading ? 'Processing...' : `Demo Full Payment — ₹${bookingData.totalPrice.toFixed(2)}`}
-                </button>
               </div>
 
               {/* Divider */}
@@ -246,22 +220,13 @@ function PaymentContent() {
                   Pay <span className="text-white font-black">₹{advanceAmount.toFixed(2)}</span> (30% advance) now and the remaining{' '}
                   <span className="text-white font-black">₹{remainingAmount.toFixed(2)}</span> in cash at the airport office on arrival.
                 </p>
-                <div className="space-y-2">
-                  <button
-                    onClick={() => handleRazorpayPayment('partial')}
-                    disabled={loading}
-                    className="w-full px-5 py-3 border border-primary-700 text-white rounded-xl font-semibold hover:border-secondary-500/50 hover:text-secondary-500 transition-colors disabled:opacity-50 flex items-center justify-center gap-2 text-sm"
-                  >
-                    💳 {loading ? 'Processing...' : `Pay ₹${advanceAmount.toFixed(2)} to Prebook`}
-                  </button>
-                  <button
-                    onClick={() => handleDemoPayment('partial')}
-                    disabled={loading}
-                    className="w-full px-5 py-2.5 border border-primary-800 text-gray-500 rounded-xl font-medium hover:text-gray-400 transition-colors disabled:opacity-50 text-sm"
-                  >
-                    {loading ? 'Processing...' : `Demo Prebook — ₹${advanceAmount.toFixed(2)}`}
-                  </button>
-                </div>
+                <button
+                  onClick={() => handleRazorpayPayment('partial')}
+                  disabled={loading}
+                  className="w-full px-5 py-3 border border-primary-700 text-white rounded-xl font-semibold hover:border-secondary-500/50 hover:text-secondary-500 transition-colors disabled:opacity-50 flex items-center justify-center gap-2 text-sm"
+                >
+                  💳 {loading ? 'Processing...' : `Pay ₹${advanceAmount.toFixed(2)} to Prebook`}
+                </button>
               </div>
 
               {/* Security note */}
@@ -334,6 +299,7 @@ function PaymentContent() {
           </div>
         </div>
       </main>
+      <PaymentTestAlert />
     </div>
   )
 }

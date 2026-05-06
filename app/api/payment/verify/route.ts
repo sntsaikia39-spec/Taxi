@@ -1,4 +1,4 @@
-import { verifyRazorpayPayment } from '@/lib/payment'
+import { verifyRazorpayPayment, getPaymentDetails } from '@/lib/payment'
 import { sendBookingConfirmation, sendAdminNotification } from '@/lib/resend-notifications'
 import { generateInvoiceNumber } from '@/lib/utils'
 import { supabaseAdmin } from '@/lib/supabase-admin'
@@ -10,36 +10,33 @@ export async function POST(request: Request) {
     const body = await request.json()
     const { orderId, paymentId, signature, bookingId, bookingType, paymentMethod, amount } = body
 
-    // ── STEP 1: Log full incoming payload (no signature) ──────────────────────
+    // ── STEP 1: Log incoming payload ───────────────────────────────────────────
     console.log('[VERIFY] ══════════════════════════════════')
     console.log('[VERIFY] STEP 1 — Incoming payload:')
     console.log('[VERIFY]   bookingId:', bookingId)
     console.log('[VERIFY]   paymentId:', paymentId)
+    console.log('[VERIFY]   orderId:', orderId)
     console.log('[VERIFY]   bookingType:', bookingType)
     console.log('[VERIFY]   paymentMethod:', paymentMethod)
     console.log('[VERIFY]   amount:', amount)
-    console.log('[VERIFY]   userEmail from body:', body.userEmail)
-    console.log('[VERIFY]   userName from body:', body.userName)
-    console.log('[VERIFY]   destination from body:', body.destination)
-    console.log('[VERIFY]   tourPackageName from body:', body.tourPackageName)
-    console.log('[VERIFY]   pickupDate from body:', body.pickupDate)
-    console.log('[VERIFY]   pickupTime from body:', body.pickupTime)
-    console.log('[VERIFY]   carType from body:', body.carType)
+    console.log('[VERIFY]   key_secret set:', !!process.env.RAZORPAY_KEY_SECRET)
 
-    // ── STEP 2: Verify signature ───────────────────────────────────────────────
+    // ── STEP 2: Verify Razorpay signature ─────────────────────────────────────
     console.log('[VERIFY] STEP 2 — Verifying Razorpay signature...')
     const isValidSignature = verifyRazorpayPayment(orderId, paymentId, signature)
     if (!isValidSignature) {
-      console.error('[VERIFY] ❌ Invalid signature — aborting')
+      console.error('[VERIFY] ❌ Invalid signature')
+      console.error('[VERIFY]   orderId:', orderId)
+      console.error('[VERIFY]   paymentId:', paymentId)
       return Response.json({ success: false, error: 'Invalid payment signature' }, { status: 400 })
     }
     console.log('[VERIFY] ✅ Signature valid')
 
-    // ── STEP 3: Fetch booking ──────────────────────────────────────────────────
+    // ── STEP 3: Fetch booking (using actual schema column names) ───────────────
     console.log('[VERIFY] STEP 3 — Fetching booking from DB...')
     const { data: booking, error: bookingError } = await supabaseAdmin
       .from('bookings')
-      .select('id, booking_status, amount_total, user_id, pickup_date, pickup_time, car_type, destination, booking_type')
+      .select('id, booking_id, booking_status, booking_type, amount_total, user_name, user_email, start_datetime, car_model, destination_id, tour_package_id')
       .eq('id', bookingId)
       .single()
 
@@ -47,105 +44,108 @@ export async function POST(request: Request) {
       console.error('[VERIFY] ❌ Booking not found:', bookingError)
       return Response.json({ success: false, error: 'Booking not found' }, { status: 404 })
     }
-    console.log('[VERIFY] ✅ Booking found:')
-    console.log('[VERIFY]   amount_total:', booking.amount_total)
-    console.log('[VERIFY]   user_id:', booking.user_id)
-    console.log('[VERIFY]   pickup_date:', booking.pickup_date)
-    console.log('[VERIFY]   car_type:', booking.car_type)
+    console.log('[VERIFY] ✅ Booking found — amount_total:', booking.amount_total, '| booking_id:', booking.booking_id)
 
-    // ── STEP 4: Resolve user email ─────────────────────────────────────────────
+    // ── STEP 4: Resolve user email/name (directly from booking row) ───────────
     console.log('[VERIFY] STEP 4 — Resolving user email...')
-    let userEmail: string = body.userEmail || ''
-    let userName: string = body.userName || ''
-    console.log('[VERIFY]   email from body:', userEmail || '(empty)')
-
-    if (!userEmail && booking.user_id) {
-      console.log('[VERIFY]   No email in body — fetching from Supabase auth...')
-      try {
-        const { data: authData, error: authError } = await supabaseAdmin.auth.admin.getUserById(booking.user_id)
-        if (authError) console.error('[VERIFY]   Auth lookup error:', authError)
-        if (authData?.user) {
-          userEmail = authData.user.email || ''
-          userName = userName || authData.user.user_metadata?.full_name || authData.user.email?.split('@')[0] || 'Customer'
-          console.log('[VERIFY]   Resolved from auth:', userEmail)
-        } else {
-          console.warn('[VERIFY]   Auth lookup returned no user')
-        }
-      } catch (authErr) {
-        console.error('[VERIFY]   Auth lookup threw:', authErr)
-      }
-    }
+    const userEmail: string = body.userEmail || booking.user_email || ''
+    const userName: string = body.userName || booking.user_name || 'Customer'
 
     if (!userEmail) {
-      console.error('[VERIFY] ❌ CRITICAL — No user email resolved. Email will NOT be sent. bookingId:', bookingId)
+      console.error('[VERIFY] ❌ No user email — emails will be skipped')
     } else {
-      console.log('[VERIFY] ✅ Final userEmail:', userEmail, '| userName:', userName)
+      console.log('[VERIFY] ✅ userEmail:', userEmail, '| userName:', userName)
     }
 
-    // ── STEP 5: Payment record ─────────────────────────────────────────────────
-    console.log('[VERIFY] STEP 5 — Creating/checking payment record...')
-    const { data: existingPayment } = await getPaymentByBookingId(bookingId)
+    // ── STEP 5: Fetch real payment details from Razorpay ──────────────────────
+    console.log('[VERIFY] STEP 5 — Fetching payment details from Razorpay...')
+    let rzpPaymentStatus = 'captured'
+    let rzpAmountCaptured: number | null = null
+    try {
+      const rzpPayment = await getPaymentDetails(paymentId)
+      rzpPaymentStatus = String(rzpPayment.status)
+      rzpAmountCaptured = typeof rzpPayment.amount === 'number' ? rzpPayment.amount / 100 : null
+      console.log('[VERIFY] ✅ Razorpay payment:', {
+        id: rzpPayment.id,
+        status: rzpPayment.status,
+        method: (rzpPayment as any).method,
+        amount: rzpPayment.amount,
+      })
+    } catch (rzpErr) {
+      console.warn('[VERIFY] ⚠️ Could not fetch Razorpay payment details:', rzpErr)
+    }
+
+    // ── STEP 6: Create payment record ─────────────────────────────────────────
+    console.log('[VERIFY] STEP 6 — Creating/checking payment record...')
+    const { data: existingPayment } = await getPaymentByBookingId(booking.booking_id)
     let paymentRecord = existingPayment
 
     if (!paymentRecord) {
       const { amountOnlinePaid, amountCashPaid } = calculatePaymentAmounts(booking.amount_total, paymentMethod)
+      const confirmedOnlineAmount = rzpAmountCaptured !== null ? rzpAmountCaptured : amountOnlinePaid
       const { data: newPayment, error: paymentError } = await createPaymentInDB({
-        booking_id: bookingId,
+        booking_id: booking.booking_id,
         payment_type: paymentMethod,
         amount_total: booking.amount_total,
-        amount_online_paid: amountOnlinePaid,
-        amount_cash_paid: amountCashPaid === booking.amount_total ? amountCashPaid : 0,
-        txn_status: 'success',
+        amount_online_paid: confirmedOnlineAmount,
+        amount_cash_paid: paymentMethod === 'full' ? 0 : 0,
+        txn_status: rzpPaymentStatus === 'captured' || rzpPaymentStatus === 'authorized' ? 'success' : 'failed',
         txn_id: paymentId,
         gateway: 'razorpay',
         payment_status: paymentMethod === 'full' ? 'paid' : 'partial',
       })
-      if (paymentError) console.error('[VERIFY] Payment record error:', paymentError)
+      if (paymentError) console.error('[VERIFY] ❌ Payment record error:', paymentError)
       else {
         paymentRecord = newPayment
-        console.log('[VERIFY] ✅ Payment record created')
+        console.log('[VERIFY] ✅ Payment record created:', newPayment?.id)
       }
     } else {
-      console.log('[VERIFY] Payment record already exists')
+      console.log('[VERIFY] Payment record already exists:', existingPayment?.id)
     }
 
-    // ── STEP 6: Update booking status ─────────────────────────────────────────
-    console.log('[VERIFY] STEP 6 — Updating booking status to confirmed...')
+    // ── STEP 7: Confirm booking ────────────────────────────────────────────────
+    console.log('[VERIFY] STEP 7 — Updating booking status to confirmed...')
     const { error: updateError } = await supabaseAdmin
       .from('bookings')
       .update({ booking_status: 'confirmed' })
       .eq('id', bookingId)
-    if (updateError) console.error('[VERIFY] Status update error:', updateError)
-    else console.log('[VERIFY] ✅ Status updated')
+    if (updateError) console.error('[VERIFY] ❌ Status update error:', updateError)
+    else console.log('[VERIFY] ✅ Booking confirmed')
 
-    // ── STEP 7: Send emails ────────────────────────────────────────────────────
-    console.log('[VERIFY] STEP 7 — Email sending...')
+    // ── STEP 8: Send emails ────────────────────────────────────────────────────
+    console.log('[VERIFY] STEP 8 — Sending emails...')
     const amountPaid = paymentMethod === 'full' ? booking.amount_total : Math.round(booking.amount_total * 0.3)
     const amountDue = booking.amount_total - amountPaid
-    const destination = body.destination || body.tourPackageName || booking.destination || ''
-    const pickupDate = body.pickupDate || booking.pickup_date || ''
-    const pickupTime = body.pickupTime || booking.pickup_time || ''
-    const carType = body.carType || booking.car_type || 'Economy'
-    const resolvedBookingType = bookingType || booking.booking_type || 'taxi'
 
-    console.log('[VERIFY]   amountPaid:', amountPaid, '| amountDue:', amountDue)
-    console.log('[VERIFY]   destination:', destination)
-    console.log('[VERIFY]   pickupDate:', pickupDate)
-    console.log('[VERIFY]   carType:', carType)
-    console.log('[VERIFY]   resolvedBookingType:', resolvedBookingType)
-    console.log('[VERIFY]   RESEND_API_KEY set:', !!process.env.RESEND_API_KEY)
-    console.log('[VERIFY]   RESEND_FROM_EMAIL:', process.env.RESEND_FROM_EMAIL)
+    // Extract pickup date and time from start_datetime
+    const pickupDate = body.pickupDate || (booking.start_datetime ? booking.start_datetime.split('T')[0] : '')
+    const pickupTime = body.pickupTime || (booking.start_datetime
+      ? new Date(booking.start_datetime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+      : '')
+    const carType = body.carType || booking.car_model || 'Economy'
+    const resolvedBookingType = bookingType || booking.booking_type || 'airport'
+
+    // Resolve destination / tour name
+    let destinationName = body.destination || body.tourPackageName || ''
+    if (!destinationName) {
+      if (booking.destination_id) {
+        const { data: dest } = await supabaseAdmin.from('destinations').select('name').eq('id', booking.destination_id).single()
+        destinationName = dest?.name || ''
+      } else if (booking.tour_package_id) {
+        const { data: tour } = await supabaseAdmin.from('tours').select('name').eq('id', booking.tour_package_id).single()
+        destinationName = tour?.name || ''
+      }
+    }
 
     if (userEmail) {
-      console.log('[VERIFY] 📧 Sending emails — awaiting both...')
       const emailResults = await Promise.allSettled([
         sendBookingConfirmation({
           to: userEmail,
-          bookingId,
-          userName: userName || 'Customer',
+          bookingId: booking.booking_id,
+          userName,
           bookingType: resolvedBookingType,
-          destination: resolvedBookingType !== 'tour' ? destination : undefined,
-          tourPackageName: resolvedBookingType === 'tour' ? destination : undefined,
+          destination: resolvedBookingType !== 'tour' ? destinationName : undefined,
+          tourPackageName: resolvedBookingType === 'tour' ? destinationName : undefined,
           pickupDate,
           pickupTime,
           carType,
@@ -155,23 +155,19 @@ export async function POST(request: Request) {
           paymentMethod,
         }),
         sendAdminNotification({
-          bookingId,
+          bookingId: booking.booking_id,
           userEmail,
-          userName: userName || 'Customer',
+          userName,
           totalAmount: booking.amount_total,
           bookingType: resolvedBookingType,
-          destination,
+          destination: destinationName,
           pickupDate,
         }),
       ])
-
       emailResults.forEach((r, i) => {
         const label = i === 0 ? 'Customer confirmation' : 'Admin notification'
-        if (r.status === 'rejected') {
-          console.error(`[VERIFY] ❌ ${label} FAILED:`, r.reason)
-        } else {
-          console.log(`[VERIFY] ✅ ${label} result:`, JSON.stringify(r.value))
-        }
+        if (r.status === 'rejected') console.error(`[VERIFY] ❌ ${label}:`, r.reason)
+        else console.log(`[VERIFY] ✅ ${label} sent`)
       })
     } else {
       console.error('[VERIFY] ❌ Skipping emails — no userEmail')
@@ -182,12 +178,12 @@ export async function POST(request: Request) {
     return Response.json({
       success: true,
       message: 'Payment verified and recorded successfully',
-      bookingId,
+      bookingId: booking.booking_id,
       payment: paymentRecord,
       invoiceNumber: generateInvoiceNumber(),
     })
   } catch (error) {
     console.error('[VERIFY] ❌ Unhandled error:', error)
-    return Response.json({ success: false, error: 'Payment verification failed' }, { status: 500 })
+    return Response.json({ success: false, error: 'Payment verification failed', details: String(error) }, { status: 500 })
   }
 }
