@@ -9,6 +9,7 @@ All notable changes to TaxiHollongi will be documented in this file.
 **Author:** Yami
 
 ### Changes
+- update: loader in pages- text removed
 - update: Ratings system added
 
 ## [2026-05-05]

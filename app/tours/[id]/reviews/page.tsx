@@ -114,27 +114,29 @@ export default function ToursReviewsPage() {
             backgroundSize: '36px 36px',
           }}
         ></div>
-        <div className="max-w-3xl mx-auto">
-          {/* Back Button */}
-          <Link
-            href="/tours"
-            className="inline-flex items-center gap-2 text-gray-400 hover:text-secondary-500 transition-colors mb-6 md:mb-8"
-          >
-            <ArrowLeft size={16} />
-            Back to Tours
-          </Link>
-
-          {/* Tour Header */}
-          {!isLoadingReviews && tour && (
-            <div className="mb-8 md:mb-12">
-              <h1 className="text-3xl md:text-4xl font-black text-white mb-2">{tour.name}</h1>
-              <p className="text-gray-400">{tour.description}</p>
-            </div>
-          )}
-
-          {isLoadingReviews ? (
+        {isLoadingReviews ? (
+          <div className="max-w-3xl mx-auto min-h-[60dvh] flex items-center justify-center">
             <Loader />
-          ) : (
+          </div>
+        ) : (
+          <div className="max-w-3xl mx-auto">
+            {/* Back Button */}
+            <Link
+              href="/tours"
+              className="inline-flex items-center gap-2 text-gray-400 hover:text-secondary-500 transition-colors mb-6 md:mb-8"
+            >
+              <ArrowLeft size={16} />
+              Back to Tours
+            </Link>
+
+            {/* Tour Header */}
+            {tour && (
+              <div className="mb-8 md:mb-12">
+                <h1 className="text-3xl md:text-4xl font-black text-white mb-2">{tour.name}</h1>
+                <p className="text-gray-400">{tour.description}</p>
+              </div>
+            )}
+
             <div className="space-y-8 md:space-y-12">
               {/* Rating Summary Section */}
               <div className="border border-primary-800 rounded-3xl p-6 md:p-8 bg-primary-900/40">
@@ -251,8 +253,8 @@ export default function ToursReviewsPage() {
                 </div>
               )}
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </main>
     </div>
   )
