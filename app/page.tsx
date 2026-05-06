@@ -212,7 +212,7 @@ export default function Home() {
         gsap.set(card, { pointerEvents: 'auto', zIndex: 1 }) // Ensure cards are clickable and on top
         gsap.fromTo(card,
           { x: startX, opacity: 0 },
-          { x: 0, opacity: 1, duration: 0.65, delay: i * 0.15, ease: 'power3.out' }
+          { x: 0, opacity: 1, duration: 0.48, delay: i * 0.1, ease: 'power3.out', overwrite: true }
         )
       })
     }
@@ -227,7 +227,7 @@ export default function Home() {
         if (!card) return
         gsap.killTweensOf(card)
         gsap.set(card, { pointerEvents: 'none' })
-        gsap.to(card, { x: endX, opacity: 0, duration: 0.46, ease: 'power3.in' })
+        gsap.to(card, { x: endX, opacity: 0, duration: 0.38, ease: 'power3.in', overwrite: true })
       })
     }
 
@@ -358,7 +358,7 @@ export default function Home() {
           () => {
             gsap.to('.tours-heading > *', { opacity: 1, y: 0, stagger: 0.1, duration: 0.5, ease: 'power2.out' })
             resetAllCards()
-            gsap.delayedCall(0.2, () => { showGroup(0); gsap.delayedCall(0.9, () => { transitioning = false }) })
+            gsap.delayedCall(0.15, () => { showGroup(0); gsap.delayedCall(0.4, () => { transitioning = false }) })
           }
         )
       } else if (from.t === 'tours' && to.t === 'hero') {
@@ -371,12 +371,12 @@ export default function Home() {
         const toGi   = (to   as { t: 'tours'; gi: number }).gi
         hideGroup(fromGi, fwd)
         showGroup(toGi, fwd) // showGroup handles its own stagger
-        gsap.delayedCall(1.3, () => { transitioning = false }) // hide (0.46) + show (0.65 + 0.15) = 1.26s
+        gsap.delayedCall(0.5, () => { transitioning = false })
       } else if (from.t === 'tours' && to.t === 'steps') {
         gsap.set('.step-card', { y: 50, opacity: 0 })
         moveToSection(stepsEl?.offsetTop ?? 0, false, () => {
           gsap.to('.step-card', { y: 0, opacity: 1, stagger: 0.15, duration: 0.6, ease: 'power3.out' })
-          gsap.delayedCall(0.6, () => { transitioning = false })
+          gsap.delayedCall(0.4, () => { transitioning = false })
         })
       } else if (from.t === 'steps' && to.t === 'tours') {
         hideHeader()
@@ -390,20 +390,20 @@ export default function Home() {
           moveToSection(toursEl?.offsetTop ?? 0, false, () => {
             gsap.to('.tours-heading > *', { opacity: 1, y: 0, stagger: 0.1, duration: 0.5, ease: 'power2.out' })
             showGroup(groups.length - 1, false) // showGroup handles its own stagger
-            gsap.delayedCall(0.9, () => { transitioning = false }) // showGroup duration + stagger
+            gsap.delayedCall(0.5, () => { transitioning = false })
           })
         })
       } else if (from.t === 'steps' && to.t === 'cta') {
         gsap.set('.cta-item', { y: 40, opacity: 0 })
         moveToSection(lastSlide?.offsetTop ?? 0, false, () => {
           gsap.to('.cta-item', { y: 0, opacity: 1, stagger: 0.1, duration: 0.6, ease: 'power2.out' })
-          gsap.delayedCall(0.6, () => { transitioning = false })
+          gsap.delayedCall(0.4, () => { transitioning = false })
         })
       } else if (from.t === 'cta' && to.t === 'steps') {
         gsap.set('.step-card', { y: -30, opacity: 0 })
         moveToSection(stepsEl?.offsetTop ?? 0, false, () => {
           gsap.to('.step-card', { y: 0, opacity: 1, stagger: 0.1, duration: 0.5, ease: 'power3.out' })
-          gsap.delayedCall(0.5, () => { transitioning = false })
+          gsap.delayedCall(0.35, () => { transitioning = false })
         })
       } else {
         transitioning = false

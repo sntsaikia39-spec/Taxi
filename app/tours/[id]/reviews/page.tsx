@@ -6,6 +6,7 @@ import Link from 'next/link'
 import Header from '@/components/Header'
 import ReviewCard from '@/components/ReviewCard'
 import ReviewForm from '@/components/ReviewForm'
+import Loader from '@/components/Loader'
 import { ArrowLeft, Star, LogIn, Car } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 import { fetchTourById } from '@/lib/db'
@@ -132,11 +133,7 @@ export default function ToursReviewsPage() {
           )}
 
           {isLoadingReviews ? (
-            <div className="flex items-center justify-center py-20">
-              <div className="text-center">
-                <p className="text-gray-400 animate-pulse">Loading reviews...</p>
-              </div>
-            </div>
+            <Loader />
           ) : (
             <div className="space-y-8 md:space-y-12">
               {/* Rating Summary Section */}

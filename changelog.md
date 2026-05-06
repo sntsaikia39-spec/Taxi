@@ -4,6 +4,13 @@ All notable changes to TaxiHollongi will be documented in this file.
 
 ---
 
+## [2026-05-06]
+
+**Author:** Yami
+
+### Changes
+- update: Ratings system added
+
 ## [2026-05-05]
 
 **Author:** Yami
