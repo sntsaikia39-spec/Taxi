@@ -9,8 +9,9 @@ import { Clock, Users, Car, Calendar, ArrowRight, Star } from 'lucide-react'
 import toast from 'react-hot-toast'
 import gsap from 'gsap'
 import { useAuth } from '@/context/AuthContext'
-import { fetchAllTours } from '@/lib/db'
+import { fetchAllTours, fetchAllTourRatingStats, type RatingStats } from '@/lib/db'
 import type { TourPackage } from '@/lib/db'
+import Link from 'next/link'
 
 const TOUR_IMAGES = [
   'https://images.pexels.com/photos/1172064/pexels-photo-1172064.jpeg?auto=compress&cs=tinysrgb&w=1600',
@@ -39,6 +40,7 @@ export default function Tours() {
   const router = useRouter()
   const { user } = useAuth()
   const [tours, setTours] = useState<TourPackage[]>([])
+  const [ratingStats, setRatingStats] = useState<Record<string, RatingStats>>({})
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [loadingTours, setLoadingTours] = useState(true)
   const scrollRef = useRef<HTMLDivElement | null>(null)
@@ -169,8 +171,9 @@ export default function Tours() {
   const loadTours = async () => {
     setLoadingTours(true)
     try {
-      const data = await fetchAllTours()
+      const [data, stats] = await Promise.all([fetchAllTours(), fetchAllTourRatingStats()])
       setTours(data)
+      setRatingStats(stats)
     } catch (error) {
       console.error('Error loading tours:', error)
       toast.error('Failed to load tours')
@@ -342,6 +345,24 @@ export default function Tours() {
 
                       {/* Fixed Footer */}
                       <div className="p-4 pt-2 shrink-0 bg-gradient-to-b from-transparent to-primary-950/40">
+                        {/* Ratings */}
+                        {ratingStats[tour.id]?.count > 0 && (
+                          <div className="mb-3 pb-3 border-b border-white/5">
+                            <Link
+                              href={`/tours/${tour.id}/reviews`}
+                              onClick={(e) => { e.stopPropagation(); }}
+                              className="inline-flex items-center gap-2 text-xs text-gray-400 hover:text-secondary-500 transition-colors"
+                            >
+                              <div className="flex gap-0.5">
+                                {[1,2,3,4,5].map(s => (
+                                  <Star key={s} size={10} className={s <= Math.round(ratingStats[tour.id].avg) ? 'text-secondary-500 fill-secondary-500' : 'text-secondary-500/20 fill-secondary-500/20'} />
+                                ))}
+                              </div>
+                              <span className="font-semibold">{ratingStats[tour.id].avg} · {ratingStats[tour.id].count} reviews →</span>
+                            </Link>
+                          </div>
+                        )}
+
                         {/* Price + CTA */}
                         <div className="flex items-center justify-between pt-3 border-t border-white/5">
                           <div>

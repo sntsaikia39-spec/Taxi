@@ -53,6 +53,18 @@ export interface Payment {
   created_at: string
 }
 
+export interface RatingStats {
+  avg: number
+  count: number
+  distribution: {
+    5: number
+    4: number
+    3: number
+    2: number
+    1: number
+  }
+}
+
 // ==================== TOURS ====================
 
 export async function fetchAllTours(): Promise<TourPackage[]> {
@@ -92,6 +104,53 @@ export async function fetchTourById(id: string): Promise<TourPackage | null> {
   } catch (error) {
     console.error('Exception fetching tour:', error)
     return null
+  }
+}
+
+export async function fetchAllTourRatingStats(): Promise<Record<string, RatingStats>> {
+  try {
+    const { data, error } = await supabase
+      .from('reviews')
+      .select('reviewable_id, rating')
+      .eq('reviewable_type', 'tour')
+      .eq('is_visible', true)
+
+    if (error) {
+      console.error('Error fetching rating stats:', error)
+      return {}
+    }
+
+    const reviews = data || []
+    const statsMap: Record<string, RatingStats> = {}
+
+    reviews.forEach(review => {
+      if (!statsMap[review.reviewable_id]) {
+        statsMap[review.reviewable_id] = {
+          avg: 0,
+          count: 0,
+          distribution: { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 }
+        }
+      }
+      statsMap[review.reviewable_id].distribution[review.rating as keyof RatingStats['distribution']]++
+    })
+
+    // Calculate averages
+    Object.keys(statsMap).forEach(tourId => {
+      const stats = statsMap[tourId]
+      const totalRatings = Object.values(stats.distribution).reduce((a, b) => a + b, 0)
+      stats.count = totalRatings
+      if (totalRatings > 0) {
+        const sum = Object.entries(stats.distribution).reduce((acc, [star, count]) => {
+          return acc + (parseInt(star) * count)
+        }, 0)
+        stats.avg = Math.round((sum / totalRatings) * 10) / 10
+      }
+    })
+
+    return statsMap
+  } catch (error) {
+    console.error('Exception fetching rating stats:', error)
+    return {}
   }
 }
 

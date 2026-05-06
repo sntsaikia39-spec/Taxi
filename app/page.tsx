@@ -9,7 +9,7 @@ import {
   Users, Star, Clock, ArrowRight, Car, MapPin,
   Shield, ChevronRight, CheckCircle, Zap,
 } from 'lucide-react'
-import { fetchAllTours } from '@/lib/db'
+import { fetchAllTours, fetchAllTourRatingStats, type RatingStats } from '@/lib/db'
 import type { TourPackage } from '@/lib/db'
 import gsap from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
@@ -52,6 +52,7 @@ const HOW_IT_WORKS = [
 
 export default function Home() {
   const [featuredTours, setFeaturedTours] = useState<TourPackage[]>([])
+  const [ratingStats, setRatingStats] = useState<Record<string, RatingStats>>({})
   const [loadingTours, setLoadingTours] = useState(true)
   const [expandedTourId, setExpandedTourId] = useState<string | null>(null)
   const mainRef = useRef<HTMLDivElement>(null)
@@ -89,8 +90,9 @@ export default function Home() {
   }, [])
 
   useEffect(() => {
-    fetchAllTours().then((tours) => {
+    Promise.all([fetchAllTours(), fetchAllTourRatingStats()]).then(([tours, stats]) => {
       setFeaturedTours(tours.slice(0, 4))
+      setRatingStats(stats)
       setLoadingTours(false)
     })
   }, [])
@@ -851,14 +853,22 @@ export default function Home() {
                         ₹{tour.price}
                       </div>
                       {/* Rating */}
-                      <div className="absolute bottom-4 left-4 flex items-center gap-1.5">
-                        <div className="flex gap-0.5">
-                          {[1,2,3,4,5].map(s => (
-                            <Star key={s} size={10} className={s <= 4 ? 'text-secondary-500 fill-secondary-500' : 'text-secondary-500/30 fill-secondary-500/30'} />
-                          ))}
-                        </div>
-                        <span className="text-white text-xs font-semibold">4.8</span>
-                      </div>
+                      {ratingStats[tour.id]?.count > 0 ? (
+                        <Link
+                          href={`/tours/${tour.id}/reviews`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="absolute bottom-4 left-4 flex items-center gap-1.5 hover:opacity-80 transition-opacity cursor-pointer"
+                        >
+                          <div className="flex gap-0.5">
+                            {[1,2,3,4,5].map(s => (
+                              <Star key={s} size={10} className={s <= Math.round(ratingStats[tour.id].avg) ? 'text-secondary-500 fill-secondary-500' : 'text-secondary-500/30 fill-secondary-500/30'} />
+                            ))}
+                          </div>
+                          <span className="text-white text-xs font-semibold">{ratingStats[tour.id].avg} · {ratingStats[tour.id].count}</span>
+                        </Link>
+                      ) : (
+                        <div className="absolute bottom-4 left-4 text-gray-400 text-xs font-semibold">No reviews yet</div>
+                      )}
                     </div>
 
                     {/* Content */}

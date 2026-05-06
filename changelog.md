@@ -9,6 +9,8 @@ All notable changes to TaxiHollongi will be documented in this file.
 **Author:** Yami
 
 ### Changes
+- fixL refresh issue
+- update: Hard delete booking
 - fix: lottie color hex
 - Update: INvoice and Email formats
 - fix: Car Assignment time UTC to IST
