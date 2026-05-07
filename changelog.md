@@ -4,11 +4,20 @@ All notable changes to TaxiHollongi will be documented in this file.
 
 ---
 
+## [2026-05-07]
+
+**Author:** Yami
+
+### Changes
+- update: Razorpay demo
+
 ## [2026-05-06]
 
 **Author:** Yami
 
 ### Changes
+- fix: Loader fix - ratings 2
+- fix: Loader fix - ratings
 - update: loader in pages- text removed
 - update: Ratings system added
 

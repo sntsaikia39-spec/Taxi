@@ -228,7 +228,7 @@ function BookingConfirmedContent() {
                 { n: '1', title: 'Confirmation Sent', desc: 'Check your email for booking details and invoice' },
                 { n: '2', title: 'Driver Assignment', desc: 'Within 2 hours you\'ll receive driver and vehicle details' },
                 { n: '3', title: 'Arrive Early', desc: 'Please arrive 15 minutes before your scheduled pickup time' },
-                { n: '4', title: 'Complete Payment', desc: 'Pay remaining amount in cash at the airport office' },
+                { n: '4', title: 'Complete Payment', desc: 'In case you prebooked, pay the remaining amount in cash at the airport office to get your driver assigned' },
               ].map(({ n, title, desc }) => (
                 <div key={n} className="flex flex-col gap-2">
                   <div className="w-7 h-7 rounded-full bg-secondary-500 text-primary-950 flex items-center justify-center font-black text-xs flex-shrink-0">
