@@ -13,6 +13,7 @@ export interface TourPackage {
   itinerary: string | null
   highlights: string[] | null
   image_url: string | null
+  image_urls: string[] | null
   is_active: boolean
   created_at: string
   updated_at: string

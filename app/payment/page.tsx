@@ -1,6 +1,6 @@
 'use client'
 
-import { useSearchParams } from 'next/navigation'
+import { useSearchParams, useRouter as useNextRouter } from 'next/navigation'
 import { useState, useEffect, useRef, Suspense } from 'react'
 import Header from '@/components/Header'
 import toast from 'react-hot-toast'
@@ -16,6 +16,7 @@ declare global {
 
 function PaymentContent() {
   const searchParams = useSearchParams()
+  const router = useNextRouter()
   const bookingId = searchParams.get('bookingId')
   const bookingType = searchParams.get('type') || 'taxi'
 
@@ -89,7 +90,7 @@ function PaymentContent() {
             const verifyData = await verifyResponse.json()
             if (verifyData.success) {
               toast.success('Payment successful! Your booking is confirmed.')
-              setTimeout(() => { window.location.href = `/booking-confirmed?bookingId=${bookingData.dbBookingId}` }, 2000)
+              setTimeout(() => { router.replace(`/booking-confirmed?bookingId=${bookingData.dbBookingId}`) }, 2000)
             } else {
               toast.error('Payment verification failed. Please contact support.')
               setLoading(false)
