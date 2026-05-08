@@ -55,6 +55,8 @@ export default function Home() {
   const [ratingStats, setRatingStats] = useState<Record<string, RatingStats>>({})
   const [loadingTours, setLoadingTours] = useState(true)
   const [expandedTourId, setExpandedTourId] = useState<string | null>(null)
+  const [cardImgIdx, setCardImgIdx] = useState<Record<string, number>>({})
+  const touchStartX = useRef<number>(0)
   const mainRef = useRef<HTMLDivElement>(null)
   const overlayPathsRef = useRef<SVGPathElement[]>([])
   const overlaySvgRef = useRef<SVGSVGElement>(null)
@@ -826,7 +828,7 @@ export default function Home() {
             // Carousel container — fixed height, all cards absolutely positioned at same location
             // Mobile: full-width cards stack at card-0 position (4 scroll steps)
             // Desktop: 2-column pairs stack at row-0 position (2 scroll steps)
-            <div className="relative w-full overflow-hidden h-[485px] md:h-[500px]">
+            <div className="relative w-full overflow-hidden h-[530px] md:h-[500px]">
               {featuredTours.map((tour, index) => {
                 const posInGroup = index % 2 // 0 = left col, 1 = right col
                 const isExpanded = expandedTourId === tour.id
@@ -835,44 +837,81 @@ export default function Home() {
                     key={tour.id}
                     onClick={() => setExpandedTourId(isExpanded ? null : tour.id)}
                     className={`tour-card card-3d group absolute top-0 rounded-3xl overflow-hidden bg-primary-900/80 backdrop-blur-md border border-primary-800/60 cursor-pointer
-                      w-full h-[475px] md:h-[490px] md:top-0
+                      w-full h-[520px] md:h-[490px] md:top-0
                       ${posInGroup === 0 ? 'md:left-0 md:w-[calc(50%-12px)]' : 'md:left-[calc(50%+12px)] md:w-[calc(50%-12px)]'}`}
                     style={{ boxShadow: '0 16px 44px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,218,0,0.1)' }}
                   >
-                    {/* Image */}
-                    <div className={`tour-img relative transition-all duration-500 ease-in-out overflow-hidden ${isExpanded ? 'h-[140px]' : 'h-[274.2px] md:h-[290px]'}`}>
-                      <Image
-                        src={tour.image_url || TOUR_IMAGES[index % TOUR_IMAGES.length]}
-                        alt={tour.name}
-                        fill
-                        className="object-cover group-hover:scale-105 transition-transform duration-700"
-                      />
-                      <div className="absolute inset-0 bg-gradient-to-t from-primary-950/70 via-primary-950/5 to-transparent" />
-                      {/* Price */}
-                      <div className="absolute top-4 right-4 px-3 py-1.5 bg-secondary-500 text-primary-950 font-black text-sm rounded-xl shadow-lg">
-                        ₹{tour.price}
-                      </div>
-                      {/* Rating */}
-                      {ratingStats[tour.id]?.count > 0 ? (
-                        <Link
-                          href={`/tours/${tour.id}/reviews`}
-                          onClick={(e) => e.stopPropagation()}
-                          className="absolute bottom-4 left-4 flex items-center gap-1.5 hover:opacity-80 transition-opacity cursor-pointer"
+                    {/* Image Carousel */}
+                    {(() => {
+                      const images = tour.image_urls?.length ? tour.image_urls : tour.image_url ? [tour.image_url] : [TOUR_IMAGES[index % TOUR_IMAGES.length]]
+                      const idx = cardImgIdx[tour.id] ?? 0
+                      const goTo = (e: React.MouseEvent | React.TouchEvent, next: number) => {
+                        e.stopPropagation()
+                        setCardImgIdx(prev => ({ ...prev, [tour.id]: (next + images.length) % images.length }))
+                      }
+                      return (
+                        <div
+                          className={`tour-img relative transition-all duration-500 ease-in-out overflow-hidden ${isExpanded ? 'h-[140px]' : 'h-[300px] md:h-[290px]'}`}
+                          onTouchStart={(e) => { touchStartX.current = e.touches[0].clientX }}
+                          onTouchEnd={(e) => {
+                            if (images.length < 2) return
+                            const diff = touchStartX.current - e.changedTouches[0].clientX
+                            if (Math.abs(diff) > 30) goTo(e, diff > 0 ? idx + 1 : idx - 1)
+                          }}
                         >
-                          <div className="flex gap-0.5">
-                            {[1,2,3,4,5].map(s => (
-                              <Star key={s} size={10} className={s <= Math.round(ratingStats[tour.id].avg) ? 'text-secondary-500 fill-secondary-500' : 'text-secondary-500/30 fill-secondary-500/30'} />
-                            ))}
+                          <Image
+                            src={images[idx]}
+                            alt={tour.name}
+                            fill
+                            className="object-cover transition-opacity duration-300"
+                          />
+                          <div className="absolute inset-0 bg-gradient-to-t from-primary-950/70 via-primary-950/5 to-transparent" />
+                          {images.length > 1 && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={(e) => goTo(e, idx - 1)}
+                                className="absolute left-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-primary-950/70 text-white flex items-center justify-center text-base hover:bg-primary-950/90 transition-colors z-10"
+                              >‹</button>
+                              <button
+                                type="button"
+                                onClick={(e) => goTo(e, idx + 1)}
+                                className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-primary-950/70 text-white flex items-center justify-center text-base hover:bg-primary-950/90 transition-colors z-10"
+                              >›</button>
+                              <div className="absolute bottom-10 left-1/2 -translate-x-1/2 flex gap-1 z-10">
+                                {images.map((_, i) => (
+                                  <span key={i} className={`block w-1.5 h-1.5 rounded-full transition-colors ${i === idx ? 'bg-white' : 'bg-white/40'}`} />
+                                ))}
+                              </div>
+                            </>
+                          )}
+                          {/* Price */}
+                          <div className="absolute top-4 right-4 px-3 py-1.5 bg-secondary-500 text-primary-950 font-black text-sm rounded-xl shadow-lg z-10">
+                            ₹{tour.price}
                           </div>
-                          <span className="text-white text-xs font-semibold">{ratingStats[tour.id].avg} · {ratingStats[tour.id].count}</span>
-                        </Link>
-                      ) : (
-                        <div className="absolute bottom-4 left-4 text-gray-400 text-xs font-semibold">No reviews yet</div>
-                      )}
-                    </div>
+                          {/* Rating */}
+                          {ratingStats[tour.id]?.count > 0 ? (
+                            <Link
+                              href={`/tours/${tour.id}/reviews`}
+                              onClick={(e) => e.stopPropagation()}
+                              className="absolute bottom-4 left-4 flex items-center gap-1.5 hover:opacity-80 transition-opacity cursor-pointer z-10"
+                            >
+                              <div className="flex gap-0.5">
+                                {[1,2,3,4,5].map(s => (
+                                  <Star key={s} size={10} className={s <= Math.round(ratingStats[tour.id].avg) ? 'text-secondary-500 fill-secondary-500' : 'text-secondary-500/30 fill-secondary-500/30'} />
+                                ))}
+                              </div>
+                              <span className="text-white text-xs font-semibold">{ratingStats[tour.id].avg} · {ratingStats[tour.id].count}</span>
+                            </Link>
+                          ) : (
+                            <div className="absolute bottom-4 left-4 text-gray-400 text-xs font-semibold z-10">No reviews yet</div>
+                          )}
+                        </div>
+                      )
+                    })()}
 
                     {/* Content */}
-                    <div className={`transition-all duration-500 p-4 md:p-7 flex flex-col ${isExpanded ? 'h-[calc(100%-140px)]' : 'h-[calc(100%-274.2px)] md:h-[calc(100%-290px)]'}`}>
+                    <div className={`transition-all duration-500 p-4 md:p-7 flex flex-col ${isExpanded ? 'h-[calc(100%-140px)]' : 'h-[calc(100%-300px)] md:h-[calc(100%-290px)]'}`}>
                       <div className={`flex-1 ${isExpanded ? 'overflow-y-auto pr-1' : 'overflow-hidden'}`}>
                         <h3 className={`font-black text-white mb-2.5 transition-all ${isExpanded ? 'text-xl' : 'text-2xl'}`}>{tour.name}</h3>
                         <p className={`text-gray-400 text-sm md:text-base mb-5 leading-relaxed ${isExpanded ? '' : 'line-clamp-3 min-h-[3.75rem] md:min-h-[4.5rem]'}`}>

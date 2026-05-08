@@ -75,6 +75,7 @@ type Tour = {
   itinerary: string | null
   highlights: string[]
   image_url: string | null
+  image_urls: string[] | null
   is_active: boolean
   created_at: string
 }
@@ -257,7 +258,11 @@ export default function AdminDashboard() {
     duration_mins: '0',
     description: '',
   })
-  const [tourData, setTourData] = useState({
+  const [tourData, setTourData] = useState<{
+    name: string; description: string; arrival_time: string; duration_hours: string;
+    price: string; max_passengers: string; car_model: string; itinerary: string;
+    highlights: string; image_urls: string[];
+  }>({
     name: '',
     description: '',
     arrival_time: '',
@@ -267,10 +272,10 @@ export default function AdminDashboard() {
     car_model: '',
     itinerary: '',
     highlights: '',
-    image_url: '',
+    image_urls: [],
   })
   const [tourImageUploading, setTourImageUploading] = useState(false)
-  const [tourImagePreview, setTourImagePreview] = useState<string>('')
+  const [tourImageUrlInput, setTourImageUrlInput] = useState('')
   const [showCashCollectionModal, setShowCashCollectionModal] = useState(false)
   const [selectedPaymentForCash, setSelectedPaymentForCash] = useState<Payment | null>(null)
   const [selectedBookingForCash, setSelectedBookingForCash] = useState<Booking | null>(null)
@@ -542,9 +547,7 @@ export default function AdminDashboard() {
         throw new Error(result.error || 'Failed to upload image')
       }
 
-      // Update tour data with the uploaded image URL
-      setTourData({ ...tourData, image_url: result.url })
-      setTourImagePreview(result.url)
+      setTourData(prev => ({ ...prev, image_urls: [...prev.image_urls, result.url] }))
       toast.success('Image uploaded successfully!')
     } catch (error) {
       console.error('Error uploading image:', error)
@@ -590,9 +593,9 @@ export default function AdminDashboard() {
         car_model: '',
         itinerary: '',
         highlights: '',
-        image_url: '',
+        image_urls: [],
       })
-      setTourImagePreview('')
+      setTourImageUrlInput('')
       setShowAddTour(false)
       loadTours()
     } catch (error) {
@@ -639,9 +642,9 @@ export default function AdminDashboard() {
         car_model: '',
         itinerary: '',
         highlights: '',
-        image_url: '',
+        image_urls: [],
       })
-      setTourImagePreview('')
+      setTourImageUrlInput('')
       setEditingTour(null)
       loadTours()
     } catch (error) {
@@ -691,9 +694,9 @@ export default function AdminDashboard() {
       car_model: tour.car_model || '',
       itinerary: tour.itinerary || '',
       highlights: tour.highlights?.join(', ') || '',
-      image_url: tour.image_url || '',
+      image_urls: tour.image_urls?.length ? tour.image_urls : (tour.image_url ? [tour.image_url] : []),
     })
-    setTourImagePreview(tour.image_url || '')
+    setTourImageUrlInput('')
     setShowAddTour(false)
   }
 
@@ -709,10 +712,18 @@ export default function AdminDashboard() {
       car_model: '',
       itinerary: '',
       highlights: '',
-      image_url: '',
+      image_urls: [],
     })
-    setTourImagePreview('')
+    setTourImageUrlInput('')
     setShowAddTour(false)
+  }
+
+  const handleDeleteTourImage = async (urlToDelete: string, index: number) => {
+    const match = urlToDelete.match(/\/tour_images\/([^?#]+)/)
+    if (match) {
+      await fetch(`/api/tours/upload-image?filename=${encodeURIComponent(match[1])}`, { method: 'DELETE' })
+    }
+    setTourData(prev => ({ ...prev, image_urls: prev.image_urls.filter((_, i) => i !== index) }))
   }
 
   const handleAddDestination = async (e: React.FormEvent) => {
@@ -3123,72 +3134,68 @@ export default function AdminDashboard() {
                 onChange={(e) => setTourData({ ...tourData, car_model: e.target.value })}
               />
               {/* Image Upload Section */}
-              <div className="border rounded-lg p-4 bg-gray-50">
-                <label className="text-xs text-gray-600 font-semibold mb-3 block">Tour Image</label>
+              <div className="border rounded-lg p-4 bg-gray-50 col-span-1 md:col-span-2">
+                <label className="text-xs text-gray-600 font-semibold mb-3 block">Tour Images ({tourData.image_urls.length} added)</label>
                 <div className="space-y-3">
-                  {/* Preview */}
-                  {tourImagePreview && (
-                    <div className="relative w-full h-48 bg-gray-200 rounded-lg overflow-hidden">
-                      <img
-                        src={tourImagePreview}
-                        alt="Tour preview"
-                        className="w-full h-full object-cover"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setTourImagePreview('')
-                          setTourData({ ...tourData, image_url: '' })
-                        }}
-                        className="absolute top-2 right-2 bg-red-500 text-white rounded-full w-8 h-8 flex items-center justify-center hover:bg-red-600 transition-colors"
-                      >
-                        ✕
-                      </button>
+                  {/* Image Grid */}
+                  {tourData.image_urls.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {tourData.image_urls.map((url, i) => (
+                        <div key={i} className="relative w-24 h-24 rounded-lg overflow-hidden border border-gray-200 shrink-0">
+                          <img src={url} alt={`Image ${i + 1}`} className="w-full h-full object-cover" />
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteTourImage(url, i)}
+                            className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center hover:bg-red-600 transition-colors text-xs"
+                          >✕</button>
+                        </div>
+                      ))}
                     </div>
                   )}
-                  {/* File Upload Input */}
+                  {/* File Upload */}
                   <div className="relative">
                     <input
                       type="file"
                       accept="image/*"
                       disabled={tourImageUploading}
-                      onChange={(e) => {
-                        const file = e.target.files?.[0]
-                        if (file) {
-                          handleTourImageUpload(file)
-                        }
-                      }}
+                      onChange={(e) => { const file = e.target.files?.[0]; if (file) { handleTourImageUpload(file); e.target.value = '' } }}
                       className="hidden"
                       id="tour-image-upload"
                     />
                     <label
                       htmlFor="tour-image-upload"
-                      className={`block w-full p-3 text-center border-2 border-dashed rounded-lg cursor-pointer transition-colors ${
-                        tourImageUploading
-                          ? 'bg-gray-100 border-gray-300 text-gray-400'
-                          : 'border-blue-300 hover:bg-blue-50 text-gray-700'
-                      }`}
+                      className={`block w-full p-3 text-center border-2 border-dashed rounded-lg cursor-pointer transition-colors ${tourImageUploading ? 'bg-gray-100 border-gray-300 text-gray-400' : 'border-blue-300 hover:bg-blue-50 text-gray-700'}`}
                     >
-                      {tourImageUploading ? '⏳ Uploading...' : '📁 Click to upload or drag image'}
+                      {tourImageUploading ? '⏳ Uploading...' : '📁 Click to upload image'}
                     </label>
                   </div>
-                  {/* OR Divider */}
-                  <div className="relative flex items-center gap-2 py-2">
+                  {/* OR + URL input */}
+                  <div className="relative flex items-center gap-2 py-1">
                     <div className="flex-1 border-t border-gray-300"></div>
-                    <span className="text-xs text-gray-500 font-medium">OR</span>
+                    <span className="text-xs text-gray-500 font-medium">OR add by URL</span>
                     <div className="flex-1 border-t border-gray-300"></div>
                   </div>
-                  {/* URL Input */}
-                  <input
-                    type="text"
-                    placeholder="Enter Image URL (https://...)"
-                    className="input-field"
-                    value={tourData.image_url}
-                    onChange={(e) => {
-                      setTourData({ ...tourData, image_url: e.target.value })
-                      setTourImagePreview(e.target.value)
-                    }}
-                  />
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      placeholder="https://..."
+                      className="input-field flex-1"
+                      value={tourImageUrlInput}
+                      onChange={(e) => setTourImageUrlInput(e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      disabled={!tourImageUrlInput.trim()}
+                      onClick={() => {
+                        const url = tourImageUrlInput.trim()
+                        if (url) {
+                          setTourData(prev => ({ ...prev, image_urls: [...prev.image_urls, url] }))
+                          setTourImageUrlInput('')
+                        }
+                      }}
+                      className="px-3 py-2 bg-blue-500 text-white rounded-lg text-sm hover:bg-blue-600 disabled:opacity-40 transition-colors whitespace-nowrap"
+                    >Add</button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -3238,7 +3245,6 @@ export default function AdminDashboard() {
             <button
               onClick={() => {
                 setShowAddTour(true)
-                setTourImagePreview('')
               }}
               className="btn-primary text-sm md:text-base"
             >
@@ -3276,13 +3282,13 @@ export default function AdminDashboard() {
                       >
                         <td className="py-3 px-4">
                           <div className="flex items-center gap-3">
-                            {tour.image_url ? (
+                            {(tour.image_urls?.[0] || tour.image_url) ? (
                               <div className="relative w-8 h-8 rounded-full overflow-hidden shrink-0 border border-gray-200">
-                                <Image 
-                                  src={tour.image_url} 
-                                  alt={tour.name} 
-                                  fill 
-                                  className="object-cover" 
+                                <Image
+                                  src={tour.image_urls?.[0] || tour.image_url!}
+                                  alt={tour.name}
+                                  fill
+                                  className="object-cover"
                                 />
                               </div>
                             ) : (
@@ -3370,13 +3376,13 @@ export default function AdminDashboard() {
                   {/* Card Image/Header */}
                   <div className="bg-gradient-to-r from-secondary-500 to-secondary-600 p-4 text-white relative">
                     <div className="flex items-center gap-3 mb-2">
-                      {tour.image_url ? (
+                      {(tour.image_urls?.[0] || tour.image_url) ? (
                         <div className="relative w-10 h-10 rounded-full overflow-hidden shrink-0 border-2 border-white/30 shadow-sm">
-                          <Image 
-                            src={tour.image_url} 
-                            alt={tour.name} 
-                            fill 
-                            className="object-cover" 
+                          <Image
+                            src={tour.image_urls?.[0] || tour.image_url!}
+                            alt={tour.name}
+                            fill
+                            className="object-cover"
                           />
                         </div>
                       ) : (

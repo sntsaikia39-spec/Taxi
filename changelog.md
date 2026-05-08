@@ -9,6 +9,7 @@ All notable changes to TaxiHollongi will be documented in this file.
 **Author:** Yami
 
 ### Changes
+- fix: What's next text
 - update: Razorpay demo
 
 ## [2026-05-06]

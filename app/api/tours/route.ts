@@ -24,7 +24,7 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { name, description, arrival_time, duration_hours, price, max_passengers, car_model, itinerary, highlights, image_url } = body
+    const { name, description, arrival_time, duration_hours, price, max_passengers, car_model, itinerary, highlights, image_url, image_urls } = body
 
     // Validation
     if (!name || !price) {
@@ -46,6 +46,7 @@ export async function POST(request: NextRequest) {
         itinerary: itinerary || null,
         highlights: highlights && Array.isArray(highlights) ? highlights : [],
         image_url: image_url || null,
+        image_urls: Array.isArray(image_urls) ? image_urls : [],
         is_active: true,
       },
     ]).select()

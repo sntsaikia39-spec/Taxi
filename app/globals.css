@@ -299,8 +299,8 @@ html, body {
 
 .app-splash__taxi {
   position: absolute;
-  --splash-taxi-width: clamp(11rem, 24vw, 16rem);
-  --splash-taxi-half-width: clamp(5.5rem, 12vw, 8rem);
+  --splash-taxi-width: clamp(9rem, 19.7vw, 13.1rem);
+  --splash-taxi-half-width: clamp(4.5rem, 9.85vw, 6.6rem);
   width: var(--splash-taxi-width);
   right: -100%;
   opacity: 0;
@@ -404,8 +404,8 @@ html, body {
 
 @media (max-width: 768px) {
   .app-splash__taxi {
-    --splash-taxi-width: clamp(9rem, 50vw, 13rem);
-    --splash-taxi-half-width: clamp(4.5rem, 25vw, 6.5rem);
+    --splash-taxi-width: clamp(7.4rem, 41vw, 10.7rem);
+    --splash-taxi-half-width: clamp(3.7rem, 20.5vw, 5.35rem);
   }
 }
 

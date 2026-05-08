@@ -43,6 +43,8 @@ export default function Tours() {
   const [ratingStats, setRatingStats] = useState<Record<string, RatingStats>>({})
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [loadingTours, setLoadingTours] = useState(true)
+  const [cardImgIdx, setCardImgIdx] = useState<Record<string, number>>({})
+  const touchStartX = useRef<number>(0)
   const scrollRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
@@ -260,26 +262,63 @@ export default function Tours() {
                       onClick={() => setExpandedId(isExpanded ? null : tour.id)}
                       className="flex flex-col h-[clamp(460px,70svh,506px)] md:h-[500px] rounded-3xl bg-primary-900/80 backdrop-blur-md border border-primary-800/60 shadow-[0_16px_44px_rgba(0,0,0,0.45)] overflow-hidden hover:shadow-[0_24px_56px_rgba(0,0,0,0.55)] transition-all duration-300 cursor-pointer"
                     >
-                    {/* Image */}
-                    <div className={`relative transition-all duration-500 ease-in-out w-full overflow-hidden shrink-0 ${isExpanded ? 'h-[129px] md:h-[140px]' : 'h-[clamp(230px,35svh,254px)] md:h-[228px]'}`}>
-                      <Image
-                        src={tour.image_url || TOUR_IMAGES[index % TOUR_IMAGES.length]}
-                        alt={tour.name}
-                        fill
-                        className="object-cover w-full h-full hover:scale-105 transition-transform duration-500"
-                      />
-                      {/* Price badge */}
-                      <div className="absolute top-2 left-3 bg-primary-950/80 backdrop-blur-sm text-secondary-500 font-black text-sm px-2.5 py-1 rounded-xl border border-secondary-500/30">
-                        ₹{toNum(tour.price).toFixed(0)}
-                      </div>
-                      {/* Departure time badge */}
-                      {tour.arrival_time && (
-                        <div className="absolute bottom-2 right-3 bg-primary-950/75 backdrop-blur-sm text-white text-[10px] font-semibold px-2 py-1 rounded-full flex items-center gap-1 border border-white/10">
-                          <Calendar size={10} />
-                          Daily {formatDepartureTime(tour.arrival_time)}
+                    {/* Image Carousel */}
+                    {(() => {
+                      const images = tour.image_urls?.length ? tour.image_urls : tour.image_url ? [tour.image_url] : [TOUR_IMAGES[index % TOUR_IMAGES.length]]
+                      const idx = cardImgIdx[tour.id] ?? 0
+                      const goTo = (e: React.MouseEvent | React.TouchEvent, next: number) => {
+                        e.stopPropagation()
+                        setCardImgIdx(prev => ({ ...prev, [tour.id]: (next + images.length) % images.length }))
+                      }
+                      return (
+                        <div
+                          className={`relative transition-all duration-500 ease-in-out w-full overflow-hidden shrink-0 ${isExpanded ? 'h-[129px] md:h-[140px]' : 'h-[clamp(230px,35svh,254px)] md:h-[228px]'}`}
+                          onTouchStart={(e) => { touchStartX.current = e.touches[0].clientX }}
+                          onTouchEnd={(e) => {
+                            if (images.length < 2) return
+                            const diff = touchStartX.current - e.changedTouches[0].clientX
+                            if (Math.abs(diff) > 30) goTo(e, diff > 0 ? idx + 1 : idx - 1)
+                          }}
+                        >
+                          <Image
+                            src={images[idx]}
+                            alt={tour.name}
+                            fill
+                            className="object-cover w-full h-full transition-opacity duration-300"
+                          />
+                          {images.length > 1 && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={(e) => goTo(e, idx - 1)}
+                                className="absolute left-2 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-primary-950/70 text-white flex items-center justify-center text-xs hover:bg-primary-950/90 transition-colors"
+                              >‹</button>
+                              <button
+                                type="button"
+                                onClick={(e) => goTo(e, idx + 1)}
+                                className="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-primary-950/70 text-white flex items-center justify-center text-xs hover:bg-primary-950/90 transition-colors"
+                              >›</button>
+                              <div className="absolute bottom-7 left-1/2 -translate-x-1/2 flex gap-1">
+                                {images.map((_, i) => (
+                                  <span key={i} className={`block w-1.5 h-1.5 rounded-full transition-colors ${i === idx ? 'bg-white' : 'bg-white/40'}`} />
+                                ))}
+                              </div>
+                            </>
+                          )}
+                          {/* Price badge */}
+                          <div className="absolute top-2 left-3 bg-primary-950/80 backdrop-blur-sm text-secondary-500 font-black text-sm px-2.5 py-1 rounded-xl border border-secondary-500/30">
+                            ₹{toNum(tour.price).toFixed(0)}
+                          </div>
+                          {/* Departure time badge */}
+                          {tour.arrival_time && (
+                            <div className="absolute bottom-2 right-3 bg-primary-950/75 backdrop-blur-sm text-white text-[10px] font-semibold px-2 py-1 rounded-full flex items-center gap-1 border border-white/10">
+                              <Calendar size={10} />
+                              Daily {formatDepartureTime(tour.arrival_time)}
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </div>
+                      )
+                    })()}
 
                     {/* Content Wrapper */}
                     <div className="flex flex-col flex-1 overflow-hidden">

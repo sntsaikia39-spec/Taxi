@@ -73,3 +73,26 @@ export async function POST(request: NextRequest) {
     )
   }
 }
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url)
+    const filename = searchParams.get('filename')
+
+    if (!filename) {
+      return NextResponse.json({ success: false, error: 'Filename required' }, { status: 400 })
+    }
+
+    const { error } = await supabaseAdmin.storage.from('tour_images').remove([filename])
+
+    if (error) {
+      console.error('Error deleting file from storage:', error)
+      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    }
+
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    console.error('Unexpected error deleting file:', error)
+    return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
+  }
+}
