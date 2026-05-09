@@ -268,10 +268,10 @@ function BookingConfirmedContent() {
               <p className="text-gray-500 text-xs">Contact our support team for any questions or modifications.</p>
             </div>
             <div className="flex flex-wrap gap-2.5 text-xs">
-              <a href="mailto:support@rinastoursandtravels.com"
+              <a href="mailto:support@rinastoursandtravels.in"
                 className="flex items-center gap-1.5 px-3 py-1.5 border border-primary-700 text-gray-300 rounded-lg hover:border-secondary-500/40 hover:text-secondary-500 transition-colors">
                 <Mail size={12} />
-                support@rinastoursandtravels.com
+                support@rinastoursandtravels.in
               </a>
               <a href="tel:+919876543210"
                 className="flex items-center gap-1.5 px-3 py-1.5 border border-primary-700 text-gray-300 rounded-lg hover:border-secondary-500/40 hover:text-secondary-500 transition-colors">

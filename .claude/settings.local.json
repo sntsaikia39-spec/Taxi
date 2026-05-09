@@ -11,7 +11,13 @@
       "Bash(xargs grep *)",
       "Bash(vercel --version)",
       "Bash(npx next *)",
-      "Bash(npm install *)"
+      "Bash(npm install *)",
+      "Bash(Get-ChildItem -Path \"d:\\\\CODE\\\\BeeDigital\\\\TaxiHollongi\" -Recurse -Force)",
+      "Bash(Select-Object -First 50)",
+      "Bash(Format-Table FullName)",
+      "Bash(node -e ' *)",
+      "Bash(grep -o '\"text\":\"[^\"]*\\\\\\(post.dep\\\\|after dep\\\\|deploy\\\\|NEXT_PUBLIC_SITE\\\\|Google Search\\\\|verification\\\\|google-site\\\\|GSC\\\\|after.*launch\\\\|checklist\\\\|set.*env\\\\|add.*env\\\\\\)[^\"]*\"' \"C:/Users/Yami Main/.claude/projects/d--CODE-BeeDigital-TaxiHollongi/8c331366-ee15-4e1e-b337-9e088b949352.jsonl\" 2>/dev/null | sed 's/\\\\\\\\n/\\\\n/g' | head -80)",
+      "Read(//c/Users/Yami Main/.claude/projects/d--CODE-BeeDigital-TaxiHollongi/**)"
     ]
   }
 }

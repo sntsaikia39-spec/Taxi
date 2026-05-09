@@ -432,15 +432,15 @@ export default function Tours() {
                   <p className="text-gray-400 text-sm leading-relaxed">
                     Don&apos;t see what you&apos;re looking for? We can customize tours based on your preferences and schedule.{' '}
                     <a
-                      href="mailto:support@rinastoursandtravels.com"
+                      href="mailto:support@rinastoursandtravels.in"
                       className="text-secondary-500 hover:text-secondary-400 font-semibold transition-colors"
                     >
-                      support@rinastoursandtravels.com
+                      support@rinastoursandtravels.in
                     </a>
                   </p>
                 </div>
                 <a
-                  href="mailto:support@rinastoursandtravels.com"
+                  href="mailto:support@rinastoursandtravels.in"
                   className="inline-flex items-center gap-2 bg-secondary-500 text-primary-950 font-black px-5 py-3 rounded-xl hover:bg-secondary-400 transition-colors whitespace-nowrap flex-shrink-0"
                 >
                   Contact Us

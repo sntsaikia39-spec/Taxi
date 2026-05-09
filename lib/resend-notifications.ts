@@ -4,7 +4,7 @@ const resend = new Resend(process.env.RESEND_API_KEY)
 
 const FROM_EMAIL = process.env.RESEND_FROM_EMAIL || 'noreply@rinastoursandtravels.in'
 const BRAND_NAME = "Rina's Tours and Travels"
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@rinastoursandtravels.com'
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@rinastoursandtravels.in'
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://rinastoursandtravels.in'
 const APP_LOGO_URL = 'https://hpobmsfwvrewpjqnmhsv.supabase.co/storage/v1/object/sign/internal/image-removebg-preview%20(1).png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV9iMjA1YjRkYi0wMDA4LTQyOWUtYTFmZi02NzBjZTE1OWJhOTkiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJpbnRlcm5hbC9pbWFnZS1yZW1vdmViZy1wcmV2aWV3ICgxKS5wbmciLCJpYXQiOjE3Nzc3NTQ5NzksImV4cCI6MTkzNTQzNDk3OX0.FR2fYD_zRiEMwQcrMja4J1PCZI6o6EFZ-_-8i6T0dy8'
 const SUPPORT_EMAIL = 'support@taxihollongi.com'

@@ -22,13 +22,13 @@ export default function Footer() {
             </p>
             <div className="space-y-1">
               <a
-                href="mailto:support@rinastoursandtravels.com"
+                href="mailto:support@rinastoursandtravels.in"
                 className="flex items-center gap-2.5 text-xs hover:text-secondary-500 transition-colors duration-200 group overflow-hidden"
               >
                 <div className="w-7 h-7 rounded-lg bg-primary-900 flex items-center justify-center group-hover:bg-secondary-500/10 transition-colors shrink-0">
                   <Mail size={12} className="text-secondary-500" />
                 </div>
-                <span className="truncate min-w-0">support@rinastoursandtravels.com</span>
+                <span className="truncate min-w-0">support@rinastoursandtravels.in</span>
               </a>
               <a
                 href="tel:+919876543210"
@@ -120,6 +120,19 @@ export default function Footer() {
         </div>
 
         {/* Bottom bar */}
+        <style>
+          {`
+            @keyframes footer-bee-shimmer {
+              0% { background-position: 0% 50%; }
+              50% { background-position: 100% 50%; }
+              100% { background-position: 0% 50%; }
+            }
+            .animate-bee-shimmer {
+              background-size: 200% auto;
+              animation: footer-bee-shimmer 6s linear infinite;
+            }
+          `}
+        </style>
         <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-1.5 sm:gap-2">
           <p className="text-[11px] sm:text-xs text-gray-600">
             &copy; 2026 Rina&apos;s Tours and Travels. All rights reserved.
@@ -131,7 +144,7 @@ export default function Footer() {
             <Link href="/terms" className="hover:text-secondary-500 transition-colors duration-200">
               Terms
             </Link>
-            <span>Made with ♥ in Arunachal Pradesh</span>
+            <span>Crafted by <Link href="https://beesolutions.in" target="_blank" className="font-bold bg-gradient-to-r from-yellow-500 to-cyan-500 bg-clip-text text-transparent animate-bee-shimmer transition-opacity hover:opacity-50">Bee Solutions</Link></span>
           </div>
         </div>
       </div>

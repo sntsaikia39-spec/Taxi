@@ -49,7 +49,7 @@ export default function PrivacyPage() {
 
             <section className="bg-primary-900/50 border border-primary-800 rounded-2xl p-5">
               <h2 className="text-lg font-semibold mb-2">Contact</h2>
-              <p>Questions? Email support@rinastoursandtravels.com.</p>
+              <p>Questions? Email support@rinastoursandtravels.in.</p>
             </section>
           </article>
         </div>
