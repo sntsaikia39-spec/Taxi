@@ -443,50 +443,28 @@ export default function MyBookings() {
                     key={booking.id}
                     className="booking-card rounded-xl border border-primary-800 bg-primary-900/60 backdrop-blur-sm overflow-hidden hover:border-primary-700 transition-colors duration-200 will-change-transform"
                   >
-                    {/* Assignment Notification Banner */}
-                    {assignment && isExpanded && (
-                      <div className="bg-green-500/10 border-b border-green-500/25 px-6 py-5">
-                        <div className="flex items-start gap-4">
-                          <div className="w-10 h-10 rounded-full bg-green-500/15 border border-green-500/25 flex items-center justify-center flex-shrink-0 mt-0.5">
-                            <Car size={18} className="text-green-400" />
-                          </div>
-                          <div className="flex-1">
-                            <p className="text-green-300 font-bold text-base mb-2">Car has been assigned to you!</p>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-1.5 text-sm text-green-300/80 mt-1">
-                              <p><span className="font-semibold text-green-300">Car:</span> {assignment.cars.model_name} ({assignment.cars.class})</p>
-                              <p><span className="font-semibold text-green-300">Number Plate:</span> {assignment.cars.number_plate}</p>
-                              <p><span className="font-semibold text-green-300">Driver:</span> {assignment.cars.driver_name}</p>
-                              <p><span className="font-semibold text-green-300">Driver Phone:</span> {assignment.cars.driver_phone}</p>
-                              {assignment.cars.driver_email && (
-                                <p><span className="font-semibold text-green-300">Driver Email:</span> {assignment.cars.driver_email}</p>
-                              )}
-                              <p><span className="font-semibold text-green-300">Pickup Time:</span> {formatDate(assignment.start_datetime)} at {formatTime(assignment.start_datetime)}</p>
-                            </div>
-                            <div className="mt-3 bg-green-500/10 border border-green-500/20 rounded-xl px-4 py-2.5 text-sm text-green-300/80">
-                              Please arrive at the pickup point at least <strong className="text-green-300">10 minutes early</strong> to ensure a smooth and on-time departure.
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="p-3.5 md:p-4">
+                    <div className="p-3 md:p-3">
                       {/* Header */}
-                      <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-2 pb-2 border-b border-primary-800">
+                      <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-1 md:mb-1.5 pb-1.5 md:pb-2 border-b border-primary-800">
                         <div>
-                          <h3 className="text-base md:text-lg font-black text-white mb-1">{bookingTypeLabel}</h3>
+                          <h3 className="text-base md:text-lg font-black text-white mb-0.5">{bookingTypeLabel}</h3>
                           <p className="text-gray-500 font-mono text-[11px] md:text-xs truncate max-w-[220px] md:max-w-none">{booking.booking_id || booking.id}</p>
                         </div>
-                        <div className="flex items-center gap-2.5 mt-2 md:mt-0">
+                        <div className="flex items-center gap-2 mt-1.5 md:mt-0">
                           <span className={`px-2.5 py-1 rounded-full font-semibold text-[11px] md:text-xs ${statusBadge.className}`}>
                             {statusBadge.label}
                           </span>
+                          {assignment && (
+                            <span className="px-2.5 py-1 rounded-full font-semibold text-[11px] md:text-xs bg-green-500/15 border border-green-500/30 text-green-400">
+                              ✓ Vehicle Assigned
+                            </span>
+                          )}
                           <span className="text-xl md:text-3xl font-black text-secondary-500">₹{toNum(booking.amount_total).toFixed(2)}</span>
                         </div>
                       </div>
 
                       {/* Details Grid */}
-                      <div className={`grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-4 transition-all duration-500 ease-out ${isExpanded ? 'max-h-[420px] opacity-100 mb-4' : 'max-h-0 opacity-0 mb-0 overflow-hidden'}`}>
+                      <div className={`grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 transition-all duration-300 ease-out overflow-hidden ${isExpanded ? 'max-h-[420px] opacity-100 mt-2 mb-3' : 'max-h-0 opacity-0 m-0'}`}>
                         <div>
                           <p className="text-gray-500 text-xs font-semibold uppercase tracking-wide mb-1">Date</p>
                           <p className="text-white font-semibold">{formatDate(booking.start_datetime)}</p>
@@ -517,21 +495,46 @@ export default function MyBookings() {
                         )}
                       </div>
 
+                      {/* Vehicle Assignment details (Integrated) */}
+                      {assignment && (
+                        <div className={`bg-green-500/5 border border-green-500/20 rounded-xl p-4 md:p-5 overflow-hidden transition-all duration-300 ease-out ${isExpanded ? 'max-h-[400px] opacity-100 mb-3' : 'max-h-0 opacity-0 p-0 m-0 border-transparent'}`}>
+                          <div className="flex items-center gap-2 mb-3">
+                            <Car size={16} className="text-green-400" />
+                            <h4 className="text-green-400 font-bold text-xs uppercase tracking-wider">Vehicle Assigned</h4>
+                          </div>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-2 text-sm">
+                            <p className="text-gray-300"><span className="text-gray-500 font-medium">Car:</span> {assignment.cars.model_name} ({assignment.cars.class})</p>
+                            <p className="text-gray-300"><span className="text-gray-500 font-medium">Number Plate:</span> {assignment.cars.number_plate}</p>
+                            <p className="text-gray-300"><span className="text-gray-500 font-medium">Driver:</span> {assignment.cars.driver_name}</p>
+                            <p className="text-gray-300"><span className="text-gray-500 font-medium">Driver Phone:</span> {assignment.cars.driver_phone}</p>
+                            {assignment.cars.driver_email && (
+                              <p className="text-gray-300"><span className="text-gray-500 font-medium">Driver Email:</span> {assignment.cars.driver_email}</p>
+                            )}
+                            <p className="text-gray-300"><span className="text-gray-500 font-medium">Pickup:</span> {formatDate(assignment.start_datetime)} at {formatTime(assignment.start_datetime)}</p>
+                          </div>
+                          <div className="mt-3 bg-green-500/10 border border-green-500/10 rounded-lg px-3 py-2 text-[11px] md:text-xs text-green-300/70 italic">
+                            Tip: Arrive at the pickup point 10 minutes early for a smooth departure.
+                          </div>
+                        </div>
+                      )}
+
                       {/* User Contact Info */}
-                      <div className={`bg-primary-950/50 border border-primary-800 rounded-xl p-4 md:p-5 mb-4 overflow-hidden transition-all duration-500 ease-out ${isExpanded ? 'max-h-[260px] opacity-100' : 'max-h-0 opacity-0 p-0 mb-0 border-transparent'}`}>
-                        <h4 className="text-gray-400 font-semibold text-xs uppercase tracking-wider mb-3">Contact Information</h4>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-sm">
-                          <p className="text-gray-300"><span className="text-gray-500 font-medium">Name:</span> {booking.user_name}</p>
-                          <p className="text-gray-300"><span className="text-gray-500 font-medium">Phone:</span> {booking.phone}</p>
-                          {booking.user_email && (
-                            <p className="text-gray-300"><span className="text-gray-500 font-medium">Email:</span> {booking.user_email}</p>
-                          )}
+                      <div className={`overflow-hidden transition-all duration-300 ease-out ${isExpanded ? 'max-h-[260px] opacity-100 mb-3' : 'max-h-0 opacity-0 m-0'}`}>
+                        <div className="bg-primary-950/50 border border-primary-800 rounded-xl p-4 md:p-5">
+                          <h4 className="text-gray-400 font-semibold text-xs uppercase tracking-wider mb-3">Contact Information</h4>
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-sm">
+                            <p className="text-gray-300"><span className="text-gray-500 font-medium">Name:</span> {booking.user_name}</p>
+                            <p className="text-gray-300"><span className="text-gray-500 font-medium">Phone:</span> {booking.phone}</p>
+                            {booking.user_email && (
+                              <p className="text-gray-300"><span className="text-gray-500 font-medium">Email:</span> {booking.user_email}</p>
+                            )}
+                          </div>
                         </div>
                       </div>
 
                       {/* Actions */}
-                      <div className="flex flex-wrap gap-2.5">
-                        <button onClick={() => toggleBookingDetails(booking.id)} className="flex items-center gap-2 px-3.5 py-2 border border-primary-700 text-gray-300 rounded-lg hover:border-primary-600 hover:text-white transition-colors text-xs">
+                      <div className="flex flex-wrap gap-2">
+                        <button onClick={() => toggleBookingDetails(booking.id)} className="flex items-center gap-2 px-3 py-1.5 border border-primary-700 text-gray-300 rounded-lg hover:border-primary-600 hover:text-white transition-colors text-xs">
                           <Eye size={14} />
                           {isExpanded ? 'Hide Details' : 'View Details'}
                           <ChevronDown size={14} className={`transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`} />
@@ -539,7 +542,7 @@ export default function MyBookings() {
                         <button
                           onClick={() => handleDownloadInvoice(booking)}
                           disabled={downloadingInvoiceId === booking.id}
-                          className="flex items-center gap-2 px-3.5 py-2 border border-secondary-500/40 text-secondary-500 rounded-lg hover:border-secondary-500 hover:bg-secondary-500/10 transition-colors text-xs"
+                          className="flex items-center gap-2 px-3 py-1.5 border border-secondary-500/40 text-secondary-500 rounded-lg hover:border-secondary-500 hover:bg-secondary-500/10 transition-colors text-xs"
                         >
                           <Download size={14} />
                           {downloadingInvoiceId === booking.id ? 'Downloading...' : 'Invoice'}
@@ -547,7 +550,7 @@ export default function MyBookings() {
                         {(booking.booking_status === 'pending' || booking.booking_status === 'confirmed') ? (
                           <button
                             onClick={() => handleCancel(booking.id)}
-                            className="flex items-center gap-2 px-3.5 py-2 border border-red-500/40 text-red-400 rounded-lg hover:border-red-500 hover:bg-red-500/10 transition-colors text-xs"
+                            className="flex items-center gap-2 px-3 py-1.5 border border-red-500/40 text-red-400 rounded-lg hover:border-red-500 hover:bg-red-500/10 transition-colors text-xs"
                           >
                             <Trash2 size={14} />
                             Cancel
