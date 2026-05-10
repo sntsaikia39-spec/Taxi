@@ -67,6 +67,7 @@ export default function BookTour() {
   const [email, setEmail] = useState('')
   const [passengers, setPassengers] = useState(1)
   const [date, setDate] = useState('')
+  const [capacityWarning, setCapacityWarning] = useState<string | null>(null)
 
   useEffect(() => {
     const scroller = scrollRef.current
@@ -118,6 +119,23 @@ export default function BookTour() {
 
   const totalPrice = tour ? toNum(tour.price) * passengers : 0
   const advancePayment = Math.round(totalPrice * 0.3 * 100) / 100
+
+  const checkAvailability = async (selectedDate: string) => {
+    if (!tour?.car_model || !selectedDate) { setCapacityWarning(null); return }
+    try {
+      const res = await fetch(`/api/tours/${tourId}/availability?booking_date=${selectedDate}`)
+      const data = await res.json()
+      if (data.success && data.car_model && !data.available) {
+        setCapacityWarning(
+          `The ${data.car_model} vehicles are fully booked for your selected date. You may still proceed — a different vehicle may be assigned to you, or contact us to confirm.`
+        )
+      } else {
+        setCapacityWarning(null)
+      }
+    } catch {
+      setCapacityWarning(null)
+    }
+  }
 
   const canAdvanceStep = (): boolean => {
     if (step === 0) {
@@ -362,7 +380,7 @@ export default function BookTour() {
                     <input
                       type="date"
                       value={date}
-                      onChange={(e) => setDate(e.target.value)}
+                      onChange={(e) => { setDate(e.target.value); checkAvailability(e.target.value) }}
                       min={todayISO()}
                       style={{ colorScheme: 'dark' }}
                       className={inputCls}
@@ -371,6 +389,12 @@ export default function BookTour() {
                       <p className="text-sm text-secondary-500 mt-2 font-semibold">
                         ✓ {formatDisplayDate(date)} at {departureTime}
                       </p>
+                    )}
+                    {capacityWarning && (
+                      <div className="mt-3 bg-yellow-500/10 border border-yellow-500/40 rounded-xl p-3 flex items-start gap-2">
+                        <span className="text-yellow-400 text-base leading-none mt-px flex-shrink-0">⚠</span>
+                        <p className="text-yellow-300 text-xs leading-relaxed">{capacityWarning}</p>
+                      </div>
                     )}
                   </div>
                 </div>
@@ -402,6 +426,12 @@ export default function BookTour() {
                       <span className="text-secondary-500">₹{totalPrice.toFixed(2)}</span>
                     </div>
                   </div>
+                  {capacityWarning && (
+                    <div className="mt-4 bg-yellow-500/10 border border-yellow-500/40 rounded-xl p-3 flex items-start gap-2">
+                      <span className="text-yellow-400 text-base leading-none mt-px flex-shrink-0">⚠</span>
+                      <p className="text-yellow-300 text-xs leading-relaxed">{capacityWarning}</p>
+                    </div>
+                  )}
                   <div className="mt-4 bg-secondary-500/10 border border-secondary-500/25 rounded-xl p-3 text-xs text-gray-400">
                     Pay full online or prebook with ₹{advancePayment.toFixed(2)} (30%) — choose on the next screen.
                     Please arrive at least 15 minutes before departure at {departureTime}.

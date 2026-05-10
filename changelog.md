@@ -4,11 +4,19 @@ All notable changes to TaxiHollongi will be documented in this file.
 
 ---
 
+## [2026-05-10]
+
+**Author:** Yami
+
+### Changes
+- fix: vehicles assignment tab and status
+
 ## [2026-05-09]
 
 **Author:** Yami
 
 ### Changes
+- update: Major SEO, minor fixes, email updates
 - fix: 'previous" after booking confirmed
 - update: Tours multi images
 

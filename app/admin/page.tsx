@@ -3126,13 +3126,16 @@ export default function AdminDashboard() {
                 value={tourData.max_passengers}
                 onChange={(e) => setTourData({ ...tourData, max_passengers: e.target.value })}
               />
-              <input
-                type="text"
-                placeholder="Car Model"
+              <select
                 className="input-field"
                 value={tourData.car_model}
                 onChange={(e) => setTourData({ ...tourData, car_model: e.target.value })}
-              />
+              >
+                <option value="">Select Car Model (optional)</option>
+                {[...new Set(cars.filter(c => c.is_active).map(c => c.model_name))].sort().map(model => (
+                  <option key={model} value={model}>{model}</option>
+                ))}
+              </select>
               {/* Image Upload Section */}
               <div className="border rounded-lg p-4 bg-gray-50 col-span-1 md:col-span-2">
                 <label className="text-xs text-gray-600 font-semibold mb-3 block">Tour Images ({tourData.image_urls.length} added)</label>
