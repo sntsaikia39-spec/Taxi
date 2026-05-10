@@ -35,6 +35,9 @@ export async function GET(request: NextRequest) {
     const bookingDate = sp.get('booking_date')
     const startTime   = sp.get('start_time')
     const endTime     = sp.get('end_time')
+    // end_date: optional. When a booking crosses midnight, the client sends the
+    // actual end date so requestEnd is computed correctly instead of wrapping.
+    const endDate     = sp.get('end_date') || bookingDate
 
     if (!bookingDate || !startTime || !endTime) {
       return NextResponse.json(
@@ -43,12 +46,51 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const requestStart = new Date(`${bookingDate}T${startTime}`)
-    const requestEnd   = new Date(`${bookingDate}T${endTime}`)
+    // ── 0. Check conflict control toggle ───────────────────────────────────
+    const { data: settingRow } = await supabaseAdmin
+      .from('app_settings')
+      .select('value')
+      .eq('key', 'conflict_control_enabled')
+      .single()
 
-    if (isNaN(requestStart.getTime()) || isNaN(requestEnd.getTime())) {
+    const conflictControlEnabled = settingRow?.value !== 'false'
+
+    if (!conflictControlEnabled) {
+      // Conflict control is OFF — return all active cars as available (no overlap checks)
+      const { data: allCars, error: allCarsError } = await supabaseAdmin
+        .from('cars')
+        .select('id, model_name, class, capacity, per_km_charge, per_hr_charge')
+        .eq('is_active', true)
+        .order('model_name', { ascending: true })
+
+      if (allCarsError) throw new Error('Failed to fetch cars')
+
+      const modelMap = new Map<string, { model_name: string; class: string; capacity: number; per_km_charge: number; per_hr_charge: number }>()
+      ;(allCars || []).forEach(car => {
+        if (!modelMap.has(car.model_name)) modelMap.set(car.model_name, car)
+      })
+
+      const counts = new Map<string, number>()
+      ;(allCars || []).forEach(car => counts.set(car.model_name, (counts.get(car.model_name) || 0) + 1))
+
+      const models = Array.from(modelMap.values()).map(rep => ({
+        model_name:      rep.model_name,
+        class:           rep.class,
+        capacity:        rep.capacity,
+        per_km_charge:   rep.per_km_charge,
+        per_hr_charge:   rep.per_hr_charge,
+        available_count: counts.get(rep.model_name) || 1,
+      }))
+
+      return NextResponse.json({ success: true, models, conflict_control_enabled: false })
+    }
+
+    const requestStart = new Date(`${bookingDate}T${startTime}`)
+    const requestEnd   = new Date(`${endDate}T${endTime}`)   // endDate may differ from bookingDate for long trips
+
+    if (isNaN(requestStart.getTime()) || isNaN(requestEnd.getTime()) || requestEnd <= requestStart) {
       return NextResponse.json(
-        { success: false, error: 'Invalid date or time format' },
+        { success: false, error: 'Invalid date/time: end must be after start' },
         { status: 400 }
       )
     }

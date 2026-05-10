@@ -315,6 +315,15 @@ export default function AdminDashboard() {
   })
   const [submittingProfile, setSubmittingProfile] = useState(false)
 
+  // Conflict control feature
+  const [conflictControlEnabled, setConflictControlEnabled] = useState(true)
+  const [loadingConflictSetting, setLoadingConflictSetting] = useState(true)
+  const [showConflictOffWarning, setShowConflictOffWarning] = useState(false)
+  const [togglingConflictControl, setTogglingConflictControl] = useState(false)
+  type ConflictData = { assignment_conflicts: any[]; model_conflicts: any[]; total: number }
+  const [conflictData, setConflictData] = useState<ConflictData | null>(null)
+  const [loadingConflicts, setLoadingConflicts] = useState(false)
+
   useEffect(() => {
     document.documentElement.style.overflowY = 'auto'
     document.body.style.overflowY = 'auto'
@@ -392,7 +401,62 @@ export default function AdminDashboard() {
     loadCars()
     loadDestinations()
     loadTours()
+    loadConflictSetting()
   }, [])
+
+  const loadConflictSetting = async () => {
+    setLoadingConflictSetting(true)
+    try {
+      const res = await fetch('/api/admin/settings?key=conflict_control_enabled', { cache: 'no-store' })
+      const data = await res.json()
+      if (data.success && data.settings?.length > 0) {
+        setConflictControlEnabled(data.settings[0].value !== 'false')
+      }
+    } catch {
+      // default to enabled if fetch fails
+    } finally {
+      setLoadingConflictSetting(false)
+    }
+  }
+
+  const fetchConflicts = async () => {
+    setLoadingConflicts(true)
+    try {
+      const res = await fetch('/api/admin/conflicts', { cache: 'no-store' })
+      const data = await res.json()
+      if (data.success) setConflictData(data)
+    } catch {
+      toast.error('Failed to fetch conflict data')
+    } finally {
+      setLoadingConflicts(false)
+    }
+  }
+
+  const handleToggleConflictControl = async (newValue: boolean) => {
+    setTogglingConflictControl(true)
+    try {
+      const res = await fetch('/api/admin/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: 'conflict_control_enabled', value: String(newValue) }),
+      })
+      const data = await res.json()
+      if (!data.success) throw new Error(data.error)
+      setConflictControlEnabled(newValue)
+      setShowConflictOffWarning(false)
+      toast.success(`Conflict control ${newValue ? 'enabled' : 'disabled'}.`)
+      if (newValue) {
+        // Turned ON — fetch conflicts immediately so admin can resolve them
+        await fetchConflicts()
+      } else {
+        setConflictData(null)
+      }
+    } catch (err) {
+      toast.error('Failed to update setting')
+    } finally {
+      setTogglingConflictControl(false)
+    }
+  }
 
   const loadBookings = async () => {
     setLoadingBookings(true)
@@ -3786,6 +3850,195 @@ export default function AdminDashboard() {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* ── Conflict Control Toggle ─────────────────────────────────── */}
+      <div className="bg-white rounded-lg shadow-lg p-4 md:p-6">
+        <h2 className="text-lg md:text-xl font-bold mb-1">Booking Conflict Control</h2>
+        <p className="text-xs md:text-sm text-gray-500 mb-4 md:mb-6">
+          When enabled, the system prevents double-booking cars for overlapping time slots.
+        </p>
+
+        {loadingConflictSetting ? (
+          <p className="text-sm text-gray-400">Loading setting…</p>
+        ) : (
+          <div className="space-y-4">
+            {/* Toggle row */}
+            <div className="flex items-center justify-between gap-3 px-3 md:px-4 py-3 md:py-4 rounded-lg border border-gray-200 hover:bg-gray-50 transition-smooth cursor-default">
+              <div className="flex items-center gap-2 md:gap-3 flex-1">
+                <div className={`w-8 md:w-9 h-8 md:h-9 rounded-lg flex items-center justify-center text-base select-none shrink-0 ${conflictControlEnabled ? 'bg-green-100' : 'bg-red-100'}`}>
+                  {conflictControlEnabled ? '🔒' : '🔓'}
+                </div>
+                <div className="min-w-0">
+                  <p className="font-semibold text-sm md:text-base">
+                    Conflict Control is <span className={conflictControlEnabled ? 'text-green-600' : 'text-red-600'}>{conflictControlEnabled ? 'ON' : 'OFF'}</span>
+                  </p>
+                  <p className="text-xs md:text-sm text-gray-500">
+                    {conflictControlEnabled
+                      ? 'Cars are hidden when fully booked for a time slot.'
+                      : 'All active cars show as available regardless of existing bookings.'}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => conflictControlEnabled ? setShowConflictOffWarning(true) : handleToggleConflictControl(true)}
+                disabled={togglingConflictControl}
+                aria-label="Toggle conflict control"
+                className={`relative inline-flex items-center w-12 md:w-14 h-6 md:h-7 rounded-full transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-secondary-500 focus:ring-offset-2 shrink-0 disabled:opacity-50 ${conflictControlEnabled ? 'bg-green-500' : 'bg-red-400'}`}
+              >
+                <span className={`inline-block w-5 md:w-6 h-5 md:h-6 bg-white rounded-full shadow transform transition-transform duration-300 ${conflictControlEnabled ? 'translate-x-6 md:translate-x-7' : 'translate-x-0.5'}`} />
+              </button>
+            </div>
+
+            {/* Warning modal for turning OFF */}
+            {showConflictOffWarning && (
+              <div className="border border-red-300 bg-red-50 rounded-lg p-4 space-y-3">
+                <p className="font-bold text-red-800 text-sm">⚠ Warning — Read before disabling</p>
+                <ul className="text-xs text-red-700 space-y-1 list-disc list-inside">
+                  <li>All active cars (except inactive ones) will appear available during booking, even if already booked.</li>
+                  <li>Users may book the same physical car for the same time slot.</li>
+                  <li>Car availability warnings in the tour booking flow will be suppressed.</li>
+                  <li>Admin will need to manually handle all scheduling and assignment conflicts.</li>
+                  <li>Re-enabling this later will surface existing conflicts for you to resolve.</li>
+                </ul>
+                <div className="flex gap-3 pt-1">
+                  <button
+                    onClick={() => handleToggleConflictControl(false)}
+                    disabled={togglingConflictControl}
+                    className="px-4 py-2 bg-red-600 text-white text-xs font-semibold rounded-lg hover:bg-red-700 disabled:opacity-50"
+                  >
+                    {togglingConflictControl ? 'Disabling…' : 'Yes, Disable Anyway'}
+                  </button>
+                  <button
+                    onClick={() => setShowConflictOffWarning(false)}
+                    className="px-4 py-2 bg-gray-200 text-gray-700 text-xs font-semibold rounded-lg hover:bg-gray-300"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Conflict resolution panel — shown when enabled and conflicts found */}
+            {conflictControlEnabled && (
+              <div className="border-t border-gray-100 pt-4">
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-widest">Conflict Checker</p>
+                  <button
+                    onClick={fetchConflicts}
+                    disabled={loadingConflicts}
+                    className="px-3 py-1.5 text-xs font-semibold bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg disabled:opacity-50"
+                  >
+                    {loadingConflicts ? 'Scanning…' : '🔍 Scan for Conflicts'}
+                  </button>
+                </div>
+
+                {conflictData === null && !loadingConflicts && (
+                  <p className="text-xs text-gray-400">Click "Scan for Conflicts" to check the current booking state.</p>
+                )}
+
+                {conflictData !== null && conflictData.total === 0 && (
+                  <div className="flex items-center gap-2 text-green-700 text-sm bg-green-50 border border-green-200 rounded-lg px-4 py-3">
+                    <span>✓</span><span className="font-semibold">No conflicts found. All bookings are clean.</span>
+                  </div>
+                )}
+
+                {conflictData !== null && conflictData.total > 0 && (
+                  <div className="space-y-4">
+                    {/* Assignment conflicts — hard conflicts */}
+                    {conflictData.assignment_conflicts.length > 0 && (
+                      <div>
+                        <p className="text-xs font-bold text-red-700 uppercase tracking-wide mb-2">
+                          🚨 Hard Conflicts ({conflictData.assignment_conflicts.length}) — Same car assigned to multiple bookings simultaneously
+                        </p>
+                        <div className="space-y-3">
+                          {conflictData.assignment_conflicts.map((c: any, i: number) => (
+                            <div key={i} className="border border-red-200 bg-red-50 rounded-lg p-3 text-xs space-y-2">
+                              <p className="font-semibold text-red-800">{c.car_model} — {c.car_number_plate}</p>
+                              {[c.booking_a, c.booking_b].filter(Boolean).map((bk: any, bi: number) => (
+                                <div key={bi} className="bg-white border border-red-100 rounded p-2 space-y-0.5">
+                                  <p className="font-semibold">{bk.user_name} <span className="text-gray-400 font-normal">({bk.booking_id?.slice(0, 12)})</span></p>
+                                  <p className="text-gray-600">{new Date(bk.start_datetime).toLocaleString('en-IN')} → {new Date(bk.end_datetime).toLocaleString('en-IN')}</p>
+                                  <p className="text-gray-500">{bk.booking_type} · {bk.booking_status}</p>
+                                  <button
+                                    onClick={() => {
+                                      const fullBk = bookings.find(b => (b.booking_id || b.id) === (bk.booking_id || bk.id))
+                                      const pmt = payments.find(p => p.booking_id === (bk.booking_id || bk.id)) || payments[0]
+                                      if (fullBk && pmt) {
+                                        setSelectedPaymentForVehicle(pmt)
+                                        setSelectedBookingForVehicle(fullBk)
+                                        setSelectedCarForAssignment(null)
+                                        setShowVehicleAssignmentModal(true)
+                                      }
+                                    }}
+                                    className="mt-1 px-3 py-1 bg-red-600 text-white rounded font-semibold hover:bg-red-700"
+                                  >
+                                    Reassign Vehicle
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Model over-subscription — soft conflicts */}
+                    {conflictData.model_conflicts.length > 0 && (
+                      <div>
+                        <p className="text-xs font-bold text-orange-700 uppercase tracking-wide mb-2">
+                          ⚠ Soft Conflicts ({conflictData.model_conflicts.length}) — More bookings than available cars of a model
+                        </p>
+                        <div className="space-y-3">
+                          {conflictData.model_conflicts.map((c: any, i: number) => (
+                            <div key={i} className="border border-orange-200 bg-orange-50 rounded-lg p-3 text-xs space-y-2">
+                              <p className="font-semibold text-orange-800">
+                                {c.car_model} — {c.conflicting_bookings.length} bookings, {c.physical_count} car{c.physical_count !== 1 ? 's' : ''} available
+                              </p>
+                              {c.conflicting_bookings.map((bk: any, bi: number) => (
+                                <div key={bi} className="bg-white border border-orange-100 rounded p-2 space-y-0.5">
+                                  <p className="font-semibold">{bk.user_name} <span className="text-gray-400 font-normal">({bk.booking_id?.slice(0, 12)})</span></p>
+                                  <p className="text-gray-600">{new Date(bk.start_datetime).toLocaleString('en-IN')} → {new Date(bk.end_datetime).toLocaleString('en-IN')}</p>
+                                  <p className="text-gray-500">{bk.booking_type} · {bk.booking_status}</p>
+                                  <div className="flex gap-2 mt-1">
+                                    <button
+                                      onClick={() => {
+                                        const fullBk = bookings.find(b => (b.booking_id || b.id) === (bk.booking_id || bk.id))
+                                        const pmt = payments.find(p => p.booking_id === (bk.booking_id || bk.id)) || payments[0]
+                                        if (fullBk && pmt) {
+                                          setSelectedPaymentForVehicle(pmt)
+                                          setSelectedBookingForVehicle(fullBk)
+                                          setSelectedCarForAssignment(null)
+                                          setShowVehicleAssignmentModal(true)
+                                        }
+                                      }}
+                                      className="px-3 py-1 bg-orange-600 text-white rounded font-semibold hover:bg-orange-700"
+                                    >
+                                      Reassign
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        const fullBk = bookings.find(b => (b.booking_id || b.id) === (bk.booking_id || bk.id))
+                                        if (fullBk) handleUpdateBookingStatus(fullBk, 'cancelled')
+                                      }}
+                                      className="px-3 py-1 bg-gray-200 text-gray-700 rounded font-semibold hover:bg-gray-300"
+                                    >
+                                      Cancel Booking
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Profile Management */}

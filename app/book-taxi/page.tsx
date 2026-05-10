@@ -216,23 +216,35 @@ export default function BookTaxi() {
   const loadCars = async () => {
     setLoadingCars(true)
     try {
-      // Calculate estimated end time based on mode and duration
+      // Compute end datetime without % 24 wrapping.
+      // Returns the actual end date string (may be a future day) and HH:mm.
+      const addMinsToDateTime = (dateStr: string, timeStr: string, addMins: number) => {
+        const [y, mo, d] = dateStr.split('-').map(Number)
+        const [h, m] = timeStr.split(':').map(Number)
+        const totalMins = h * 60 + m + addMins
+        const extraDays = Math.floor(totalMins / 1440)       // 1440 = 24*60
+        const remainMins = totalMins % 1440
+        const endH = Math.floor(remainMins / 60)
+        const endM = remainMins % 60
+        // Add extraDays using local date parts to avoid UTC shift on .toISOString()
+        const dt = new Date(y, mo - 1, d + extraDays)
+        const endDate = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`
+        const endTime = `${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}`
+        return { endDate, endTime }
+      }
+
+      let endDate = date
       let estimatedEndTime = startTime
-      
+
       if (mode === 'airport' && selectedDest) {
-        // For airport bookings, use the exact integer duration
-        const [startHour, startMin] = startTime.split(':').map(Number)
-        const endMinutes = startHour * 60 + startMin + selectedDest.estimated_duration_minutes
-        const endHour = Math.floor(endMinutes / 60) % 24
-        const endMin = endMinutes % 60
-        estimatedEndTime = `${String(endHour).padStart(2, '0')}:${String(endMin).padStart(2, '0')}`
+        // Double duration: trip to destination + return to base
+        const result = addMinsToDateTime(date, startTime, selectedDest.estimated_duration_minutes * 2)
+        endDate = result.endDate
+        estimatedEndTime = result.endTime
       } else if (mode === 'hourly') {
-        // For hourly bookings, add the selected hours
-        const [startHour, startMin] = startTime.split(':').map(Number)
-        const endMinutes = startHour * 60 + startMin + noOfHours * 60
-        const endHour = Math.floor(endMinutes / 60) % 24
-        const endMin = endMinutes % 60
-        estimatedEndTime = `${String(endHour).padStart(2, '0')}:${String(endMin).padStart(2, '0')}`
+        const result = addMinsToDateTime(date, startTime, noOfHours * 60)
+        endDate = result.endDate
+        estimatedEndTime = result.endTime
       }
 
       const params = new URLSearchParams({
@@ -240,6 +252,8 @@ export default function BookTaxi() {
         start_time: startTime,
         end_time: estimatedEndTime,
       })
+      // Pass end_date only when the booking crosses into a different calendar day
+      if (endDate !== date) params.set('end_date', endDate)
 
       const r = await fetch(`/api/cars/available-models?${params}`)
       const d = await r.json()

@@ -143,8 +143,9 @@ export async function POST(request: NextRequest) {
           .single()
 
         if (!destError && destination?.estimated_duration_minutes) {
-          durationMinutes = destination.estimated_duration_minutes
-          console.log(`Destination duration: ${durationMinutes} minutes`)
+          // Double the one-way duration: car is busy for trip + return to base
+          durationMinutes = destination.estimated_duration_minutes * 2
+          console.log(`Destination duration (×2 for return): ${durationMinutes} minutes`)
         } else {
           console.warn('Could not fetch destination duration, using default of 60 minutes')
           durationMinutes = 60

@@ -27,6 +27,17 @@ export async function GET(
       return NextResponse.json({ success: true, available: true, available_count: null, car_model: null })
     }
 
+    // Check conflict control toggle — if OFF, skip conflict logic
+    const { data: settingRow } = await supabaseAdmin
+      .from('app_settings')
+      .select('value')
+      .eq('key', 'conflict_control_enabled')
+      .single()
+
+    if (settingRow?.value === 'false') {
+      return NextResponse.json({ success: true, available: true, available_count: null, car_model: tour.car_model, conflict_control_enabled: false })
+    }
+
     // Extract HH:mm from arrival_time (stored as datetime string like "...T09:00...")
     const timeMatch = tour.arrival_time?.match(/T(\d{2}):(\d{2})/)
     const startTime = timeMatch ? `${timeMatch[1]}:${timeMatch[2]}` : '09:00'
