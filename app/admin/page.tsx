@@ -4213,7 +4213,7 @@ export default function AdminDashboard() {
               </div>
               <div className="min-w-0">
                 <p className="font-semibold text-sm md:text-base">Cleanup Window</p>
-                <p className="text-xs md:text-sm text-gray-500">Deletion runs once this much time has passed since the last cleanup — not every hour.</p>
+                <p className="text-xs md:text-sm text-gray-500">Deletion runs once this much time has passed since the last cleanup.</p>
               </div>
             </div>
             <div className="flex items-center gap-2 shrink-0">
