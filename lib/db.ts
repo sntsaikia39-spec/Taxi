@@ -36,6 +36,8 @@ export interface Booking {
   amount_total: number
   booking_status: 'pending' | 'confirmed' | 'completed' | 'cancelled'
   created_at: string
+  cancellation_requested_at: string | null
+  cancellation_reason: string | null
 }
 
 export interface Payment {
@@ -52,6 +54,11 @@ export interface Payment {
   cash_paid_at: string | null
   cash_collected_by: string | null
   created_at: string
+  refund_status: 'none' | 'pending' | 'processed' | 'failed' | null
+  refund_amount: number | null
+  refund_id: string | null
+  refunded_at: string | null
+  refund_notes: string | null
 }
 
 export interface RatingStats {

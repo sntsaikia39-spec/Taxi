@@ -4,6 +4,13 @@ All notable changes to TaxiHollongi will be documented in this file.
 
 ---
 
+## [2026-05-12]
+
+**Author:** Yami
+
+### Changes
+- fix: vercel limit on hobby mode
+
 ## [2026-05-11]
 
 **Author:** Yami

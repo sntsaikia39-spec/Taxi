@@ -100,6 +100,11 @@ type Payment = {
   cash_paid_at: string | null
   cash_collected_by: string | null
   created_at: string
+  refund_status: 'none' | 'pending' | 'processed' | 'failed' | null
+  refund_amount: number | null
+  refund_id: string | null
+  refunded_at: string | null
+  refund_notes: string | null
 }
 
 type VehicleAssignment = {
@@ -293,6 +298,9 @@ export default function AdminDashboard() {
   const [confirmLowCapacityCarAssignment, setConfirmLowCapacityCarAssignment] = useState<Car | null>(null)
   const [updatingStatusId, setUpdatingStatusId] = useState<string | null>(null)
   const [deletingBookingId, setDeletingBookingId] = useState<string | null>(null)
+  const [processingCancellationId, setProcessingCancellationId] = useState<string | null>(null)
+  const [cancellationRefundAmount, setCancellationRefundAmount] = useState<Record<string, string>>({})
+  const [cancellationRefundNotes, setCancellationRefundNotes] = useState<Record<string, string>>({})
   const [darkMode, setDarkMode] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false
     return localStorage.getItem('adminDarkMode') === '1'
@@ -1562,6 +1570,51 @@ export default function AdminDashboard() {
     }
   }
 
+  const handleProcessCancellation = async (booking: Booking, action: 'approve' | 'reject') => {
+    const bookingId = booking.booking_id || booking.id
+    const bookingPayment = payments.find(p => p.booking_id === bookingId)
+    const suggestedRefund = toNum(bookingPayment?.amount_online_paid)
+
+    if (action === 'approve') {
+      const refundAmt = cancellationRefundAmount[booking.id] ?? String(suggestedRefund)
+      const parsed = parseFloat(refundAmt)
+      const confirmed = window.confirm(
+        `Approve cancellation for booking ${bookingId.slice(0, 12)}…?\n\n` +
+        `This will:\n` +
+        `• Initiate a Razorpay refund of Rs. ${isNaN(parsed) ? suggestedRefund.toFixed(2) : parsed.toFixed(2)} to the customer\n` +
+        `• Mark the booking as Cancelled\n\n` +
+        `Cash payments (if any) must be handled manually.\n\n` +
+        `Proceed?`
+      )
+      if (!confirmed) return
+    } else {
+      if (!window.confirm(`Reject this cancellation request? The booking will remain Confirmed.`)) return
+    }
+
+    setProcessingCancellationId(booking.id)
+    try {
+      const bookingPayment = payments.find(p => p.booking_id === bookingId)
+      const refundAmt = action === 'approve'
+        ? (cancellationRefundAmount[booking.id] ?? String(toNum(bookingPayment?.amount_online_paid)))
+        : undefined
+      const notes = action === 'approve' ? cancellationRefundNotes[booking.id] : undefined
+
+      const res = await fetch('/api/admin/process-cancellation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ booking_id: bookingId, action, refund_amount: refundAmt, refund_notes: notes }),
+      })
+      const result = await res.json()
+      if (!result.success) throw new Error(result.error || 'Failed to process cancellation')
+      toast.success(result.message)
+      await Promise.all([loadBookings(), loadPayments()])
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to process cancellation')
+    } finally {
+      setProcessingCancellationId(null)
+    }
+  }
+
   const renderOverview = () => (
     <div className="space-y-4 md:space-y-8">
       <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-6">
@@ -1736,6 +1789,12 @@ export default function AdminDashboard() {
 
               return (
                 <div key={booking.id} className="border rounded-lg overflow-hidden hover:shadow-md transition-shadow">
+                  {booking.cancellation_requested_at && booking.booking_status !== 'cancelled' && (
+                    <div className="bg-orange-50 border-b border-orange-200 px-3 md:px-4 py-1.5 flex items-center gap-2 text-xs text-orange-700 font-semibold">
+                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse shrink-0" />
+                      Cancellation Requested — awaiting admin review
+                    </div>
+                  )}
                   {/* Summary row — click to expand */}
                   <button
                     onClick={() => setExpandedBookingId(isExpanded ? null : booking.id)}
@@ -1898,6 +1957,86 @@ export default function AdminDashboard() {
                               <dd className="text-xs text-right">{booking.created_at ? new Date(booking.created_at).toLocaleString('en-IN') : '-'}</dd>
                             </div>
                           </dl>
+
+                          {/* Cancellation Request Review */}
+                          {booking.cancellation_requested_at && booking.booking_status !== 'cancelled' && (
+                            <div className="mt-4 pt-4 border-t border-orange-200 bg-orange-50 rounded-lg p-4 space-y-3">
+                              <div className="flex items-center gap-2">
+                                <span className="inline-block w-2 h-2 rounded-full bg-orange-500 animate-pulse" />
+                                <h4 className="font-bold text-orange-800 text-sm">Cancellation Requested</h4>
+                                <span className="text-xs text-orange-600 ml-auto">
+                                  {new Date(booking.cancellation_requested_at).toLocaleString('en-IN')}
+                                </span>
+                              </div>
+                              {booking.cancellation_reason && (
+                                <p className="text-sm text-orange-700 bg-orange-100 rounded-lg px-3 py-2">
+                                  <span className="font-semibold">Reason: </span>{booking.cancellation_reason}
+                                </p>
+                              )}
+                              {(() => {
+                                const bp = payments.find(p => p.booking_id === (booking.booking_id || booking.id))
+                                const onlinePaid = toNum(bp?.amount_online_paid)
+                                const bookingKey = booking.id
+                                return (
+                                  <div className="space-y-2">
+                                    <div className="text-xs text-orange-700 font-semibold">
+                                      Online payment on record: <span className="text-green-700">Rs. {onlinePaid.toFixed(2)}</span>
+                                      {bp?.payment_type === 'partial' && (
+                                        <span className="ml-2 text-orange-600">(partial — cash portion must be refunded manually)</span>
+                                      )}
+                                    </div>
+                                    {bp?.refund_status === 'processed' ? (
+                                      <div className="text-xs text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+                                        Refund already processed — Rs. {toNum(bp.refund_amount).toFixed(2)}
+                                        {bp.refund_id && <span className="font-mono ml-1">({bp.refund_id})</span>}
+                                      </div>
+                                    ) : (
+                                      <>
+                                        <div>
+                                          <label className="text-xs text-orange-700 font-semibold block mb-1">Refund Amount (Rs.)</label>
+                                          <input
+                                            type="number"
+                                            min={0}
+                                            max={onlinePaid}
+                                            step={0.01}
+                                            value={cancellationRefundAmount[bookingKey] ?? String(onlinePaid)}
+                                            onChange={e => setCancellationRefundAmount(prev => ({ ...prev, [bookingKey]: e.target.value }))}
+                                            className="w-full border border-orange-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-orange-500"
+                                          />
+                                        </div>
+                                        <div>
+                                          <label className="text-xs text-orange-700 font-semibold block mb-1">Admin Notes (optional)</label>
+                                          <input
+                                            type="text"
+                                            placeholder="e.g. Customer requested, approved per policy"
+                                            value={cancellationRefundNotes[bookingKey] ?? ''}
+                                            onChange={e => setCancellationRefundNotes(prev => ({ ...prev, [bookingKey]: e.target.value }))}
+                                            className="w-full border border-orange-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-orange-500"
+                                          />
+                                        </div>
+                                        <div className="flex gap-2 pt-1">
+                                          <button
+                                            onClick={() => handleProcessCancellation(booking, 'approve')}
+                                            disabled={processingCancellationId === booking.id}
+                                            className="flex-1 px-3 py-2 bg-green-600 text-white rounded-lg text-sm font-semibold hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                          >
+                                            {processingCancellationId === booking.id ? 'Processing…' : '✓ Approve & Refund'}
+                                          </button>
+                                          <button
+                                            onClick={() => handleProcessCancellation(booking, 'reject')}
+                                            disabled={processingCancellationId === booking.id}
+                                            className="flex-1 px-3 py-2 bg-red-100 text-red-700 border border-red-300 rounded-lg text-sm font-semibold hover:bg-red-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                          >
+                                            {processingCancellationId === booking.id ? 'Processing…' : '✕ Reject Request'}
+                                          </button>
+                                        </div>
+                                      </>
+                                    )}
+                                  </div>
+                                )
+                              })()}
+                            </div>
+                          )}
 
                           {/* Status Actions */}
                           {booking.booking_status !== 'completed' && booking.booking_status !== 'cancelled' && (
@@ -2089,6 +2228,32 @@ export default function AdminDashboard() {
                                 <div className="flex justify-between gap-2">
                                   <dt className="text-gray-500 shrink-0">cash_paid_at</dt>
                                   <dd>{new Date(bookingPayment.cash_paid_at).toLocaleString('en-IN')}</dd>
+                                </div>
+                              )}
+                              {bookingPayment.refund_status === 'processed' && (
+                                <div className="pt-2 border-t space-y-1">
+                                  <div className="flex justify-between gap-2 font-semibold">
+                                    <dt className="text-green-700">Refund Processed</dt>
+                                    <dd className="text-green-700">Rs. {toNum(bookingPayment.refund_amount).toFixed(2)}</dd>
+                                  </div>
+                                  {bookingPayment.refund_id && (
+                                    <div className="flex justify-between gap-2">
+                                      <dt className="text-gray-500 shrink-0">refund_id</dt>
+                                      <dd className="font-mono text-xs break-all text-right">{bookingPayment.refund_id}</dd>
+                                    </div>
+                                  )}
+                                  {bookingPayment.refunded_at && (
+                                    <div className="flex justify-between gap-2">
+                                      <dt className="text-gray-500 shrink-0">refunded_at</dt>
+                                      <dd className="text-xs">{new Date(bookingPayment.refunded_at).toLocaleString('en-IN')}</dd>
+                                    </div>
+                                  )}
+                                  {bookingPayment.refund_notes && (
+                                    <div className="flex justify-between gap-2">
+                                      <dt className="text-gray-500 shrink-0">refund_notes</dt>
+                                      <dd className="text-xs text-right">{bookingPayment.refund_notes}</dd>
+                                    </div>
+                                  )}
                                 </div>
                               )}
                               {bookingPayment.payment_status === 'partial' && (
@@ -4772,29 +4937,37 @@ export default function AdminDashboard() {
               ? 'border-primary-700/70 bg-primary-900/92'
               : 'border-gray-200/80 bg-white/95'
           }`}>
-            {[
-              { id: 'overview', label: 'Overview' },
-              { id: 'bookings', label: 'Bookings' },
-              { id: 'car-management', label: 'Cars' },
-              { id: 'destinations', label: 'Destinations' },
-              { id: 'tours', label: 'Tours' },
-              { id: 'analytics', label: 'Analytics' },
-              { id: 'misc', label: 'Misc' },
-            ].map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`px-2 sm:px-3 md:px-5 lg:px-6 py-1.5 sm:py-2 md:py-2.5 lg:py-3 rounded-lg font-semibold transition-smooth text-xs sm:text-sm md:text-base whitespace-nowrap ${
-                  activeTab === tab.id
-                    ? 'bg-secondary-500 text-primary-950'
-                    : darkMode
-                    ? 'text-gray-300 hover:bg-primary-800'
-                    : 'text-gray-700 hover:bg-gray-100'
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
+            {(() => {
+              const pendingCancellations = bookings.filter(b => b.cancellation_requested_at && b.booking_status !== 'cancelled').length
+              return [
+                { id: 'overview', label: 'Overview', badge: 0 },
+                { id: 'bookings', label: 'Bookings', badge: pendingCancellations },
+                { id: 'car-management', label: 'Cars', badge: 0 },
+                { id: 'destinations', label: 'Destinations', badge: 0 },
+                { id: 'tours', label: 'Tours', badge: 0 },
+                { id: 'analytics', label: 'Analytics', badge: 0 },
+                { id: 'misc', label: 'Misc', badge: 0 },
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`relative px-2 sm:px-3 md:px-5 lg:px-6 py-1.5 sm:py-2 md:py-2.5 lg:py-3 rounded-lg font-semibold transition-smooth text-xs sm:text-sm md:text-base whitespace-nowrap ${
+                    activeTab === tab.id
+                      ? 'bg-secondary-500 text-primary-950'
+                      : darkMode
+                      ? 'text-gray-300 hover:bg-primary-800'
+                      : 'text-gray-700 hover:bg-gray-100'
+                  }`}
+                >
+                  {tab.label}
+                  {tab.badge > 0 && (
+                    <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold px-1">
+                      {tab.badge}
+                    </span>
+                  )}
+                </button>
+              ))
+            })()}
           </div>
 
           {activeTab === 'overview' && renderOverview()}

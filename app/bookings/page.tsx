@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Header from '@/components/Header'
 import { DotLottieReact } from '@lottiefiles/dotlottie-react'
-import { Eye, Download, Trash2, ArrowRight, Car, ChevronDown, CreditCard, Clock } from 'lucide-react'
+import { Eye, Download, Trash2, ArrowRight, Car, ChevronDown, CreditCard, Clock, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 import gsap from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
@@ -52,6 +52,9 @@ export default function MyBookings() {
   const [downloadingInvoiceId, setDownloadingInvoiceId] = useState<string | null>(null)
   const [resumingBookingId, setResumingBookingId] = useState<string | null>(null)
   const [pendingTimeoutHours, setPendingTimeoutHours] = useState<number>(24)
+  const [cancelModalBooking, setCancelModalBooking] = useState<Booking | null>(null)
+  const [cancellationReason, setCancellationReason] = useState('')
+  const [submittingCancellation, setSubmittingCancellation] = useState(false)
   const scrollRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
@@ -372,8 +375,30 @@ export default function MyBookings() {
     return statusMap[status] || { className: 'bg-gray-500/15 border border-gray-500/30 text-gray-400', label: 'Unknown' }
   }
 
-  const handleCancel = (bookingId: string) => {
-    toast.error('Cannot cancel. Please contact support within 24 hours of booking.')
+  const handleCancelRequest = async () => {
+    if (!cancelModalBooking || !user?.email) return
+    setSubmittingCancellation(true)
+    try {
+      const res = await fetch('/api/bookings/cancel-request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          booking_id: cancelModalBooking.booking_id || cancelModalBooking.id,
+          user_email: user.email,
+          reason: cancellationReason.trim() || undefined,
+        }),
+      })
+      const data = await res.json()
+      if (!data.success) throw new Error(data.error || 'Failed to submit request')
+      toast.success('Cancellation request submitted. We will review and process your refund shortly.')
+      setCancelModalBooking(null)
+      setCancellationReason('')
+      await loadBookings(user.email)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to submit cancellation request')
+    } finally {
+      setSubmittingCancellation(false)
+    }
   }
 
   const handleDownloadInvoice = async (booking: Booking) => {
@@ -620,6 +645,14 @@ export default function MyBookings() {
                         )
                       })()}
 
+                      {/* Cancellation requested notice */}
+                      {booking.cancellation_requested_at && booking.booking_status !== 'cancelled' && (
+                        <div className="flex items-start gap-2 rounded-lg px-3 py-2.5 mb-2 bg-orange-500/10 border border-orange-500/20 text-orange-400 text-xs">
+                          <Clock size={13} className="mt-0.5 shrink-0" />
+                          <span>Cancellation requested — under admin review. You will be notified once processed.</span>
+                        </div>
+                      )}
+
                       {/* Actions */}
                       <div className="flex flex-wrap gap-2">
                         <button onClick={() => toggleBookingDetails(booking.id)} className="flex items-center gap-2 px-3 py-1.5 border border-primary-700 text-gray-300 rounded-lg hover:border-primary-600 hover:text-white transition-colors text-xs">
@@ -647,15 +680,15 @@ export default function MyBookings() {
                             {downloadingInvoiceId === booking.id ? 'Downloading...' : 'Invoice'}
                           </button>
                         )}
-                        {(booking.booking_status === 'pending' || booking.booking_status === 'confirmed') ? (
+                        {booking.booking_status === 'confirmed' && !booking.cancellation_requested_at && (
                           <button
-                            onClick={() => handleCancel(booking.id)}
+                            onClick={() => setCancelModalBooking(booking)}
                             className="flex items-center gap-2 px-3 py-1.5 border border-red-500/40 text-red-400 rounded-lg hover:border-red-500 hover:bg-red-500/10 transition-colors text-xs"
                           >
                             <Trash2 size={14} />
-                            Cancel
+                            Cancel Booking
                           </button>
-                        ) : null}
+                        )}
                       </div>
                     </div>
                   </div>
@@ -665,6 +698,63 @@ export default function MyBookings() {
           )}
         </div>
       </main>
+
+      {/* Cancellation request modal */}
+      {cancelModalBooking && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+          <div className="w-full max-w-md bg-primary-900 border border-primary-700 rounded-2xl shadow-2xl p-6">
+            <div className="flex items-start justify-between mb-4">
+              <h2 className="text-white font-black text-lg">Request Cancellation</h2>
+              <button
+                onClick={() => { setCancelModalBooking(null); setCancellationReason('') }}
+                className="text-gray-400 hover:text-white transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 mb-4 text-sm text-red-300 space-y-1.5">
+              <p className="font-semibold">Before you proceed:</p>
+              <ul className="list-disc list-inside space-y-1 text-red-300/80">
+                <li>Your cancellation request will be reviewed by our team.</li>
+                <li>Refunds are issued only for the online payment amount (advance paid).</li>
+                <li>Cash portions are non-refundable via this flow.</li>
+                <li>Refunds may take 5–7 business days to reflect in your account.</li>
+              </ul>
+            </div>
+
+            <div className="mb-5">
+              <label className="block text-gray-400 text-xs font-semibold uppercase tracking-wide mb-2">
+                Reason for cancellation <span className="text-gray-600 normal-case font-normal">(optional)</span>
+              </label>
+              <textarea
+                value={cancellationReason}
+                onChange={e => setCancellationReason(e.target.value)}
+                placeholder="Tell us why you are cancelling..."
+                rows={3}
+                maxLength={300}
+                className="w-full bg-primary-950 border border-primary-700 rounded-xl px-4 py-3 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-secondary-500 resize-none"
+              />
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => { setCancelModalBooking(null); setCancellationReason('') }}
+                className="flex-1 px-4 py-2.5 border border-primary-600 text-gray-300 rounded-xl text-sm font-semibold hover:bg-primary-800 transition-colors"
+              >
+                Keep Booking
+              </button>
+              <button
+                onClick={handleCancelRequest}
+                disabled={submittingCancellation}
+                className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-xl text-sm font-semibold hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {submittingCancellation ? 'Submitting...' : 'Request Cancellation'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
