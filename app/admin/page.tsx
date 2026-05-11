@@ -325,7 +325,7 @@ export default function AdminDashboard() {
   const [loadingConflicts, setLoadingConflicts] = useState(false)
 
   // Pending booking cleanup
-  const [pendingTimeoutHours, setPendingTimeoutHours] = useState<number>(24)
+  const [pendingTimeoutDays, setPendingTimeoutDays] = useState<number>(1)
   const [savingPendingTimeout, setSavingPendingTimeout] = useState(false)
   const [cleaningUp, setCleaningUp] = useState(false)
   const [autoCleanupEnabled, setAutoCleanupEnabled] = useState(true)
@@ -407,7 +407,7 @@ export default function AdminDashboard() {
       const data = await res.json()
       if (data.success && data.settings) {
         for (const s of data.settings) {
-          if (s.key === 'pending_booking_timeout_hours') setPendingTimeoutHours(parseInt(s.value) || 24)
+          if (s.key === 'pending_booking_timeout_hours') setPendingTimeoutDays(Math.round((parseInt(s.value) || 24) / 24) || 1)
           if (s.key === 'auto_cleanup_enabled') setAutoCleanupEnabled(s.value !== 'false')
         }
       }
@@ -439,8 +439,8 @@ export default function AdminDashboard() {
   }
 
   const handleSavePendingTimeout = async () => {
-    if (pendingTimeoutHours < 1 || pendingTimeoutHours > 168) {
-      toast.error('Timeout must be between 1 and 168 hours.')
+    if (pendingTimeoutDays < 1 || pendingTimeoutDays > 30) {
+      toast.error('Cleanup interval must be between 1 and 30 days.')
       return
     }
     setSavingPendingTimeout(true)
@@ -448,11 +448,11 @@ export default function AdminDashboard() {
       const res = await fetch('/api/admin/settings', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key: 'pending_booking_timeout_hours', value: String(pendingTimeoutHours) }),
+        body: JSON.stringify({ key: 'pending_booking_timeout_hours', value: String(pendingTimeoutDays * 24) }),
       })
       const data = await res.json()
       if (data.success) {
-        toast.success('Pending booking timeout saved.')
+        toast.success(`Cleanup interval set to ${pendingTimeoutDays} day${pendingTimeoutDays !== 1 ? 's' : ''}.`)
       } else {
         throw new Error(data.error)
       }
@@ -1503,7 +1503,7 @@ export default function AdminDashboard() {
         if (!window.confirm(`Revert this booking to pending?`)) return
       }
     } else {
-      if (!window.confirm(newStatus === 'pending' || newStatus === 'confirmed' ? `Revert this booking to ${label}?` : `Mark this booking as ${label}?`)) return
+      if (!window.confirm(newStatus === 'confirmed' ? `Revert this booking to ${label}?` : `Mark this booking as ${label}?`)) return
     }
 
     setUpdatingStatusId(booking.id)
@@ -4174,7 +4174,7 @@ export default function AdminDashboard() {
       <div className="bg-white rounded-lg shadow-lg p-4 md:p-6">
         <h2 className="text-lg md:text-xl font-bold mb-1">Pending Booking Management</h2>
         <p className="text-xs md:text-sm text-gray-500 mb-4 md:mb-6">
-          Unconfirmed bookings (payment not completed) are automatically removed once they exceed the cleanup window you set. A scheduler checks every hour but only runs deletion after the full window has elapsed since the last cleanup.
+          Unconfirmed bookings (payment not completed) are automatically removed once they exceed the cleanup window you set. The scheduler runs once daily and only deletes bookings that have exceeded the configured window.
         </p>
 
         <div className="space-y-4">
@@ -4190,7 +4190,7 @@ export default function AdminDashboard() {
                 </p>
                 <p className="text-xs md:text-sm text-gray-500">
                   {autoCleanupEnabled
-                    ? 'Scheduler checks every hour, deletes only after the configured window elapses.'
+                    ? 'Scheduler runs daily, deletes only after the configured window has elapsed.'
                     : 'Pending bookings stay indefinitely until manually cleaned or confirmed.'}
                 </p>
               </div>
@@ -4220,12 +4220,12 @@ export default function AdminDashboard() {
               <input
                 type="number"
                 min={1}
-                max={168}
-                value={pendingTimeoutHours}
-                onChange={e => setPendingTimeoutHours(Math.max(1, Math.min(168, parseInt(e.target.value) || 1)))}
+                max={30}
+                value={pendingTimeoutDays}
+                onChange={e => setPendingTimeoutDays(Math.max(1, Math.min(30, parseInt(e.target.value) || 1)))}
                 className="w-20 border border-gray-300 rounded-lg px-2 py-1.5 text-sm text-center font-semibold focus:outline-none focus:ring-2 focus:ring-secondary-500"
               />
-              <span className="text-sm text-gray-500 whitespace-nowrap">hours</span>
+              <span className="text-sm text-gray-500 whitespace-nowrap">day{pendingTimeoutDays !== 1 ? 's' : ''}</span>
               <button
                 onClick={handleSavePendingTimeout}
                 disabled={savingPendingTimeout}
@@ -4251,7 +4251,7 @@ export default function AdminDashboard() {
           </div>
 
           <p className="text-[11px] text-gray-400 italic">
-            Example: set 24h → pending bookings are cleaned up once every 24h. Scheduler checks every hour but skips until the full window has passed. &ldquo;Clean Up Now&rdquo; always runs immediately, ignoring the schedule.
+            Example: set 3 days → pending bookings older than 3 days are deleted the next time the daily scheduler runs. &ldquo;Clean Up Now&rdquo; always runs immediately, ignoring the schedule.
           </p>
         </div>
       </div>

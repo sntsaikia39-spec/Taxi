@@ -4,8 +4,8 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 export const dynamic = 'force-dynamic'
 
 // Core delete logic — shared by cron and manual trigger
-async function deleteExpiredPendingBookings(timeoutHours: number) {
-  const cutoff = new Date(Date.now() - timeoutHours * 60 * 60 * 1000).toISOString()
+async function deleteExpiredPendingBookings(timeoutDays: number) {
+  const cutoff = new Date(Date.now() - timeoutDays * 24 * 60 * 60 * 1000).toISOString()
 
   const { data: staleBookings, error: fetchError } = await supabaseAdmin
     .from('bookings')
@@ -49,8 +49,8 @@ async function updateLastCleanupTime() {
     )
 }
 
-// GET — called by Vercel Cron every hour (requires CRON_SECRET)
-// Respects the timeout: only runs deletion when enough time has passed since last run
+// GET — called by Vercel Cron daily (requires CRON_SECRET)
+// Only deletes bookings when enough days have passed since the last cleanup run
 export async function GET(request: NextRequest) {
   const authHeader = request.headers.get('authorization')
   const cronSecret = process.env.CRON_SECRET
@@ -73,24 +73,26 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: true, skipped: true, reason: 'disabled' })
     }
 
+    // stored as hours internally (days * 24); default 1 day
     const timeoutHours = s['pending_booking_timeout_hours'] ? parseInt(s['pending_booking_timeout_hours']) : 24
+    const timeoutDays = timeoutHours / 24
     const timeoutMs = timeoutHours * 60 * 60 * 1000
 
-    // Check if enough time has passed since the last cleanup run
+    // Skip if not enough time has passed since the last cleanup run
     if (s['last_cleanup_ran_at']) {
       const msSinceLastRun = Date.now() - new Date(s['last_cleanup_ran_at']).getTime()
       if (msSinceLastRun < timeoutMs) {
-        const hoursLeft = Math.ceil((timeoutMs - msSinceLastRun) / (60 * 60 * 1000))
-        console.log(`[CRON] Too soon — ${hoursLeft}h remaining until next cleanup window`)
-        return NextResponse.json({ success: true, skipped: true, reason: 'too_soon', hoursLeft })
+        const daysLeft = Math.ceil((timeoutMs - msSinceLastRun) / (24 * 60 * 60 * 1000))
+        console.log(`[CRON] Too soon — ${daysLeft}d remaining until next cleanup window`)
+        return NextResponse.json({ success: true, skipped: true, reason: 'too_soon', daysLeft })
       }
     }
 
-    const deleted = await deleteExpiredPendingBookings(timeoutHours)
+    const deleted = await deleteExpiredPendingBookings(timeoutDays)
     await updateLastCleanupTime()
 
-    console.log(`[CRON] Cleanup complete — deleted: ${deleted}, timeout: ${timeoutHours}h`)
-    return NextResponse.json({ success: true, deleted, timeoutHours })
+    console.log(`[CRON] Cleanup complete — deleted: ${deleted}, window: ${timeoutDays}d`)
+    return NextResponse.json({ success: true, deleted, timeoutDays })
   } catch (error) {
     console.error('[CRON] Cleanup error:', error)
     return NextResponse.json({ success: false, error: 'Cleanup failed' }, { status: 500 })
@@ -114,10 +116,11 @@ export async function POST() {
     }
 
     const timeoutHours = s['pending_booking_timeout_hours'] ? parseInt(s['pending_booking_timeout_hours']) : 24
-    const deleted = await deleteExpiredPendingBookings(timeoutHours)
+    const timeoutDays = timeoutHours / 24
+    const deleted = await deleteExpiredPendingBookings(timeoutDays)
     await updateLastCleanupTime()
 
-    return NextResponse.json({ success: true, deleted, timeoutHours })
+    return NextResponse.json({ success: true, deleted, timeoutDays })
   } catch (error) {
     console.error('Cleanup error:', error)
     return NextResponse.json({ success: false, error: 'Cleanup failed' }, { status: 500 })

@@ -4,11 +4,21 @@ All notable changes to TaxiHollongi will be documented in this file.
 
 ---
 
+## [2026-05-11]
+
+**Author:** Yami
+
+### Changes
+- fix: minor misc tab
+- update: bookings db cleanup, bug fix cars tab admin, "Continue to pay" pending bookings, revert to confirmed after marked
+
 ## [2026-05-10]
 
 **Author:** Yami
 
 ### Changes
+- update: CONFLICT CONTROL toggler, updated conflict control to resolve edge cases
+- update: tour car linked to available. car conflict system updated to accomodate tours flow
 - fix: vehicles assignment tab and status
 
 ## [2026-05-09]
