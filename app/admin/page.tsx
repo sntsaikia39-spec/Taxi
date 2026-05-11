@@ -324,6 +324,13 @@ export default function AdminDashboard() {
   const [conflictData, setConflictData] = useState<ConflictData | null>(null)
   const [loadingConflicts, setLoadingConflicts] = useState(false)
 
+  // Pending booking cleanup
+  const [pendingTimeoutHours, setPendingTimeoutHours] = useState<number>(24)
+  const [savingPendingTimeout, setSavingPendingTimeout] = useState(false)
+  const [cleaningUp, setCleaningUp] = useState(false)
+  const [autoCleanupEnabled, setAutoCleanupEnabled] = useState(true)
+  const [togglingAutoCleanup, setTogglingAutoCleanup] = useState(false)
+
   useEffect(() => {
     document.documentElement.style.overflowY = 'auto'
     document.body.style.overflowY = 'auto'
@@ -394,6 +401,92 @@ export default function AdminDashboard() {
     }
   }
 
+  const loadPendingTimeoutSetting = async () => {
+    try {
+      const res = await fetch('/api/admin/settings', { cache: 'no-store' })
+      const data = await res.json()
+      if (data.success && data.settings) {
+        for (const s of data.settings) {
+          if (s.key === 'pending_booking_timeout_hours') setPendingTimeoutHours(parseInt(s.value) || 24)
+          if (s.key === 'auto_cleanup_enabled') setAutoCleanupEnabled(s.value !== 'false')
+        }
+      }
+    } catch {
+      // keep defaults
+    }
+  }
+
+  const handleToggleAutoCleanup = async (newValue: boolean) => {
+    setTogglingAutoCleanup(true)
+    try {
+      const res = await fetch('/api/admin/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: 'auto_cleanup_enabled', value: String(newValue) }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setAutoCleanupEnabled(newValue)
+        toast.success(`Auto-cleanup ${newValue ? 'enabled' : 'disabled'}.`)
+      } else {
+        throw new Error(data.error)
+      }
+    } catch {
+      toast.error('Failed to update setting.')
+    } finally {
+      setTogglingAutoCleanup(false)
+    }
+  }
+
+  const handleSavePendingTimeout = async () => {
+    if (pendingTimeoutHours < 1 || pendingTimeoutHours > 168) {
+      toast.error('Timeout must be between 1 and 168 hours.')
+      return
+    }
+    setSavingPendingTimeout(true)
+    try {
+      const res = await fetch('/api/admin/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: 'pending_booking_timeout_hours', value: String(pendingTimeoutHours) }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        toast.success('Pending booking timeout saved.')
+      } else {
+        throw new Error(data.error)
+      }
+    } catch {
+      toast.error('Failed to save setting.')
+    } finally {
+      setSavingPendingTimeout(false)
+    }
+  }
+
+  const handleCleanupPending = async () => {
+    setCleaningUp(true)
+    try {
+      const res = await fetch('/api/admin/cleanup-pending', { method: 'POST' })
+      const data = await res.json()
+      if (data.success) {
+        if (data.skipped) {
+          toast.error('Auto-cleanup is disabled. Enable it in settings first.')
+        } else if (data.deleted > 0) {
+          toast.success(`Cleaned up ${data.deleted} expired pending booking${data.deleted !== 1 ? 's' : ''}.`)
+          loadBookings()
+        } else {
+          toast.success('No expired pending bookings found.')
+        }
+      } else {
+        toast.error('Cleanup failed.')
+      }
+    } catch {
+      toast.error('Cleanup failed.')
+    } finally {
+      setCleaningUp(false)
+    }
+  }
+
   useEffect(() => {
     loadBookings()
     loadPayments()
@@ -402,6 +495,7 @@ export default function AdminDashboard() {
     loadDestinations()
     loadTours()
     loadConflictSetting()
+    loadPendingTimeoutSetting()
   }, [])
 
   const loadConflictSetting = async () => {
@@ -1390,8 +1484,27 @@ export default function AdminDashboard() {
 
   const handleUpdateBookingStatus = async (booking: Booking, newStatus: 'pending' | 'confirmed' | 'completed' | 'cancelled') => {
     const bookingId = booking.booking_id || booking.id
-    const label = newStatus === 'completed' ? 'completed' : 'cancelled'
-    if (!window.confirm(`Mark this booking as ${label}?`)) return
+    const label = newStatus === 'completed' ? 'completed' : newStatus === 'cancelled' ? 'cancelled' : newStatus === 'confirmed' ? 'confirmed' : 'pending'
+
+    if (newStatus === 'pending') {
+      const existingPayment = payments.find(
+        p => p.booking_id === bookingId && (p.payment_status === 'paid' || p.payment_status === 'partial' || p.txn_status === 'success')
+      )
+      if (existingPayment) {
+        const confirmed = window.confirm(
+          `⚠️ WARNING: This booking already has a confirmed payment on record.\n\n` +
+          `Reverting to Pending will move it back to a "before payment" state. ` +
+          `The customer will be required to pay again as if the booking was never paid for.\n\n` +
+          `The existing payment record will NOT be automatically refunded or deleted — you must handle that separately.\n\n` +
+          `Are you absolutely sure you want to revert this booking to Pending?`
+        )
+        if (!confirmed) return
+      } else {
+        if (!window.confirm(`Revert this booking to pending?`)) return
+      }
+    } else {
+      if (!window.confirm(newStatus === 'pending' || newStatus === 'confirmed' ? `Revert this booking to ${label}?` : `Mark this booking as ${label}?`)) return
+    }
 
     setUpdatingStatusId(booking.id)
     try {
@@ -1402,7 +1515,7 @@ export default function AdminDashboard() {
       })
       const result = await response.json()
       if (!response.ok || !result.success) throw new Error(result.error || 'Failed to update status')
-      toast.success(`Booking marked as ${label}!`)
+      toast.success(newStatus === 'pending' || newStatus === 'confirmed' ? `Booking reverted to ${label}!` : `Booking marked as ${label}!`)
       await loadBookings()
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to update booking status')
@@ -1806,18 +1919,27 @@ export default function AdminDashboard() {
                             </div>
                           )}
                           {(booking.booking_status === 'completed' || booking.booking_status === 'cancelled') && (
-                            <div className="flex gap-2 mt-4 pt-4 border-t">
-                              <button
-                                onClick={() => handleUpdateBookingStatus(booking, 'pending')}
-                                disabled={updatingStatusId === booking.id}
-                                className="flex-1 px-3 py-2 border border-gray-300 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors disabled:opacity-50"
-                              >
-                                {updatingStatusId === booking.id ? 'Updating…' : '↩ Revert to Pending'}
-                              </button>
+                            <div className="flex flex-col gap-2 mt-4 pt-4 border-t">
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => handleUpdateBookingStatus(booking, 'confirmed')}
+                                  disabled={updatingStatusId === booking.id}
+                                  className="flex-1 px-3 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                  {updatingStatusId === booking.id ? 'Updating…' : '↩ Revert to Confirmed'}
+                                </button>
+                                <button
+                                  onClick={() => handleUpdateBookingStatus(booking, 'pending')}
+                                  disabled={updatingStatusId === booking.id}
+                                  className="flex-1 px-3 py-2 border border-gray-300 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                  {updatingStatusId === booking.id ? 'Updating…' : '↩ Revert to Pending'}
+                                </button>
+                              </div>
                               <button
                                 onClick={() => handleDeleteBooking(booking)}
                                 disabled={deletingBookingId === booking.id}
-                                className="flex-1 px-3 py-2 bg-red-700 text-white rounded-lg text-sm font-semibold hover:bg-red-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                className="w-full px-3 py-2 bg-red-700 text-white rounded-lg text-sm font-semibold hover:bg-red-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                               >
                                 {deletingBookingId === booking.id ? 'Deleting…' : 'Delete Booking'}
                               </button>
@@ -2573,28 +2695,30 @@ export default function AdminDashboard() {
               Next →
             </button>
             <div className="w-px h-5 md:h-6 bg-gray-200 mx-0.5 md:mx-1 hidden md:block" />
-            <button
-              type="button"
-              onClick={() => scheduleDateInputRef.current?.showPicker()}
-              className="flex items-center gap-1 text-xs md:text-sm text-gray-500 border rounded-lg px-2.5 md:px-3 py-1.5 md:py-2 hover:bg-gray-50 whitespace-nowrap"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="w-3 md:w-4 h-3 md:h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-              </svg>
-              <span className="hidden sm:inline">
-                {scheduleFocusDate
-                  ? new Date(scheduleFocusDate + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
-                  : 'Jump to date'}
-              </span>
-              <span className="sm:hidden">📅</span>
-            </button>
-            <input
-              ref={scheduleDateInputRef}
-              type="date"
-              value={scheduleFocusDate}
-              onChange={e => handleScheduleDatePick(e.target.value)}
-              className="sr-only"
-            />
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => scheduleDateInputRef.current?.showPicker()}
+                className="flex items-center gap-1 text-xs md:text-sm text-gray-500 border rounded-lg px-2.5 md:px-3 py-1.5 md:py-2 hover:bg-gray-50 whitespace-nowrap"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-3 md:w-4 h-3 md:h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                <span className="hidden sm:inline">
+                  {scheduleFocusDate
+                    ? new Date(scheduleFocusDate + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+                    : 'Jump to date'}
+                </span>
+                <span className="sm:hidden">📅</span>
+              </button>
+              <input
+                ref={scheduleDateInputRef}
+                type="date"
+                value={scheduleFocusDate}
+                onChange={e => handleScheduleDatePick(e.target.value)}
+                style={{ position: 'absolute', bottom: 0, left: 0, width: '1px', height: '1px', opacity: 0, pointerEvents: 'none', fontSize: '16px' }}
+              />
+            </div>
             {scheduleFocusDate && (
               <button
                 onClick={() => setScheduleFocusDate('')}
@@ -2616,7 +2740,7 @@ export default function AdminDashboard() {
               {scheduleDays.map((day, i) => {
                 const isToday = day.toDateString() === new Date().toDateString()
                 const isFocused = scheduleFocusDate
-                  ? day.toDateString() === new Date(scheduleFocusDate).toDateString()
+                  ? day.toDateString() === new Date(scheduleFocusDate + 'T00:00:00').toDateString()
                   : false
                 return (
                   <div
@@ -2708,7 +2832,7 @@ export default function AdminDashboard() {
                     {scheduleDays.map((day, i) => {
                       const isToday = day.toDateString() === new Date().toDateString()
                       const isFocused = scheduleFocusDate
-                        ? day.toDateString() === new Date(scheduleFocusDate).toDateString()
+                        ? day.toDateString() === new Date(scheduleFocusDate + 'T00:00:00').toDateString()
                         : false
                       return (
                         <div
@@ -2730,26 +2854,31 @@ export default function AdminDashboard() {
                       const clampedEnd = Math.min(aEnd.getTime(), scheduleWeekEnd.getTime())
                       const leftPct = (clampedStart - scheduleWeekStart.getTime()) / scheduleWeekDurationMs * 100
                       const widthPct = (clampedEnd - clampedStart) / scheduleWeekDurationMs * 100
-                      if (widthPct < 0.3) return null
                       const booking = bookings.find(b => b.booking_id === assignment.booking_id)
                       const typeColor =
                         booking?.booking_type === 'airport' ? 'bg-blue-500 hover:bg-blue-600' :
                         booking?.booking_type === 'tour'    ? 'bg-emerald-500 hover:bg-emerald-600' :
                                                              'bg-purple-500 hover:bg-purple-600'
+                      // Use minWidth so even short bookings (minutes) render as a visible bar
+                      const isTiny = widthPct < 1.5
                       return (
                         <button
                           key={assignment.id}
-                          className={`absolute top-2 bottom-2 rounded text-white text-xs px-1.5 overflow-hidden text-left transition-colors shadow-sm ${typeColor}`}
-                          style={{ left: `calc(${leftPct}% + 1px)`, width: `calc(${widthPct}% - 2px)` }}
+                          className={`absolute top-2 bottom-2 rounded text-white text-xs overflow-hidden text-left transition-colors shadow-sm ${typeColor} ${isTiny ? 'px-0.5' : 'px-1.5'}`}
+                          style={{ left: `calc(${leftPct}% + 1px)`, width: `calc(${widthPct}% - 2px)`, minWidth: '6px' }}
                           onClick={() => setSelectedScheduleAssignment({ assignment, booking, car })}
                           title={booking ? `${booking.user_name} · ${booking.booking_type}` : assignment.booking_id}
                         >
-                          <span className="truncate block font-medium leading-tight">
-                            {booking?.user_name || assignment.booking_id}
-                          </span>
-                          <span className="truncate block opacity-80 leading-tight capitalize">
-                            {booking?.booking_type || ''}
-                          </span>
+                          {!isTiny && (
+                            <>
+                              <span className="truncate block font-medium leading-tight">
+                                {booking?.user_name || assignment.booking_id}
+                              </span>
+                              <span className="truncate block opacity-80 leading-tight capitalize">
+                                {booking?.booking_type || ''}
+                              </span>
+                            </>
+                          )}
                         </button>
                       )
                     })}
@@ -4039,6 +4168,92 @@ export default function AdminDashboard() {
             )}
           </div>
         )}
+      </div>
+
+      {/* ── Pending Booking Management ──────────────────────────────────── */}
+      <div className="bg-white rounded-lg shadow-lg p-4 md:p-6">
+        <h2 className="text-lg md:text-xl font-bold mb-1">Pending Booking Management</h2>
+        <p className="text-xs md:text-sm text-gray-500 mb-4 md:mb-6">
+          Unconfirmed bookings (payment not completed) are automatically removed once they exceed the cleanup window you set. A scheduler checks every hour but only runs deletion after the full window has elapsed since the last cleanup.
+        </p>
+
+        <div className="space-y-4">
+          {/* Auto-cleanup toggle */}
+          <div className="flex items-center justify-between gap-3 px-3 md:px-4 py-3 md:py-4 rounded-lg border border-gray-200 hover:bg-gray-50 transition-smooth cursor-default">
+            <div className="flex items-center gap-2 md:gap-3 flex-1">
+              <div className={`w-8 md:w-9 h-8 md:h-9 rounded-lg flex items-center justify-center text-base select-none shrink-0 ${autoCleanupEnabled ? 'bg-green-100' : 'bg-gray-100'}`}>
+                {autoCleanupEnabled ? '🤖' : '⏸'}
+              </div>
+              <div className="min-w-0">
+                <p className="font-semibold text-sm md:text-base">
+                  Auto-cleanup is <span className={autoCleanupEnabled ? 'text-green-600' : 'text-gray-400'}>{autoCleanupEnabled ? 'ON' : 'OFF'}</span>
+                </p>
+                <p className="text-xs md:text-sm text-gray-500">
+                  {autoCleanupEnabled
+                    ? 'Scheduler checks every hour, deletes only after the configured window elapses.'
+                    : 'Pending bookings stay indefinitely until manually cleaned or confirmed.'}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => handleToggleAutoCleanup(!autoCleanupEnabled)}
+              disabled={togglingAutoCleanup}
+              aria-label="Toggle auto-cleanup"
+              className={`relative inline-flex items-center w-12 md:w-14 h-6 md:h-7 rounded-full transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-secondary-500 focus:ring-offset-2 shrink-0 disabled:opacity-50 ${autoCleanupEnabled ? 'bg-green-500' : 'bg-gray-300'}`}
+            >
+              <span className={`inline-block w-5 md:w-6 h-5 md:h-6 bg-white rounded-full shadow transform transition-transform duration-300 ${autoCleanupEnabled ? 'translate-x-6 md:translate-x-7' : 'translate-x-0.5'}`} />
+            </button>
+          </div>
+
+          {/* Timeout setting */}
+          <div className={`flex flex-col sm:flex-row sm:items-center gap-3 px-3 md:px-4 py-3 md:py-4 rounded-lg border bg-gray-50 transition-opacity ${autoCleanupEnabled ? 'border-gray-200 opacity-100' : 'border-gray-100 opacity-40 pointer-events-none'}`}>
+            <div className="flex items-center gap-2 md:gap-3 flex-1">
+              <div className="w-8 md:w-9 h-8 md:h-9 rounded-lg bg-yellow-100 flex items-center justify-center text-base select-none shrink-0">
+                ⏳
+              </div>
+              <div className="min-w-0">
+                <p className="font-semibold text-sm md:text-base">Cleanup Window</p>
+                <p className="text-xs md:text-sm text-gray-500">Deletion runs once this much time has passed since the last cleanup — not every hour.</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <input
+                type="number"
+                min={1}
+                max={168}
+                value={pendingTimeoutHours}
+                onChange={e => setPendingTimeoutHours(Math.max(1, Math.min(168, parseInt(e.target.value) || 1)))}
+                className="w-20 border border-gray-300 rounded-lg px-2 py-1.5 text-sm text-center font-semibold focus:outline-none focus:ring-2 focus:ring-secondary-500"
+              />
+              <span className="text-sm text-gray-500 whitespace-nowrap">hours</span>
+              <button
+                onClick={handleSavePendingTimeout}
+                disabled={savingPendingTimeout}
+                className="px-3 py-1.5 bg-secondary-500 text-primary-950 text-xs font-bold rounded-lg hover:bg-secondary-400 disabled:opacity-50 transition-colors whitespace-nowrap"
+              >
+                {savingPendingTimeout ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+          </div>
+
+          {/* Info + manual trigger */}
+          <div className="flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg border border-blue-100 bg-blue-50 text-xs text-blue-700">
+            <span>
+              Currently <span className="font-bold">{bookings.filter(b => b.booking_status === 'pending').length}</span> pending booking{bookings.filter(b => b.booking_status === 'pending').length !== 1 ? 's' : ''} awaiting payment.
+            </span>
+            <button
+              onClick={handleCleanupPending}
+              disabled={cleaningUp}
+              className="px-3 py-1.5 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors whitespace-nowrap text-xs"
+            >
+              {cleaningUp ? 'Cleaning…' : '🗑 Clean Up Now'}
+            </button>
+          </div>
+
+          <p className="text-[11px] text-gray-400 italic">
+            Example: set 24h → pending bookings are cleaned up once every 24h. Scheduler checks every hour but skips until the full window has passed. &ldquo;Clean Up Now&rdquo; always runs immediately, ignoring the schedule.
+          </p>
+        </div>
       </div>
 
       {/* Profile Management */}

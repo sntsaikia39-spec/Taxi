@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Header from '@/components/Header'
 import { DotLottieReact } from '@lottiefiles/dotlottie-react'
-import { Eye, Download, Trash2, ArrowRight, Car, ChevronDown } from 'lucide-react'
+import { Eye, Download, Trash2, ArrowRight, Car, ChevronDown, CreditCard, Clock } from 'lucide-react'
 import toast from 'react-hot-toast'
 import gsap from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
@@ -50,6 +50,8 @@ export default function MyBookings() {
   const [expandedBookingId, setExpandedBookingId] = useState<string | null>(null)
   const [loadingBookings, setLoadingBookings] = useState(true)
   const [downloadingInvoiceId, setDownloadingInvoiceId] = useState<string | null>(null)
+  const [resumingBookingId, setResumingBookingId] = useState<string | null>(null)
+  const [pendingTimeoutHours, setPendingTimeoutHours] = useState<number>(24)
   const scrollRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
@@ -68,6 +70,7 @@ export default function MyBookings() {
 
     if (user?.email) {
       loadBookings(user.email)
+      loadPendingTimeout()
     }
   }, [user, isLoading, router])
 
@@ -263,6 +266,80 @@ export default function MyBookings() {
     } finally {
       setLoadingBookings(false)
     }
+  }
+
+  const loadPendingTimeout = async () => {
+    try {
+      const res = await fetch('/api/admin/settings?key=pending_booking_timeout_hours', { cache: 'no-store' })
+      const data = await res.json()
+      if (data.success && data.settings?.length > 0) {
+        setPendingTimeoutHours(parseInt(data.settings[0].value) || 24)
+      }
+    } catch {
+      // keep default 24h
+    }
+  }
+
+  const handleContinueToPay = async (booking: Booking) => {
+    setResumingBookingId(booking.id)
+    try {
+      const res = await fetch('/api/bookings/resume', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ booking_id: booking.booking_id }),
+      })
+      const data = await res.json()
+      if (!data.success) {
+        toast.error('Unable to resume this booking. It may have already expired.')
+        return
+      }
+
+      const totalPrice = toNum(booking.amount_total)
+      const advancePayment = Math.round(totalPrice * 0.3 * 100) / 100
+
+      const startDate = new Date(booking.start_datetime)
+      const day = String(startDate.getDate()).padStart(2, '0')
+      const month = String(startDate.getMonth() + 1).padStart(2, '0')
+      const year = startDate.getFullYear()
+      const dateStr = `${day}/${month}/${year}`
+      const timeStr = startDate.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false })
+
+      const sessionPayload = {
+        bookingId: booking.booking_id,
+        dbBookingId: data.booking.id,
+        name: booking.user_name,
+        email: booking.user_email,
+        phone: booking.phone,
+        destination: data.destinationName || undefined,
+        tourName: data.tourName || undefined,
+        date: dateStr,
+        startTime: timeStr,
+        passengers: booking.passenger_count,
+        carType: booking.car_model,
+        totalPrice,
+        advancePayment,
+      }
+
+      const storageKey = booking.booking_type === 'tour' ? 'tourBookingData' : 'bookingData'
+      sessionStorage.setItem(storageKey, JSON.stringify(sessionPayload))
+      router.push(`/payment?bookingId=${booking.booking_id}&type=${booking.booking_type === 'tour' ? 'tour' : 'taxi'}`)
+    } catch (error) {
+      console.error('Continue to pay error:', error)
+      toast.error('Something went wrong. Please try again.')
+    } finally {
+      setResumingBookingId(null)
+    }
+  }
+
+  const getPendingExpiryInfo = (createdAt: string) => {
+    const expiresAt = new Date(createdAt).getTime() + pendingTimeoutHours * 60 * 60 * 1000
+    const msLeft = expiresAt - Date.now()
+    if (msLeft <= 0) return { label: 'Expiring soon', urgent: true }
+    const hoursLeft = Math.floor(msLeft / (60 * 60 * 1000))
+    const minsLeft = Math.floor((msLeft % (60 * 60 * 1000)) / 60000)
+    if (hoursLeft === 0) return { label: `${minsLeft}m left to pay`, urgent: true }
+    if (hoursLeft < 3) return { label: `${hoursLeft}h ${minsLeft}m left to pay`, urgent: true }
+    return { label: `Expires in ${hoursLeft}h`, urgent: false }
   }
 
   const getStatusBadge = (status: string) => {
@@ -532,6 +609,17 @@ export default function MyBookings() {
                         </div>
                       </div>
 
+                      {/* Pending payment notice */}
+                      {booking.booking_status === 'pending' && (() => {
+                        const expiry = getPendingExpiryInfo(booking.created_at)
+                        return (
+                          <div className={`flex items-start gap-2 rounded-lg px-3 py-2.5 mb-2 text-xs ${expiry.urgent ? 'bg-red-500/10 border border-red-500/20 text-red-400' : 'bg-yellow-500/10 border border-yellow-500/20 text-yellow-400'}`}>
+                            <Clock size={13} className="mt-0.5 shrink-0" />
+                            <span>Payment pending — complete payment to confirm your booking. <span className="font-semibold">{expiry.label}.</span></span>
+                          </div>
+                        )
+                      })()}
+
                       {/* Actions */}
                       <div className="flex flex-wrap gap-2">
                         <button onClick={() => toggleBookingDetails(booking.id)} className="flex items-center gap-2 px-3 py-1.5 border border-primary-700 text-gray-300 rounded-lg hover:border-primary-600 hover:text-white transition-colors text-xs">
@@ -539,14 +627,26 @@ export default function MyBookings() {
                           {isExpanded ? 'Hide Details' : 'View Details'}
                           <ChevronDown size={14} className={`transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`} />
                         </button>
-                        <button
-                          onClick={() => handleDownloadInvoice(booking)}
-                          disabled={downloadingInvoiceId === booking.id}
-                          className="flex items-center gap-2 px-3 py-1.5 border border-secondary-500/40 text-secondary-500 rounded-lg hover:border-secondary-500 hover:bg-secondary-500/10 transition-colors text-xs"
-                        >
-                          <Download size={14} />
-                          {downloadingInvoiceId === booking.id ? 'Downloading...' : 'Invoice'}
-                        </button>
+                        {booking.booking_status === 'pending' && (
+                          <button
+                            onClick={() => handleContinueToPay(booking)}
+                            disabled={resumingBookingId === booking.id}
+                            className="flex items-center gap-2 px-3 py-1.5 bg-secondary-500/10 border border-secondary-500/50 text-secondary-500 rounded-lg hover:bg-secondary-500/20 hover:border-secondary-500 transition-colors text-xs font-semibold disabled:opacity-50"
+                          >
+                            <CreditCard size={14} />
+                            {resumingBookingId === booking.id ? 'Loading...' : 'Continue to Pay'}
+                          </button>
+                        )}
+                        {booking.booking_status === 'confirmed' && (
+                          <button
+                            onClick={() => handleDownloadInvoice(booking)}
+                            disabled={downloadingInvoiceId === booking.id}
+                            className="flex items-center gap-2 px-3 py-1.5 border border-secondary-500/40 text-secondary-500 rounded-lg hover:border-secondary-500 hover:bg-secondary-500/10 transition-colors text-xs"
+                          >
+                            <Download size={14} />
+                            {downloadingInvoiceId === booking.id ? 'Downloading...' : 'Invoice'}
+                          </button>
+                        )}
                         {(booking.booking_status === 'pending' || booking.booking_status === 'confirmed') ? (
                           <button
                             onClick={() => handleCancel(booking.id)}
