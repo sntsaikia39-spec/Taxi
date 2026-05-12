@@ -52,6 +52,8 @@ function BookingConfirmedContent() {
 
   const generateAndDownloadInvoice = async () => {
     if (!booking || !payment) return
+    const onlineRecord = (payment.payment_records ?? []).find((r: { txn_type: string; invoice_number?: string | null }) => r.txn_type === 'online')
+    const invoiceNumber = onlineRecord?.invoice_number || `INV-${booking.bookingId}-${Date.now()}`
     const invoiceData: InvoiceData = {
       bookingId: booking.bookingId,
       date: new Date().toLocaleDateString('en-IN'),
@@ -71,7 +73,7 @@ function BookingConfirmedContent() {
       remainingAmount: payment.payment_type === 'full' ? 0 : parseFloat(payment.amount_total) - parseFloat(payment.amount_online_paid),
       paymentStatus: payment.payment_status === 'paid' ? 'completed' : payment.payment_status,
       paymentMethod: payment.payment_type === 'full' ? 'Full Online Payment' : 'Partial Online + Cash',
-      invoiceNumber: `INV-${Date.now()}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`,
+      invoiceNumber,
     }
     const doc = await generateInvoicePDF(invoiceData)
     downloadInvoicePDF(doc, `Invoice-${booking.bookingId}.pdf`)

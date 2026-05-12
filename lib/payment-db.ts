@@ -114,6 +114,76 @@ export async function updatePaymentStatus(
 }
 
 /**
+ * Create a payment_records row for a single transaction (online or cash)
+ */
+export async function createPaymentRecord(data: {
+  payment_id: string
+  booking_id: string
+  txn_type: 'online' | 'cash'
+  txn_id?: string | null
+  gateway?: string | null
+  amount: number
+  currency?: string
+  status?: 'success' | 'failed' | 'pending'
+  razorpay_order_id?: string | null
+  collected_by?: string | null
+  collected_at?: string | null
+  invoice_number?: string | null
+  notes?: string | null
+}) {
+  try {
+    const { data: record, error } = await supabaseAdmin
+      .from('payment_records')
+      .insert([{
+        payment_id: data.payment_id,
+        booking_id: data.booking_id,
+        txn_type: data.txn_type,
+        txn_id: data.txn_id ?? null,
+        gateway: data.gateway ?? null,
+        amount: data.amount,
+        currency: data.currency ?? 'INR',
+        status: data.status ?? 'success',
+        razorpay_order_id: data.razorpay_order_id ?? null,
+        collected_by: data.collected_by ?? null,
+        collected_at: data.collected_at ?? null,
+        invoice_number: data.invoice_number ?? null,
+        notes: data.notes ?? null,
+      }])
+      .select()
+      .single()
+    if (error) {
+      console.error('Error creating payment_record:', error)
+      return { data: null, error }
+    }
+    return { data: record, error: null }
+  } catch (err) {
+    console.error('Exception creating payment_record:', err)
+    return { data: null, error: err }
+  }
+}
+
+/**
+ * Get all payment_records for a given payments.id
+ */
+export async function getPaymentRecordsByPaymentId(paymentId: string) {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('payment_records')
+      .select('*')
+      .eq('payment_id', paymentId)
+      .order('created_at', { ascending: true })
+    if (error) {
+      console.error('Error fetching payment_records:', error)
+      return { data: null, error }
+    }
+    return { data: data || [], error: null }
+  } catch (err) {
+    console.error('Exception fetching payment_records:', err)
+    return { data: null, error: err }
+  }
+}
+
+/**
  * Mark cash payment as collected
  * @param bookingId - Booking ID
  * @param amountCashPaid - Cash amount collected

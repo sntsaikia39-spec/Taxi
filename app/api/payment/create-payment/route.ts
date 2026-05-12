@@ -1,7 +1,8 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { calculatePaymentAmounts, validatePaymentAmounts } from '@/lib/payment-utils'
-import { createPaymentInDB, getPaymentByBookingId } from '@/lib/payment-db'
+import { createPaymentInDB, getPaymentByBookingId, createPaymentRecord } from '@/lib/payment-db'
 import { sendBookingConfirmation, sendAdminNotification } from '@/lib/resend-notifications'
+import { generateInvoiceNumber } from '@/lib/utils'
 import { NextRequest } from 'next/server'
 
 export async function POST(request: NextRequest) {
@@ -171,6 +172,19 @@ export async function POST(request: NextRequest) {
     }
 
     console.log('Payment record created successfully:', payment)
+
+    // Create payment_records row for this online transaction
+    const invoiceNumber = generateInvoiceNumber()
+    await createPaymentRecord({
+      payment_id: payment.id,
+      booking_id: booking.booking_id,
+      txn_type: 'online',
+      txn_id: txnId || null,
+      gateway: gateway,
+      amount: finalOnlineAmount,
+      status: txnStatus === 'success' ? 'success' : 'failed',
+      invoice_number: invoiceNumber,
+    }).catch(err => console.error('[CREATE-PAYMENT] payment_record insert failed:', err))
 
     // ===== UPDATE BOOKING STATUS =====
     

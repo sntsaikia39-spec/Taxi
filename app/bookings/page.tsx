@@ -414,6 +414,8 @@ export default function MyBookings() {
       const totalAmount = toNum(payment.amount_total || booking.amount_total)
       const onlinePaid = toNum(payment.amount_online_paid)
       const isFullPay = payment.payment_type === 'full'
+      const onlineRecord = (payment.payment_records ?? []).find((r: { txn_type: string; invoice_number?: string | null }) => r.txn_type === 'online')
+      const invoiceNumber = onlineRecord?.invoice_number || `INV-${bookingKey}-${Date.now()}`
       const invoiceData: InvoiceData = {
         bookingId: bookingKey,
         date: new Date().toISOString(),
@@ -431,7 +433,7 @@ export default function MyBookings() {
         remainingAmount: isFullPay ? 0 : Math.max(totalAmount - onlinePaid, 0),
         paymentStatus: payment.payment_status === 'paid' ? 'completed' : (payment.payment_status || 'pending'),
         paymentMethod: isFullPay ? 'Full Online Payment' : 'Partial Online + Cash',
-        invoiceNumber: `INV-${bookingKey}-${Date.now()}`,
+        invoiceNumber,
       }
 
       const doc = await generateInvoicePDF(invoiceData)

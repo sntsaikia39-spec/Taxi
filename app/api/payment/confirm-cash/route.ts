@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { sendCashPaymentInvoice } from '@/lib/resend-notifications'
+import { createPaymentRecord } from '@/lib/payment-db'
 
 export async function POST(request: Request) {
   try {
@@ -92,6 +93,18 @@ export async function POST(request: Request) {
     }
 
     console.log('✅ Payment updated successfully:', updatedPayment)
+
+    // Create payment_records row for this cash transaction
+    const now = new Date().toISOString()
+    await createPaymentRecord({
+      payment_id: payment.id,
+      booking_id: booking_id,
+      txn_type: 'cash',
+      amount: cashAmount,
+      status: 'success',
+      collected_by: cash_collected_by,
+      collected_at: now,
+    }).catch(err => console.error('[CONFIRM-CASH] payment_record insert failed:', err))
 
     // Send invoice email to customer (awaited — Vercel kills fire-and-forget after response)
     if (user_email) {

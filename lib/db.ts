@@ -61,6 +61,24 @@ export interface Payment {
   refund_notes: string | null
 }
 
+export interface PaymentRecord {
+  id: string
+  payment_id: string
+  booking_id: string
+  txn_type: 'online' | 'cash'
+  txn_id: string | null
+  gateway: string | null
+  amount: number
+  currency: string
+  status: 'success' | 'failed' | 'pending'
+  razorpay_order_id: string | null
+  collected_by: string | null
+  collected_at: string | null
+  invoice_number: string | null
+  notes: string | null
+  created_at: string
+}
+
 export interface RatingStats {
   avg: number
   count: number

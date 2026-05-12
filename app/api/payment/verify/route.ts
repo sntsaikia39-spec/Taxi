@@ -3,7 +3,7 @@ import { sendBookingConfirmation, sendAdminNotification } from '@/lib/resend-not
 import { generateInvoiceNumber } from '@/lib/utils'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { calculatePaymentAmounts } from '@/lib/payment-utils'
-import { getPaymentByBookingId, createPaymentInDB } from '@/lib/payment-db'
+import { getPaymentByBookingId, createPaymentInDB, createPaymentRecord } from '@/lib/payment-db'
 
 export async function POST(request: Request) {
   try {
@@ -79,17 +79,19 @@ export async function POST(request: Request) {
     console.log('[VERIFY] STEP 6 — Creating/checking payment record...')
     const { data: existingPayment } = await getPaymentByBookingId(booking.booking_id)
     let paymentRecord = existingPayment
+    let storedInvoiceNumber: string | null = null
 
     if (!paymentRecord) {
-      const { amountOnlinePaid, amountCashPaid } = calculatePaymentAmounts(booking.amount_total, paymentMethod)
+      const { amountOnlinePaid } = calculatePaymentAmounts(booking.amount_total, paymentMethod)
       const confirmedOnlineAmount = rzpAmountCaptured !== null ? rzpAmountCaptured : amountOnlinePaid
+      const txnStatus: 'success' | 'failed' = rzpPaymentStatus === 'captured' || rzpPaymentStatus === 'authorized' ? 'success' : 'failed'
       const { data: newPayment, error: paymentError } = await createPaymentInDB({
         booking_id: booking.booking_id,
         payment_type: paymentMethod,
         amount_total: booking.amount_total,
         amount_online_paid: confirmedOnlineAmount,
-        amount_cash_paid: paymentMethod === 'full' ? 0 : 0,
-        txn_status: rzpPaymentStatus === 'captured' || rzpPaymentStatus === 'authorized' ? 'success' : 'failed',
+        amount_cash_paid: 0,
+        txn_status: txnStatus,
         txn_id: paymentId,
         gateway: 'razorpay',
         payment_status: paymentMethod === 'full' ? 'paid' : 'partial',
@@ -98,6 +100,20 @@ export async function POST(request: Request) {
       else {
         paymentRecord = newPayment
         console.log('[VERIFY] ✅ Payment record created:', newPayment?.id)
+        if (newPayment) {
+          storedInvoiceNumber = generateInvoiceNumber()
+          await createPaymentRecord({
+            payment_id: newPayment.id,
+            booking_id: booking.booking_id,
+            txn_type: 'online',
+            txn_id: paymentId,
+            gateway: 'razorpay',
+            amount: confirmedOnlineAmount,
+            status: txnStatus,
+            razorpay_order_id: orderId,
+            invoice_number: storedInvoiceNumber,
+          }).catch(err => console.error('[VERIFY] ❌ payment_record insert failed:', err))
+        }
       }
     } else {
       console.log('[VERIFY] Payment record already exists:', existingPayment?.id)
@@ -180,7 +196,7 @@ export async function POST(request: Request) {
       message: 'Payment verified and recorded successfully',
       bookingId: booking.booking_id,
       payment: paymentRecord,
-      invoiceNumber: generateInvoiceNumber(),
+      invoiceNumber: storedInvoiceNumber || generateInvoiceNumber(),
     })
   } catch (error) {
     console.error('[VERIFY] ❌ Unhandled error:', error)

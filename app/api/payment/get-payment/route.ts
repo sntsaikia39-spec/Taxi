@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { getPaymentRecordsByPaymentId } from '@/lib/payment-db'
 import { NextRequest } from 'next/server'
 
 export const dynamic = 'force-dynamic'
@@ -26,7 +27,8 @@ export async function GET(request: NextRequest) {
       .single()
 
     if (!directError && directPayment) {
-      return Response.json(directPayment, { status: 200 })
+      const { data: records } = await getPaymentRecordsByPaymentId(directPayment.id)
+      return Response.json({ ...directPayment, payment_records: records ?? [] }, { status: 200 })
     }
 
     // Fallback: bookingId may be DB UUID (bookings.id) while payment row stores bookings.booking_id
@@ -64,7 +66,8 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    return Response.json(fallbackPayment, { status: 200 })
+    const { data: fallbackRecords } = await getPaymentRecordsByPaymentId(fallbackPayment.id)
+    return Response.json({ ...fallbackPayment, payment_records: fallbackRecords ?? [] }, { status: 200 })
   } catch (error) {
     console.error('Error in get-payment route:', error)
     return Response.json(
