@@ -4146,6 +4146,37 @@ export default function AdminDashboard() {
         </div>
       </div>
 
+      {/* ── Documentation ───────────────────────────────────────────── */}
+      <div className={`rounded-lg shadow-lg p-4 md:p-6 ${darkMode ? 'bg-primary-800 border border-primary-700' : 'bg-white'}`}>
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+          <div className="flex-1 min-w-0">
+            <h2 className={`text-lg md:text-xl font-bold mb-1 ${darkMode ? 'text-white' : 'text-gray-900'}`}>Documentation</h2>
+            <p className={`text-xs md:text-sm mb-4 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+              Complete technical and product documentation for the TaxiHollongi platform — PRD, SRS, BRD, SAD, API docs, ERDs, UML diagrams, and more.
+            </p>
+            <div className="flex flex-wrap gap-1.5 mb-4">
+              {['BRD', 'PRD', 'SRS', 'SAD', 'HLD', 'LLD', 'TDD', 'ERD', 'DFDs', 'UML', 'API Docs'].map(tag => (
+                <span
+                  key={tag}
+                  className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${darkMode ? 'bg-primary-700 text-gray-300' : 'bg-gray-100 text-gray-500'}`}
+                >
+                  {tag}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+        <button
+          onClick={() => router.push('/admin/docs')}
+          className="flex items-center gap-2 px-4 py-2.5 bg-secondary-500 hover:bg-yellow-400 text-primary-950 font-semibold rounded-lg transition-colors text-sm shadow-sm"
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          Go to Docs
+        </button>
+      </div>
+
       {/* ── Conflict Control Toggle ─────────────────────────────────── */}
       <div className="bg-white rounded-lg shadow-lg p-4 md:p-6">
         <h2 className="text-lg md:text-xl font-bold mb-1">Booking Conflict Control</h2>
