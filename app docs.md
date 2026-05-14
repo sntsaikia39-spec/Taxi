@@ -1,9 +1,11 @@
-# TaxiHollongi — Complete Application Documentation
+# Rina's Tours and Travels — Complete Application Documentation
 
-**Product:** Rina's Tours and Travels  
-**Version:** 1.0  
-**Last Updated:** 2026-05-12  
-**Branch:** v2-unstable  
+**Product:** Rina's Tours and Travels (RT&T)
+**Version:** 2.0
+**Last Updated:** 2026-05-12
+**Branch:** v2-stable
+
+
 
 ---
 
@@ -19,8 +21,11 @@
 8. [Entity-Relationship Diagram (ERD)](#8-entity-relationship-diagram-erd)
 9. [Data Flow Diagrams (DFDs)](#9-data-flow-diagrams-dfds)
 10. [UML Diagrams](#10-uml-diagrams)
-11. [API Documentation](#11-api-documentation)
-12. [Development Documentation](#12-development-documentation)
+11. [Feature Reference](#11-feature-reference)
+12. [Admin Dashboard Reference](#12-admin-dashboard-reference)
+13. [API Documentation](#13-api-documentation)
+14. [Development Documentation](#14-development-documentation)
+15. [Glossary](#15-glossary)
 
 ---
 
@@ -28,58 +33,87 @@
 
 ### 1.1 Business Overview
 
-Rina's Tours and Travels is a taxi and tour service operator based in Itanagar, Arunachal Pradesh. The business provides:
+**Rina's Tours and Travels** is a taxi and tour operator serving Itanagar and the wider Papum Pare / Lower Subansiri region of Arunachal Pradesh, India. Its services centre on **Donyi Polo Airport (Hollongi)** — the only commercial airport serving the state capital — and on guided tourism across Arunachal Pradesh.
 
-- **Airport taxi services** to/from Hollongi (Donyi Polo) Airport
-- **Curated tour packages** covering Arunachal Pradesh destinations (Tawang, Ziro, Bomdila, etc.)
-- **Hourly taxi rental** services within Itanagar
+The business offers three product lines:
 
-The digital platform is developed under the product name **TaxiHollongi**.
+| Line | Description |
+|------|-------------|
+| **Airport taxi** | Point-to-point transfers between Donyi Polo Airport (Hollongi) and destinations such as Itanagar, Naharlagun, Ziro, Bomdila, Tawang, etc. Distance-based pricing. |
+| **Tour packages** | Fixed-price curated multi-hour / multi-day tours with a predefined itinerary, vehicle, and passenger cap. |
+| **Hourly taxi** | Time-based ("disposal") taxi hire within and around Itanagar — billed per hour or per day. |
 
-### 1.2 Business Problem
+The digital platform — **Rina's Tours and Travels (RT&T)** — provides a customer-facing booking website and an internal operations dashboard.
 
-The business previously relied on phone calls, WhatsApp, and manual payment tracking. This caused:
 
-- Lost bookings due to missed calls or unanswered messages
-- No clear payment tracking or receipts for customers
-- Manual (error-prone) conflict detection for vehicle availability
-- No centralized view of bookings for the admin team
-- No formal invoice or confirmation system for customers
+### 1.2 Business Objectives
 
-### 1.3 Business Objectives
+| # | Objective | How the platform delivers it |
+|---|-----------|------------------------------|
+| O1 | Digitise booking & payment end to end | Self-service web booking + Razorpay online payments |
+| O2 | Reduce missed bookings | 24/7 self-service, no phone dependency |
+| O3 | Centralise operations | Single admin dashboard for bookings, fleet, pricing, tours |
+| O4 | Track every rupee | `payments` + `payment_records` tables; PDF invoices |
+| O5 | Eliminate double-bookings | Conflict control system with overlap detection |
+| O6 | Notify customers & drivers automatically | Resend transactional emails |
+| O7 | Provide operational visibility | Analytics tab: revenue, fleet utilization, top routes/tours |
 
-| # | Objective |
-|---|-----------|
-| 1 | Digitize the complete booking and payment process |
-| 2 | Provide customers with a self-service web platform accessible on mobile |
-| 3 | Give the admin team a centralized operations dashboard |
-| 4 | Track all payments (online + cash) with digital invoices |
-| 5 | Automate email notifications for booking confirmation and driver assignment |
-| 6 | Reduce administrative overhead for routine operations |
+### 1.3 Business Rules
+
+These rules are enforced by the system and must be preserved by any future change:
+
+| ID | Rule |
+|----|------|
+| BR-01 | Every booking is identified by a unique `booking_id` of the form `BK` + timestamp-based suffix (see [`generateBookingId`](#76-utility-functions)). |
+| BR-02 | A booking cannot be created without an authenticated user account. |
+| BR-03 | **Partial payment** = exactly **30%** of the total paid online via Razorpay; the remaining **70%** is collected in cash by the driver. **Full payment** = **100%** online. |
+| BR-04 | The 30% advance is computed as `Math.round(total × 0.30 × 100) / 100`; the cash portion is `total − advance` (avoids floating-point drift). |
+| BR-05 | A booking is only marked `confirmed` after the Razorpay payment **signature is verified server-side** (HMAC-SHA256). |
+| BR-06 | A customer may cancel a booking only if the trip start is **more than 24 hours away** (see [`canCancelBooking`](#76-utility-functions)). Admins may cancel at any time. |
+| BR-07 | When **conflict control is ON**, a vehicle/model cannot be committed for a time window that overlaps an existing assignment. Overlap = `existing.start < new.end AND existing.end > new.start`. |
+| BR-08 | Bookings left in `pending` (unpaid) for more than 24 hours are deleted automatically by a daily cron job. |
+| BR-09 | A user may submit **at most one review per item** (`UNIQUE(user_email, reviewable_type, reviewable_id)`). |
+| BR-10 | Ratings are integers from **1 to 5** (DB `CHECK` constraint). |
+| BR-11 | Tour bookings cannot exceed the tour's `max_passengers`; airport/hourly bookings cannot exceed the chosen car model's `capacity`. |
+| BR-12 | All monetary amounts are stored and processed in **INR**. Razorpay amounts are expressed in **paise** (× 100). |
+| BR-13 | Customers see car **models** (name, class, capacity, price, available count) — never number plates, driver names, or specific car IDs — until after a vehicle is assigned by an admin. |
 
 ### 1.4 Stakeholders
 
-| Stakeholder | Role | Key Needs |
-|-------------|------|-----------|
-| Customers | End users booking taxis and tours | Easy booking, transparent pricing, payment receipts, booking history |
-| Admin / Operator | Rina's Tours staff | Booking management, vehicle assignment, payment tracking, CRUD over content |
-| Drivers | Assigned to bookings by admin | Receive notifications about trip assignments via email |
-| Developer | TaxiHollongi development team | Clean API surface, maintainable TypeScript codebase |
+| Stakeholder | Role | Primary needs |
+|-------------|------|---------------|
+| **Customer** | Books and pays for trips | Fast booking, transparent pricing, receipts, booking history, cancellation |
+| **Admin / Operator** | Runs day-to-day operations | Booking management, vehicle & driver assignment, cash reconciliation, content CRUD, analytics |
+| **Driver** | Executes the trip | Email notification of assignments with customer contact and trip details |
+| **Developer** | Maintains and extends the platform | Clean API, typed code, reproducible setup |
 
-### 1.5 Business Constraints
+### 1.5 Revenue Model
 
-- Platform must be fully functional on mobile devices (primary user device)
-- Payment gateway limited to Indian market — Razorpay (INR only)
-- Deployed on Vercel Hobby plan (10-second function timeout, limited execution units)
-- No real-time driver GPS integration in current scope
-- Refund processing is manual (no automated refund flow)
+The platform itself charges no commission — it is an owned channel. Revenue is the trip fare:
 
-### 1.6 Success Metrics
+- **Airport taxi:** `distance_km × cars.per_km_charge` for the chosen car class; distance is stored per destination row (all distances measured FROM Hollongi Airport).
+- **Hourly taxi:** `no_of_hours × cars.per_hr_charge` for the chosen car class.
+- **Tours:** fixed `price` per `tour_packages` row, independent of distance.
 
-- Volume of online bookings vs. prior phone-based bookings
-- Payment collection rate: online advance vs. cash-only
-- Customer re-booking rate
-- Admin time saved on manual booking and payment tracking operations
+Cash collected at the airport (the 70% balance on partial bookings) is reconciled in the admin dashboard by marking the cash as collected, which records the collector's name and timestamp.
+
+### 1.6 Constraints
+
+- **Vercel Hobby** deployment: serverless functions have a ~10 s execution limit; bundle and execution budgets apply.
+- **Supabase** free tier: 500 MB DB, 2 GB egress / month.
+- **Razorpay**: India-only, INR only, minimum ₹1.
+- **Region**: Vercel functions run from `iad1` (US East); database latency to India is acceptable for this workload.
+- No native server-side rendering for user-specific pages — those are client-rendered against the Supabase client.
+
+### 1.7 Risk Register
+
+| Risk | Impact | Mitigation |
+|------|--------|------------|
+| Razorpay outage | Customers can't pay online | Partial-payment mode still allows trips; cash fallback handled offline |
+| Supabase free-tier limits hit | Read/write failures | Monitor usage; upgrade tier; archive old bookings |
+| Stale `pending` bookings | Clutter, false conflicts | Daily `cleanup-pending` cron |
+| Admin credential leak | Full operational compromise | bcrypt hashing, JWT expiry (24 h), change default password, planned 2FA & rate limiting |
+| Vercel function timeout on heavy queries | 504 errors | Keep queries indexed and narrow; paginate admin lists |
 
 ---
 
@@ -87,127 +121,131 @@ The business previously relied on phone calls, WhatsApp, and manual payment trac
 
 ### 2.1 Product Vision
 
-A mobile-first web application that lets customers book airport taxis, tour packages, and hourly taxis from Rina's Tours and Travels — and gives the admin team a single dashboard to manage all operations.
+A mobile-first web application that lets travellers in Arunachal Pradesh book airport taxis, hourly taxis, and curated tours from Rina's Tours and Travels in under two minutes — and gives the operator a single dashboard to run the entire business.
 
-### 2.2 Target Users
+### 2.2 User Personas
 
-**Primary — Customer**
-- Travelers arriving at or departing from Hollongi (Donyi Polo) Airport
-- Tourists looking for guided tour packages in Arunachal Pradesh
-- Local residents needing hourly taxi services
-- Age range: 18–60, smartphone users, moderate digital literacy
+**Persona A — "Arriving Traveller" (primary)**
+- Lands at Donyi Polo Airport, needs a taxi to Itanagar/Naharlagun or onward.
+- On a phone, possibly on weak network, wants a quick confirmed price and a driver assigned.
+- Values: speed, transparent fare, a confirmation they can show.
 
-**Secondary — Admin**
-- Rina's Tours and Travels operations staff
-- Manages bookings, vehicles, pricing, and payments through the admin dashboard
+**Persona B — "Trip Planner / Tourist"**
+- Planning an Arunachal trip weeks ahead; comparing tour packages.
+- Wants itinerary detail, photos, reviews, and the ability to lock a date with a small advance.
+- Values: information depth, social proof (reviews), flexible 30% advance.
 
-### 2.3 Core Features
+**Persona C — "Local Resident"**
+- Needs a car for a few hours / a day within Itanagar (errands, events).
+- Wants simple hourly pricing and a known vehicle class.
+- Values: simplicity, predictable per-hour cost.
 
-#### F-01: User Authentication
-- Email/password signup with mandatory email verification
-- Login with verified credentials; session persistence across tabs
-- Google OAuth login
-- Password change flow
-- Email verification link enables cross-device auto-login
+**Persona D — "Operator / Admin"**
+- Runs Rina's Tours; non-technical but comfortable with web apps.
+- Needs to see today's bookings, assign cars & drivers, confirm cash, manage prices and tours, and see how the business is doing.
+- Values: clarity, few clicks, no surprises, mobile-usable dashboard.
 
-#### F-02: Airport Taxi Booking
-- Select source and destination from managed list
-- Select date, time, and passenger count
-- View only available car models for the selected time window
-- See full fare breakdown before confirming
+### 2.3 Core Features & User Stories
 
-#### F-03: Tour Package Booking
-- Browse active tour packages by destination category
-- View itinerary, highlights, duration, pricing, and multi-image gallery
-- Book a tour for a specific date with passenger count selection
-- View star ratings and customer reviews per package
+Each feature lists representative user stories with acceptance criteria (AC).
 
-#### F-04: Hourly Taxi Booking
-- Select rental duration (hours or days)
-- Select start date and time from Itanagar base
-- View applicable rates before confirming
+#### F-01 — User Authentication
+- *As a new customer, I want to sign up with email & password so I can book trips.*
+  - AC: Email format validated (RFC 5322 simplified); password 6–128 chars; full name ≥ 2 words, letters/spaces/hyphens/apostrophes only; verification email sent on signup; login blocked until verified.
+- *As a returning customer, I want to log in with email & password.*
+  - AC: Verified email + correct password logs in; session persists across tabs; unverified email blocked with a resend-verification nudge.
+- *As a new or returning customer, I want to sign up or log in with Google so I can skip email/password entry.*
+  - AC: "Continue with Google" button on both `/login` and `/signup`; clicking it initiates Google OAuth; after Google consent the user is routed back through `/auth/callback` → `/auth/verify`; session is set and the user lands on `/bookings` (or the page they were trying to reach); no email verification step required — Google guarantees a verified email.
+- *As a customer, I want to change my password.*
+  - AC: `/change` page updates the password through Supabase Auth.
+- *As a customer who verified on a different device, I want to land logged-in.*
+  - AC: Clicking the verification link exchanges the code for a session and redirects authenticated.
 
-#### F-05: Payment Processing
-- **Partial mode**: 30% advance paid online (Razorpay), 70% cash paid to driver
-- **Full mode**: 100% paid online (Razorpay)
-- Real-time payment status tracking per booking
-- Invoice PDF generation and in-browser download
-- Admin confirms cash collection with timestamp
+#### F-02 — Airport Taxi Booking
+- *As an arriving traveller, I want to book a taxi from the airport to my destination for a date & time.*
+  - AC: 5-step flow — **Contact → Route → Date & Time → Car → Confirm**; destinations come from the `destinations` table (each with `distance_km`, `estimated_duration_minutes`); only car models with ≥ 1 free unit for the window are shown; fare breakdown shown before confirm; passenger count ≤ chosen model `capacity`.
 
-#### F-06: Customer Booking Management
-- View all bookings with live status (pending, confirmed, completed, cancelled)
-- Download invoice for confirmed/completed bookings
-- Cancel booking (allowed only >24 hours before trip start)
-- Resume payment for pending (unpaid) bookings
+#### F-03 — Hourly Taxi Booking
+- *As a customer, I want to hire a car for N hours/days within Itanagar.*
+  - AC: 5-step flow — **Contact → Passengers & Date → Time & Duration → Car → Confirm**; duration entered as days + hours; price = per-hour/per-day rate × duration; availability checked over the full window.
 
-#### F-07: Review System
-- Submit a 1–5 star rating with title and comment on completed bookings or tours
-- One review enforced per user per item (database constraint)
-- Reviews displayed on tour package pages with aggregated rating stats
+#### F-04 — Tour Package Booking
+- *As a tourist, I want to browse tours and book one for a date.*
+  - AC: Tour list and category landing pages (`/arunachal-tours`, `/itanagar-tours`); tour detail page shows description, itinerary, highlights, multi-image gallery, average rating & reviews; booking checks availability and `max_passengers`; price is fixed per tour.
 
-#### F-08: Admin Dashboard
-- View and search/filter all bookings by status
-- Assign specific vehicle (car) and driver to a confirmed booking
-- Confirm cash payment received from customer
-- Full CRUD: cars, destinations, pricing rules, tour packages
-- Process cancellation requests
-- Toggle conflict control system on/off
-- View conflicting booking pairs
+#### F-05 — Payment Processing
+- *As a customer, I want to pay 30% now and 70% cash to the driver, or pay 100% now.*
+  - AC: Two buttons — **Partial (30% online)** and **Full (100% online)**; Razorpay checkout (company shown as "Rina's Tours and Travels"); server creates the Razorpay order, then verifies the signature on callback; on success the booking becomes `confirmed`, a payment record is written, an invoice number is generated, and a confirmation email is sent.
 
-#### F-09: Email Notifications
-- Booking confirmation email to customer (on payment verified)
-- Driver assignment notification email (on vehicle assigned)
-- Cancellation confirmation email to customer
+#### F-06 — Invoice
+- *As a customer, I want to download a PDF invoice for my booking.*
+  - AC: PDF generated client-side (jsPDF) with company header, booking ID, customer & trip details, and payment breakdown (online paid / cash due / total); available from "Booking Confirmed" and "My Bookings".
+
+#### F-07 — My Bookings & Cancellation
+- *As a customer, I want to see all my bookings with status and continue paying for pending ones.*
+  - AC: `/bookings` lists bookings by email with status badges; pending bookings have a "Continue to Pay" action; "Cancel" available only > 24 h before trip start; cancellation creates a request the admin processes.
+
+#### F-08 — Reviews & Ratings
+- *As a customer, I want to rate a completed trip/tour 1–5 stars with a title & comment.*
+  - AC: One review per user per item; rating 1–5; review appears on tour pages; admins can hide a review.
+
+#### F-09 — Admin Dashboard
+- *As an admin, I want to manage everything from one place.*
+  - AC: Tabs — **Overview, Bookings, Cars, Destinations, Tours, Analytics, Misc**; JWT-protected; mobile responsive; dark mode toggle. See [§12](#12-admin-dashboard-reference).
+
+#### F-10 — Email Notifications
+- *As a customer, I want a confirmation email; as a driver, I want an assignment email.*
+  - AC: Booking confirmation on payment verified; driver notification on vehicle assignment; cancellation email on cancellation processed; delivered via Resend (SMTP fallback available).
+
+#### F-11 — Conflict Control
+- *As an admin, I want the system to prevent double-booking a vehicle — but I want to be able to turn it off.*
+  - AC: `app_settings.conflict_control_enabled` toggle; when ON, overlapping assignments are blocked; when OFF, the admin manages conflicts manually and can view detected conflicts in the Misc tab.
+
+#### F-12 — SEO Landing Pages
+- *As the business, I want dedicated pages to rank for local search.*
+  - AC: Static-content pages: `/hollongi-airport-taxi`, `/donyi-polo-airport-taxi`, `/itanagar-airport-taxi`, `/hourly-taxi-itanagar`, `/arunachal-tours`, `/itanagar-tours`; semantic HTML + Next.js metadata; legacy `/airport-taxi-itanagar` permanently redirects to `/itanagar-airport-taxi`.
 
 ### 2.4 Out of Scope (Current Version)
 
-- Real-time GPS driver tracking
-- Driver-facing mobile application
-- SMS or WhatsApp notifications (placeholders exist, not integrated)
-- Automated refund processing (manual admin step)
-- Multi-language support
-- In-app customer support chat
-- Advanced analytics and reporting
+Real-time GPS driver tracking · driver mobile app · SMS / WhatsApp delivery (placeholders only) · automated refunds (manual admin step) · multi-language UI · in-app support chat · loyalty / promo codes · third-party error tracking (Sentry) — all tracked in [§14.12 TODOs](#1412-outstanding-todos).
 
-### 2.5 Customer Booking Journey
+### 2.5 Customer Journey Map
 
-```
-[Land on Homepage]
-        │
-        ▼
-[Choose Service Type]
-  ┌─────┴──────┬──────────────┐
-  ▼            ▼              ▼
-[Book Taxi] [Book Tour] [Hourly Taxi]
-  │            │              │
-  └─────┬──────┴──────────────┘
-        ▼
-[Enter Booking Details]
-[Select Available Car Model]
-[View Fare Breakdown]
-        │
-        ▼
-[Sign In / Sign Up]  ←── If not authenticated
-        │
-        ▼
-[Choose Payment Mode: Partial 30% | Full 100%]
-        │
-        ▼
-[Razorpay Payment Gateway]
-        │
-        ▼
-[Booking Confirmed + Invoice Generated]
-[Email Confirmation Sent]
-        │
-        ▼
-[Admin Assigns Vehicle & Driver]
-[Driver Notified by Email]
-        │
-        ▼
-[Trip Completed]
-        │
-        ▼
-[Customer Submits Review]
+```mermaid
+flowchart TD
+    A([User opens RT&T]) --> B{Logged in?}
+    B -- No --> C[Sign Up / Log In]
+    C --> D[Email verification]
+    D --> E{Choose service}
+    B -- Yes --> E
+
+    E -- Airport taxi --> F1[Contact → Passangers/Route → Date/Time]
+    E -- Hourly taxi --> F2[Contact → Passengers/Date → Time/Duration]
+    E -- Tour package --> F3[Browse tours → Pick date & passengers]
+
+    F1 --> G[System: GET available car models for window]
+    F2 --> G
+    F3 --> G
+
+    G --> H{Any model available?}
+    H -- No --> I[Show no availability]
+    H -- Yes --> J[Show models with price & count]
+    J --> K[Select model → Review fare]
+    K --> L{Payment mode}
+
+    L -- Partial 30% --> M1[Pay 30% via Razorpay]
+    L -- Full 100% --> M2[Pay 100% via Razorpay]
+    M1 --> N[Server verifies HMAC signature]
+    M2 --> N
+    N --> O{Signature valid?}
+    O -- No --> P[Payment failed → retry]
+    O -- Yes --> Q[Booking = confirmed]
+    Q --> R[Invoice number generated]
+    R --> S[Confirmation email sent]
+    S --> T[Admin assigns car & driver]
+    T --> U[Driver email sent]
+    U --> V([Trip completed])
+    V --> W[Customer leaves a review]
 ```
 
 ---
@@ -216,86 +254,85 @@ A mobile-first web application that lets customers book airport taxis, tour pack
 
 ### 3.1 Functional Requirements
 
-#### FR-01: User Authentication
+#### Authentication (FR-AUTH)
 
 | ID | Requirement |
 |----|-------------|
-| FR-01.1 | The system shall allow users to register with an email address and password |
-| FR-01.2 | The system shall send an email verification link upon registration |
-| FR-01.3 | The system shall not allow login before the email address is verified |
-| FR-01.4 | The system shall allow users to log in with a verified email and password |
-| FR-01.5 | The system shall support Google OAuth as an alternative login method |
-| FR-01.6 | The system shall allow authenticated users to change their password |
-| FR-01.7 | Email verification links shall auto-login the user on any device upon click |
+| FR-AUTH-1 | The system shall register users with email + password via Supabase Auth and send a verification email. |
+| FR-AUTH-2 | The system shall reject login attempts for unverified email addresses. |
+| FR-AUTH-3 | The system shall support Google OAuth signup and login via `supabase.auth.signInWithOAuth({ provider: 'google' })`. The OAuth callback is routed through `GET /auth/callback` → `/auth/verify` → `POST /api/auth/exchange-code` — the same pipeline as email verification. No email verification step is required; Google guarantees a verified email address. |
+| FR-AUTH-4 | The system shall validate inputs using `lib/validation.ts`: email (≤ 254 chars, RFC 5322 simplified), password (6–128 chars), full name (2–100 chars, ≥ 2 words, `[a-zA-Z\s'-]`), phone (exactly 10 digits after stripping non-digits). |
+| FR-AUTH-5 | The system shall let an authenticated user change their password at `/change`. |
+| FR-AUTH-6 | The system shall complete email verification on any device by exchanging the code at `/auth/verify` → `POST /api/auth/exchange-code` and redirecting the user authenticated. |
 
-#### FR-02: Booking
-
-| ID | Requirement |
-|----|-------------|
-| FR-02.1 | The system shall allow airport taxi bookings with source, destination, date, time, and passenger count |
-| FR-02.2 | The system shall allow tour package bookings with a selected date and passenger count |
-| FR-02.3 | The system shall allow hourly taxi bookings with selected duration and start time |
-| FR-02.4 | The system shall display only car models that have at least one available vehicle for the selected time window |
-| FR-02.5 | The system shall calculate and display the full fare breakdown before booking confirmation |
-| FR-02.6 | The system shall require user authentication before accepting a booking |
-| FR-02.7 | The system shall generate a unique booking ID for every booking (format: `BK` + `YYYYMMDD` + 6 random chars) |
-| FR-02.8 | When conflict control is enabled, the system shall prevent booking a car model with no available units |
-
-#### FR-03: Payment
+#### Booking (FR-BOOK)
 
 | ID | Requirement |
 |----|-------------|
-| FR-03.1 | The system shall offer partial payment (30% online) and full payment (100% online) modes |
-| FR-03.2 | The system shall integrate Razorpay as the online payment gateway |
-| FR-03.3 | The system shall verify Razorpay payment signatures server-side (HMAC-SHA256) before confirming a booking |
-| FR-03.4 | The system shall create a payment record and generate an invoice number upon successful payment verification |
-| FR-03.5 | The system shall allow admin to mark the cash portion of a partial payment as collected |
-| FR-03.6 | The system shall track payment status: `pending`, `partial`, `paid`, `refunded` |
-| FR-03.7 | Customers shall be able to download an invoice PDF for their confirmed bookings |
+| FR-BOOK-1 | The system shall support three booking types: `airport`, `tour`, `hourly`. |
+| FR-BOOK-2 | The system shall require an authenticated user before creating a booking. |
+| FR-BOOK-3 | The system shall generate a unique `booking_id` (`BK` + timestamp suffix) for every booking. |
+| FR-BOOK-4 | For airport bookings, the system shall capture source/destination (from `destinations`), date, time, and passenger count. |
+| FR-BOOK-5 | For hourly bookings, the system shall capture duration (days + hours), start date/time, and passenger count. |
+| FR-BOOK-6 | For tour bookings, the system shall capture the selected `tour_package_id`, date, and passenger count (≤ `max_passengers`). |
+| FR-BOOK-7 | The system shall display only car **models** that have ≥ 1 available unit for the requested window (`GET /api/cars/available-models`). |
+| FR-BOOK-8 | The system shall display the full fare breakdown before booking confirmation. |
+| FR-BOOK-9 | When conflict control is ON, the system shall block creation of an assignment overlapping an existing one (`start < otherEnd AND end > otherStart`). |
+| FR-BOOK-10 | The system shall create new bookings with `booking_status = 'pending'`. |
+| FR-BOOK-11 | The system shall allow a customer to request cancellation only if the trip start is > 24 h away; admins may cancel any time. |
+| FR-BOOK-12 | The system shall delete `pending` bookings older than 24 h via the daily `cleanup-pending` cron. |
 
-#### FR-04: Admin Operations
-
-| ID | Requirement |
-|----|-------------|
-| FR-04.1 | Admin shall authenticate via email/password and receive a JWT token valid for 24 hours |
-| FR-04.2 | Admin shall view all bookings with filter capability by status |
-| FR-04.3 | Admin shall assign a specific vehicle and driver to a booking post-payment |
-| FR-04.4 | Admin shall confirm cash payment collection with their name and the collected amount |
-| FR-04.5 | Admin shall perform full CRUD on cars, destinations, pricing rules, and tour packages |
-| FR-04.6 | Admin shall be able to toggle the conflict control system on or off |
-| FR-04.7 | Admin shall process customer cancellation requests |
-| FR-04.8 | Admin shall create new admin accounts with hashed passwords |
-
-#### FR-05: Reviews
+#### Payment (FR-PAY)
 
 | ID | Requirement |
 |----|-------------|
-| FR-05.1 | Authenticated users shall be able to rate a completed booking or tour (1–5 stars) |
-| FR-05.2 | The system shall enforce a maximum of one review per user per booking/tour (unique DB constraint) |
-| FR-05.3 | Reviews and aggregated rating statistics shall be visible on tour package pages |
-| FR-05.4 | Admin shall be able to hide any review from public display |
+| FR-PAY-1 | The system shall offer `partial` (30% online) and `full` (100% online) payment modes. |
+| FR-PAY-2 | The system shall compute the advance as `round(total × 0.30 × 100) / 100` and the cash portion as `total − advance`. |
+| FR-PAY-3 | The system shall create a Razorpay order server-side (`POST /api/payment/create-order`) with amount in paise. |
+| FR-PAY-4 | The system shall verify the Razorpay signature (`HMAC-SHA256(order_id + "|" + payment_id, RAZORPAY_KEY_SECRET)`) server-side (`POST /api/payment/verify`) before confirming the booking. |
+| FR-PAY-5 | On verification success, the system shall: set `payments.txn_status = 'success'`; set `payments.payment_status` to `partial` or `paid`; set `bookings.booking_status = 'confirmed'`; write a `payment_records` row with an `invoice_number`; send a confirmation email. |
+| FR-PAY-6 | The system shall let an admin mark the cash portion collected (`POST /api/payment/confirm-cash`), recording `cash_paid_at` and `cash_collected_by`. |
+| FR-PAY-7 | The system shall track `payment_status ∈ {pending, partial, paid}` and `refund_status ∈ {none, pending, processed, failed}`. |
+| FR-PAY-8 | The system shall expose a downloadable PDF invoice generated client-side. |
+
+#### Admin (FR-ADM)
+
+| ID | Requirement |
+|----|-------------|
+| FR-ADM-1 | The system shall authenticate admins with email + bcrypt-hashed password and issue a JWT valid for 24 h, stored in `localStorage` as `adminToken`. |
+| FR-ADM-2 | The system shall protect all `/api/admin/*` (and admin-only) routes by verifying the JWT. |
+| FR-ADM-3 | The system shall provide an Overview tab with totals (bookings, revenue, active, completed today, pending, cancelled) and recent bookings. |
+| FR-ADM-4 | The system shall provide a Bookings tab to view/filter all bookings, open details, assign vehicle & driver, update status, confirm cash, and process cancellations. |
+| FR-ADM-5 | The system shall provide Cars, Destinations, and Tours tabs with full CRUD (Tours includes image upload; Cars enforces a strict check when adding). |
+| FR-ADM-6 | The system shall provide an Analytics tab: revenue, completed bookings, average booking value, fleet utilization %, status breakdown, fleet info, revenue breakdown (online vs cash), weekly booking trend, top destinations, top tours. |
+| FR-ADM-7 | The system shall provide a Misc tab: dark mode toggle, app version/date, conflict control toggle + conflict scanner, pending-booking cleanup controls, profile edit, add-admin, and a link to this documentation. |
+| FR-ADM-8 | The system shall allow an admin to create another admin (`POST /api/admin/create-admin`). |
+
+#### Reviews (FR-REV)
+
+| ID | Requirement |
+|----|-------------|
+| FR-REV-1 | The system shall allow authenticated users to submit a review (`reviewable_type ∈ {tour, taxi_booking}`, rating 1–5, optional title & comment). |
+| FR-REV-2 | The system shall enforce one review per `(user_email, reviewable_type, reviewable_id)`. |
+| FR-REV-3 | The system shall display reviews and aggregate stats (`avg`, `count`, 5→1 distribution) on tour pages. |
+| FR-REV-4 | The system shall let admins toggle `is_visible` on a review. |
 
 ### 3.2 Non-Functional Requirements
 
-| ID | Category | Requirement | Target |
-|----|----------|-------------|--------|
-| NFR-01 | Performance | Page load time on 4G mobile | < 3 seconds |
-| NFR-02 | Availability | Platform uptime | 99.5% (Vercel SLA) |
-| NFR-03 | Security | API secret keys must never appear in client-side code | Zero exceptions |
-| NFR-04 | Scalability | Concurrent user handling | 100 simultaneous users |
-| NFR-05 | Usability | UI must be fully functional on mobile screens (≥320px) | Mobile-first |
-| NFR-06 | Maintainability | TypeScript strict mode; modular lib architecture | Enforced via tsconfig |
-| NFR-07 | SEO | Semantic HTML, Next.js Metadata API, route-specific SEO pages | Organic traffic optimized |
-| NFR-08 | Browser Support | Chrome, Safari, Firefox — last 2 major versions | No IE support |
-| NFR-09 | Payment Security | No raw card data handled by the application server | PCI-compliant via Razorpay |
-| NFR-10 | Data Privacy | Personal data stored in Supabase (SOC 2 compliant) | Supabase managed |
-
-### 3.3 System Constraints
-
-- Vercel Hobby plan: 10-second serverless function timeout; limited monthly execution budget
-- Supabase free tier: 500MB database storage, 2GB monthly bandwidth
-- Razorpay: Indian market only, INR currency, minimum amount ₹1
-- No native server-side rendering for user-specific pages (all CSR via Supabase client)
+| ID | Category | Requirement | Target / Note |
+|----|----------|-------------|---------------|
+| NFR-01 | Performance | First contentful paint on 4G mobile | < 3 s |
+| NFR-02 | Performance | Serverless function execution | < 10 s (Vercel Hobby cap) |
+| NFR-03 | Availability | Platform uptime | ≥ 99.5% (Vercel) |
+| NFR-04 | Scalability | Concurrent users | ~100 |
+| NFR-05 | Security | Secret keys never shipped to the client | Only `NEXT_PUBLIC_*` reach the browser |
+| NFR-06 | Security | Payment card data never touches our servers | Razorpay-hosted checkout (PCI DSS) |
+| NFR-07 | Security | HTTP hardening | `X-Frame-Options: SAMEORIGIN`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy: camera=(), microphone=(), geolocation=()` |
+| NFR-08 | Usability | Fully functional on screens ≥ 320 px wide | Mobile-first; admin dashboard responsive |
+| NFR-09 | Maintainability | TypeScript across app & API; modular `lib/` | — |
+| NFR-10 | SEO | Semantic HTML + Next.js Metadata API + dedicated landing pages | — |
+| NFR-11 | Compatibility | Chrome, Safari, Firefox — last 2 major versions | No IE |
+| NFR-12 | Data privacy | Personal data stored in Supabase (SOC 2) | — |
 
 ---
 
@@ -303,109 +340,89 @@ A mobile-first web application that lets customers book airport taxis, tour pack
 
 ### 4.1 Architecture Style
 
-**Monolithic Full-Stack Web Application** built on Next.js 14 App Router.
-
-The system follows a **3-Tier Architecture**:
-
-1. **Presentation Layer** — Next.js React pages with Tailwind CSS, GSAP animations, and Lottie
-2. **Application Layer** — Next.js API Route Handlers (serverless functions on Vercel)
-3. **Data Layer** — Supabase managed PostgreSQL database
+A **monolithic full-stack web application** on **Next.js 14 (App Router)**, deployed as static assets + serverless functions on **Vercel**, backed by **Supabase (PostgreSQL + Auth)**, with two external integrations: **Razorpay** (payments) and **Resend** (email). It is conceptually a **three-tier architecture**: presentation (React pages), application (API route handlers + `lib/`), data (Supabase).
 
 ### 4.2 System Architecture Diagram
 
-```
-┌────────────────────────────────────────────────────────────────┐
-│                        CLIENT (Browser)                        │
-│              Next.js React Pages + Tailwind CSS                │
-│          AuthContext (Supabase)  │  AdminContext (JWT)         │
-│                      Zustand Global Store                      │
-└─────────────────────────┬──────────────────────────────────────┘
-                          │  HTTPS  (Next.js App Router)
-┌─────────────────────────▼──────────────────────────────────────┐
-│              VERCEL — SERVERLESS FUNCTIONS (10s limit)         │
-│                    Next.js API Routes /api/*                    │
-│                                                                │
-│  ┌───────────┐ ┌───────────┐ ┌───────────┐ ┌──────────────┐  │
-│  │ /admin/*  │ │/bookings/ │ │/payment/  │ │/tours/       │  │
-│  │ /auth/*   │ │/cars/*    │ │           │ │/destinations/│  │
-│  │           │ │           │ │           │ │/reviews/     │  │
-│  └───────────┘ └───────────┘ └───────────┘ └──────────────┘  │
-│                                                                │
-│         lib/db.ts  lib/payment-db.ts  lib/payment.ts          │
-│         lib/utils.ts  lib/validation.ts  lib/invoice.ts       │
-└──┬─────────────────────┬──────────────┬───────────────────────┘
-   │                     │              │
-   ▼                     ▼              ▼
-┌──────────┐      ┌────────────┐  ┌──────────┐   ┌────────────┐
-│ Supabase │      │  Razorpay  │  │  Resend  │   │  Vercel    │
-│PostgreSQL│      │  Payment   │  │  Email   │   │  Cron Jobs │
-│+ Auth    │      │  Gateway   │  │  API     │   │ (daily)    │
-└──────────┘      └────────────┘  └──────────┘   └────────────┘
+```mermaid
+flowchart TB
+    subgraph Client["🌐 Client Layer — Browser"]
+        Cust["Customer<br/>Next.js pages + React + Tailwind"]
+        Adm["Admin<br/>Dashboard panel"]
+    end
+
+    subgraph Vercel["☁️ Application Layer — Vercel (Next.js 14 App Router)"]
+        Pages["Pages<br/>/book-taxi · /tours · /payment<br/>/bookings · /admin · SEO pages"]
+        API["API Routes /api/*<br/>admin · auth · bookings · cars<br/>destinations · payment · tours · reviews"]
+        Lib["Server Libraries<br/>db.ts · database.ts · payment-db.ts · payment.ts<br/>utils.ts · validation.ts · notifications.ts · resend-notifications.ts<br/>supabase.ts (anon) · supabase-admin.ts (service role)"]
+        InvoiceLib["invoice.ts<br/>(client-side PDF, jsPDF + html2canvas)"]
+    end
+
+    subgraph External["🔌 External Services"]
+        DB[("Supabase<br/>PostgreSQL + Auth")]
+        RZP["Razorpay<br/>Payment Gateway"]
+        Resend["Resend<br/>Email API (SMTP fallback)"]
+        Cron["Vercel Cron<br/>daily 00:00 UTC"]
+    end
+
+    Cust --> Pages
+    Adm --> Pages
+    Pages --> API
+    Pages --> InvoiceLib
+    API --> Lib
+    Lib --> DB
+    API -- create order / verify --> RZP
+    Lib -- send mail --> Resend
+    Cron -- POST /api/admin/cleanup-pending --> API
 ```
 
 ### 4.3 Technology Stack
 
 | Layer | Technology | Version | Purpose |
 |-------|-----------|---------|---------|
-| Framework | Next.js | 14.0.0 | Full-stack React framework, App Router |
-| Language | TypeScript | 5.0.0 | Type-safe development |
-| Styling | Tailwind CSS | 3.3.0 | Utility-first CSS framework |
-| Database | Supabase (PostgreSQL) | — | Managed relational database |
-| User Auth | Supabase Auth | 2.38.0 | Email/OAuth authentication |
-| Admin Auth | bcryptjs + jsonwebtoken | — | Password hashing + JWT sessions |
-| Payment | Razorpay | 2.9.1 | Indian payment gateway |
-| Email | Resend API | 2.1.0 | Transactional email delivery |
-| Email (fallback) | Nodemailer (SMTP) | 6.9.7 | SMTP email fallback |
-| Animation | GSAP | 3.15.0 | Page and UI animations |
-| Animation | @lottiefiles/dotlottie-react | 0.19.0 | Lottie JSON animations |
-| PDF | jsPDF + html2canvas | — | Client-side invoice PDF generation |
-| Global State | Zustand | 4.4.1 | Lightweight client state management |
-| Toast Alerts | react-hot-toast | 2.4.1 | In-app user notifications |
-| Icons | lucide-react | 0.292.0 | Icon library |
-| Date Utilities | date-fns | 2.30.0 | Date formatting and calculation |
-| HTTP Client | axios | 1.6.0 | HTTP requests |
-| Deployment | Vercel | — | Cloud hosting, CDN, cron jobs |
+| Framework | Next.js (App Router) | 14.x | Full-stack React + serverless API |
+| Language | TypeScript (A JavaScript Superset) | 5.x | Type safety |
+| UI | React | 18.x | Components |
+| Styling | Tailwind CSS | 3.3.x | Utility-first CSS |
+| DB & Auth | Supabase | `@supabase/supabase-js` 2.38.x, `auth-helpers-nextjs` 0.7.x | PostgreSQL + email/OAuth auth |
+| Admin auth | bcryptjs 3.x + jsonwebtoken 9.x | — | Password hashing + 24 h JWT |
+| Payments | Razorpay | 2.9.x | Online payment gateway |
+| Email | Resend 2.1.x; Nodemailer 6.9.x | — | Transactional email + SMTP fallback |
+| Animation | GSAP 3.15.x; `@lottiefiles/dotlottie-react` 0.19.x | — | Page/loader animations |
+| PDF | jsPDF 2.5.x + html2canvas 1.4.x | — | Client-side invoices |
+| State | Zustand 4.4.x | — | Lightweight global state |
+| Toasts | react-hot-toast 2.4.x | — | In-app notifications |
+| Icons | lucide-react 0.292.x | — | Icon set |
+| Dates | date-fns 2.30.x | — | Formatting & math |
+| HTTP | axios 1.6.x | — | HTTP requests |
+| Docs viewer | react-markdown 9.x + remark-gfm 4.x + mermaid 11.x | — | In-app rendering of this document |
+| Hosting | Vercel | — | CDN + serverless + cron |
 
 ### 4.4 Security Architecture
 
 | Concern | Implementation |
 |---------|----------------|
-| User authentication | Supabase JWTs via managed session cookies |
-| Admin authentication | bcryptjs password hash + JWT stored in localStorage |
-| Secret API keys | Stored in server-only env vars — never in `NEXT_PUBLIC_*` |
-| Payment security | Razorpay handles all card data (PCI DSS compliant) |
-| Payment verification | HMAC-SHA256 signature check server-side before booking confirmation |
-| HTTP security headers | `X-Frame-Options: SAMEORIGIN`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy: camera=(), microphone=(), geolocation=()` |
-| Admin route protection | JWT middleware on every `/api/admin/*` handler |
-| Input validation | `lib/validation.ts` applied to all user-facing inputs |
-| Supabase RLS | Row Level Security enforced via anon-key client for user operations |
+| Customer auth | Supabase session (managed cookies) via `@supabase/auth-helpers-nextjs` |
+| Admin auth | `admins.password_hash` (bcrypt) → `jwt.sign({id,email,role}, JWT_SECRET, {expiresIn:'24h'})` → `localStorage.adminToken` |
+| Admin route guard | Each `/api/admin/*` handler calls `jwt.verify(token, JWT_SECRET)` before any work; admin pages wrapped in `ProtectedAdminPage` |
+| Secret handling | `SUPABASE_SERVICE_ROLE_KEY`, `RAZORPAY_KEY_SECRET`, `JWT_SECRET`, `RESEND_API_KEY` are server-only env vars; only `NEXT_PUBLIC_*` reach the browser (`next.config.js` `env` block) |
+| Payment integrity | Razorpay hosted checkout; server verifies `HMAC-SHA256(order_id\|payment_id, secret)` against the returned signature |
+| RLS | Customer-facing reads use the anon-key client (`lib/supabase.ts`) under Row Level Security; privileged writes use the service-role client (`lib/supabase-admin.ts`) which bypasses RLS — used **server-side only** |
+| HTTP headers | Set globally in `next.config.js` (see NFR-07) |
+| Input validation | `lib/validation.ts` on every user-supplied string |
 
 ### 4.5 Deployment Architecture
 
-```
-┌──────────────┐      git push       ┌──────────────────────────┐
-│    GitHub    │ ──────────────────► │   Vercel CI/CD Pipeline  │
-│  Repository  │                     │   npm run build          │
-└──────────────┘                     │   (generates changelog)  │
-                                     └──────────┬───────────────┘
-                                                │
-                               ┌────────────────┴─────────────────┐
-                               ▼                                   ▼
-                    ┌──────────────────┐               ┌──────────────────┐
-                    │  Static Assets   │               │  Serverless Fns  │
-                    │  (CDN Edge)      │               │  API Routes      │
-                    │  JS bundles      │               │  10s timeout     │
-                    │  CSS, Images     │               │  Vercel Regions  │
-                    └──────────────────┘               └──────────────────┘
-                                                                │
-                                                   ┌────────────┴────────────┐
-                                                   ▼                         ▼
-                                          ┌──────────────┐       ┌──────────────────┐
-                                          │   Supabase   │       │  Vercel Cron Job │
-                                          │  PostgreSQL  │       │  /api/admin/     │
-                                          │  + Auth      │       │  cleanup-pending │
-                                          └──────────────┘       │  daily 00:00 UTC │
-                                                                  └──────────────────┘
+```mermaid
+flowchart LR
+    Dev["Developer"] -- git push --> GH["GitHub repo"]
+    GH -- webhook --> VC["Vercel CI/CD<br/>npm install → npm run build<br/>(build also regenerates changelog)"]
+    VC --> Static["Static assets<br/>JS / CSS / images<br/>(CDN edge)"]
+    VC --> Fns["Serverless functions<br/>/api/* — region iad1<br/>10 s timeout"]
+    Fns --> DB[("Supabase<br/>PostgreSQL + Auth")]
+    Fns --> RZP["Razorpay"]
+    Fns --> Resend["Resend"]
+    CronSvc["Vercel Cron<br/>0 0 * * *"] --> Fns
 ```
 
 ---
@@ -414,269 +431,263 @@ The system follows a **3-Tier Architecture**:
 
 ### 5.1 System Modules
 
-| Module | Responsibility | Key Files |
+| Module | Responsibility | Key files |
 |--------|---------------|-----------|
-| User Auth | Signup, login, verification, OAuth | `context/AuthContext.tsx`, `app/api/auth/` |
-| Admin Auth | Admin login, JWT session, profile management | `context/AdminContext.tsx`, `app/api/admin/login` |
-| Booking Engine | Create, read, update booking records | `app/api/bookings/`, `lib/db.ts` |
-| Payment Processor | Razorpay order creation, signature verification, cash tracking | `app/api/payment/`, `lib/payment.ts`, `lib/payment-db.ts` |
-| Vehicle Availability | Check car model availability for a time window | `app/api/cars/available-models` |
-| Vehicle Assignment | Admin assigns specific car + driver to booking | `app/api/bookings/assign-vehicle` |
-| Tour Management | CRUD for tour packages with images | `app/api/tours/`, `lib/database.ts` |
-| Destination Management | CRUD for destinations and pricing rules | `app/api/destinations/`, `lib/database.ts` |
-| Notification Service | Email delivery for confirmations and alerts | `lib/notifications.ts`, `lib/resend-notifications.ts` |
-| Invoice Generator | Client-side PDF invoice creation | `lib/invoice.ts` |
-| Review System | Submit and display ratings for tours/bookings | `app/api/reviews/`, `lib/reviews.ts` |
-| Admin Dashboard | Unified operations UI | `app/admin/page.tsx` |
-| Conflict Control | Toggle-controlled double-booking prevention | `app/api/admin/settings`, `app_settings` table |
-| Cleanup Cron | Auto-delete stale pending bookings | `app/api/admin/cleanup-pending` |
+| User Auth | Signup, login, verification, OAuth, password change | `context/AuthContext.tsx`, `app/api/auth/*`, `app/login`, `app/signup`, `app/change`, `app/auth/verify` |
+| Admin Auth | Admin login, JWT session, profile, add-admin | `context/AdminContext.tsx`, `components/ProtectedAdminPage.tsx`, `app/api/admin/login`, `/logout`, `/verify-session`, `/create-admin`, `/update-profile`, `scripts/generate-admin-hash.js` |
+| Booking Engine | Create/read/update bookings; multi-step booking UI | `app/book-taxi`, `app/tours/[id]/book`, `app/api/bookings/*`, `lib/db.ts`, `lib/database.ts` |
+| Vehicle Availability | Compute available car **models** for a window | `app/api/cars/available-models` |
+| Vehicle Assignment | Admin assigns a specific car + driver to a booking | `app/api/bookings/assign-vehicle`, `/update-assignment`, `/get-assignments`, `/user-assignments` |
+| Payment Processor | Razorpay orders & verification; cash collection; refunds | `app/api/payment/*`, `lib/payment.ts`, `lib/payment-db.ts`, `lib/payment-utils.ts` |
+| Tour Management | Tour package CRUD + images + availability | `app/api/tours/*`, `lib/db.ts`, `lib/database.ts` |
+| Destination & Pricing | Destination CRUD; pricing rules; hourly rates | `app/api/destinations/*`, `lib/database.ts` |
+| Notification Service | Confirmation / driver / cancellation emails | `lib/notifications.ts`, `lib/resend-notifications.ts` |
+| Invoice Generator | Client-side PDF invoice | `lib/invoice.ts` |
+| Review System | Submit & display ratings | `app/api/reviews/*`, `lib/reviews.ts`, `components/ReviewForm.tsx`, `components/ReviewCard.tsx` |
+| Admin Dashboard | One-stop operations UI (7 tabs) | `app/admin/page.tsx` |
+| Conflict Control | Toggle-gated double-booking prevention + scanner | `app/api/admin/settings`, `app/api/admin/conflicts`, `app_settings` table |
+| Cleanup Cron | Delete stale `pending` bookings daily | `app/api/admin/cleanup-pending`, `vercel.json` |
+| SEO Pages | Local-search landing pages | `app/hollongi-airport-taxi`, `/donyi-polo-airport-taxi`, `/itanagar-airport-taxi`, `/hourly-taxi-itanagar`, `/arunachal-tours`, `/itanagar-tours` |
 
-### 5.2 Module Interaction
+### 5.2 Module Interaction Diagram
 
-```
-Customer Browser
-    │
-    ├── User Auth Module ─────────────────► Supabase Auth
-    │
-    ├── Booking Engine ───────────────────► bookings table (Supabase)
-    │       └── Vehicle Availability ──────► cars + vehicle_assignments tables
-    │
-    ├── Payment Processor ────────────────► Razorpay API
-    │       └── Payment DB ───────────────► payments table (Supabase)
-    │
-    ├── Notification Service ─────────────► Resend API → Customer Email
-    │
-    └── Invoice Generator ────────────────► jsPDF (client-side, no server needed)
+```mermaid
+flowchart TB
+    subgraph Customer["Customer side"]
+        UAuth["User Auth"]
+        Booking["Booking Engine"]
+        Avail["Vehicle Availability"]
+        Payment["Payment Processor"]
+        Invoice["Invoice Generator"]
+        Reviews["Review System"]
+    end
 
-Admin Browser
-    │
-    ├── Admin Auth Module ────────────────► JWT + bcrypt (admins table)
-    │
-    ├── Admin Dashboard ──────────────────► All modules above
-    │       ├── Vehicle Assignment ────────► vehicle_assignments + cars tables
-    │       ├── Cash Confirmation ─────────► payments table
-    │       ├── Conflict Control Toggle ───► app_settings table
-    │       └── Content CRUD ─────────────► tours, destinations, pricing_rules, cars tables
-    │
-    └── Cron: Cleanup Pending ────────────► bookings table (auto-delete >24h pending)
+    subgraph Admin["Admin side"]
+        AAuth["Admin Auth"]
+        Dash["Admin Dashboard"]
+        Assign["Vehicle Assignment"]
+        Conflict["Conflict Control"]
+        Content["Tour / Destination / Pricing CRUD"]
+    end
+
+    Notif["Notification Service"]
+    DB[("Supabase PostgreSQL + Auth")]
+    RZP["Razorpay"]
+    Resend["Resend"]
+    CronJob["Cleanup Cron"]
+
+    UAuth --> DB
+    Booking --> Avail
+    Booking --> DB
+    Avail --> DB
+    Payment --> RZP
+    Payment --> DB
+    Payment --> Notif
+    Reviews --> DB
+    Invoice -. client-side .-> Booking
+
+    AAuth --> DB
+    Dash --> Booking
+    Dash --> Assign
+    Dash --> Conflict
+    Dash --> Content
+    Assign --> DB
+    Assign --> Notif
+    Conflict --> DB
+    Content --> DB
+    Notif --> Resend
+    CronJob --> DB
 ```
 
 ---
 
 ## 6. Low-Level Design (LLD)
 
-### 6.1 User Authentication — Detailed Flow
+### 6.1 Authentication Flows
 
-**Signup:**
+**Customer signup (email + password)**
 ```
-Client → POST /api/auth/signup (handled by Supabase client)
-  supabase.auth.signUp({ email, password })
-    └── Supabase sends verification email with link
-
-User clicks email link → /auth/verify page
-  GET /api/auth/exchange-code?code=<code>
-    supabase.auth.exchangeCodeForSession(code)
-      └── Creates session + sets JWT cookie
-        └── User redirected to homepage (authenticated)
+Client → supabase.auth.signUp({ email, password, options: { data: { full_name }, emailRedirectTo: origin/auth/callback } })
+        → Supabase emails a verification link
+User clicks link → GET /auth/callback?code=<code>
+        → server redirects to /auth/verify?code=<code>&redirect=/bookings
+        → /auth/verify calls POST /api/auth/exchange-code { code }
+        → server: supabase.auth.exchangeCodeForSession(code)  → session tokens returned
+        → client sets session cookies; redirect to /bookings (authenticated)
 ```
 
-**Login:**
+**Customer login (email + password)**
 ```
-Client: supabase.auth.signInWithPassword({ email, password })
-  Supabase validates credentials → returns session
-    └── Session persisted in browser (auto-refresh)
-```
-
-**Admin Authentication:**
-```
-POST /api/admin/login
-  Input: { email, password }
-    SELECT * FROM admins WHERE email = ? AND is_active = true
-      bcrypt.compare(password, admin.password_hash)
-        If valid:
-          jwt.sign({ id, email, role }, JWT_SECRET, { expiresIn: '24h' })
-          UPDATE admins SET last_login = NOW() WHERE id = ?
-          Return: { token, admin: { email, fullName, role } }
-
-Every protected admin API request:
-  Authorization: Bearer <token>
-    jwt.verify(token, JWT_SECRET) → { id, email, role }
-      Proceed with admin operation
+supabase.auth.signInWithPassword({ email, password })
+   ↳ blocked by Supabase if email not yet verified → "verify your email" nudge shown with resend option
+   ↳ session persisted; AuthContext exposes { user, isLoading, signOut, ... }
 ```
 
-### 6.2 Booking Creation — Detailed Flow
+**Customer signup or login (Google OAuth)**
+```
+User clicks "Continue with Google" on /login or /signup
+   → signInWithOAuth('google', redirect) in AuthContext
+   → supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: origin/auth/callback?redirect=<redirect> } })
+   → Browser redirected to Google consent screen
+   → Google redirects back to GET /auth/callback?code=<code>&redirect=<redirect>
+   → server redirects to /auth/verify?code=<code>&redirect=<redirect>
+   → /auth/verify calls POST /api/auth/exchange-code { code }
+   → server: supabase.auth.exchangeCodeForSession(code)  → session tokens returned
+   → client sets session cookies; redirect to <redirect> (defaults to /bookings)
+
+Note: no email verification step — Google guarantees a verified email.
+      /auth/callback → /auth/verify → POST /api/auth/exchange-code is the
+      shared pipeline for both email verification and Google OAuth.
+```
+
+**Admin login & guard**
+```
+POST /api/admin/login { email, password }
+   SELECT * FROM admins WHERE email = ? AND is_active = true
+   bcrypt.compare(password, row.password_hash)  → must be true
+   token = jwt.sign({ id, email, role }, JWT_SECRET, { expiresIn: '24h' })
+   UPDATE admins SET last_login = now() WHERE id = row.id
+   → { token, admin: { email, fullName, role } }
+Client: localStorage.setItem('adminToken', token); AdminContext holds state
+
+Every protected request: header  Authorization: Bearer <token>
+   jwt.verify(token, JWT_SECRET) → { id, email, role }  (else 401)
+```
+
+### 6.2 Booking Creation
 
 ```
 POST /api/bookings/create
-  Input: {
-    booking_type: 'airport_taxi' | 'tour' | 'hourly',
-    user_name, user_email, phone,
-    passenger_count,
-    start_datetime, end_datetime,
-    destination_id?,      // airport_taxi only
-    tour_package_id?,     // tour only
-    no_of_hours?,         // hourly only
-    car_model,
-    amount_total
-  }
+Input (varies by type):
+  booking_type ∈ { 'airport', 'tour', 'hourly' }
+  user_name, user_email, phone, passenger_count
+  start_datetime, end_datetime
+  destination_id?      (airport)
+  tour_package_id?     (tour)
+  no_of_hours?         (hourly)
+  car_model, amount_total
 
-  Step 1: Generate booking_id
-    "BK" + format(now, "yyyyMMdd") + randomAlphaNum(6).toUpperCase()
-
-  Step 2: Read conflict control setting
-    SELECT value FROM app_settings WHERE key = 'conflict_control_enabled'
-
-  Step 3 (if enabled): Check vehicle availability
-    SELECT car_id FROM vehicle_assignments
-    WHERE car_model = ? AND start_datetime < input.end AND end_datetime > input.start
-    If any results → return 409 Conflict
-
-  Step 4: Insert booking
-    INSERT INTO bookings (booking_id, booking_type, user_name, user_email, phone,
-    passenger_count, start_datetime, end_datetime, destination_id, tour_package_id,
-    no_of_hours, car_model, amount_total, booking_status)
-    VALUES (..., 'pending')
-
-  Return: { success: true, booking_id }
+Steps:
+  1. booking_id = generateBookingId()                    // "BK" + timestamp suffix
+  2. read conflict_control_enabled from app_settings
+  3. if enabled: check overlap against vehicle_assignments / committed bookings
+        overlap ⇔ existing.start < new.end AND existing.end > new.start
+        → if overlap, 409 Conflict
+  4. INSERT INTO bookings (... , booking_status = 'pending')
+  5. → { success: true, booking_id }
 ```
 
-### 6.3 Payment Processing — Detailed Flow
+The booking UI is a guided multi-step wizard. There are two wizard implementations:
 
-**Phase 1 — Create Razorpay Order:**
+**Taxi wizard** (`app/book-taxi/page.tsx`) — covers Airport and Hourly types:
+- **Airport** steps: `contact → destination/passengers → date/time → car → confirm`
+- **Hourly** steps: `contact → date/passengers → time/duration → car → confirm`
+
+Each step component is memoised; refs preserve focus across re-renders; the `ContactStep` locks the email field when the user is already authenticated.
+
+**Tour wizard** (`app/tours/[id]/book/page.tsx`) — dedicated per-package page:
+- **Steps:** `contact → passengers → date → confirm`
+- Authentication is enforced upfront: unauthenticated users are redirected to `/login?redirect=/tours/[id]/book` before the wizard renders.
+- The email field is locked and pre-filled from the authenticated user's session; full name is pre-filled from `user_metadata.full_name` if available.
+- Car model is **preset by the tour package** — the user does not choose a vehicle.
+- Fare is `tour.price × passengers`; the confirm step offers full payment or **30% advance** (`Math.round(totalPrice × 0.3)`).
+- On the date step, `GET /api/tours/[id]/availability?booking_date=` is called; if the tour's car model is fully booked for that date the user sees an advisory warning but can still proceed.
+- On confirm, `booking_id` is generated client-side (`generateBookingId()`), the payload is sent to `POST /api/bookings/create` with `booking_type: 'tour'` and `tour_package_id`, the result is stored in `sessionStorage` as `tourBookingData`, and the user is redirected to `/payment?bookingId=...&type=tour&amount=<advancePayment>`.
+
+### 6.3 Payment Processing
+
+**Phase 1 — create order** (`POST /api/payment/create-order`)
 ```
-POST /api/payment/create-payment
-  Input: { bookingId, amount, currency: 'INR', paymentType }
-
-  razorpay.orders.create({
-    amount: Math.round(amount * 100),  // paise
-    currency: 'INR',
-    receipt: bookingId
-  }) → { id: orderId }
-
-  supabaseAdmin.from('payments').insert({
-    booking_id: bookingId,
-    payment_type: paymentType,         // 'partial' | 'full'
-    amount_total: bookingTotalAmount,
-    amount_online_paid: amount,        // 30% or 100%
-    amount_cash_paid: 0,
-    txn_status: 'initiated',
-    gateway: 'razorpay',
-    payment_status: 'pending'
-  })
-
-  Return: { orderId, amount: amount * 100, currency }
-```
-
-**Phase 2 — Client Completes Payment:**
-```
-Browser opens Razorpay modal with { orderId, amount, currency, key }
-User pays → Razorpay returns:
-  { razorpay_order_id, razorpay_payment_id, razorpay_signature }
+Input: { amount, bookingId, currency: 'INR' }
+  razorpay.orders.create({ amount: round(amount*100), currency: 'INR', receipt: bookingId })
+  INSERT/UPSERT payments { booking_id, payment_type, amount_total,
+                           amount_online_paid = amount, amount_cash_paid,
+                           txn_status: 'pending', gateway: 'razorpay', payment_status: 'pending' }
+  → { orderId }
 ```
 
-**Phase 3 — Verify and Confirm:**
+**Phase 2 — browser checkout**
 ```
-POST /api/payment/verify
-  Input: { orderId, paymentId, signature, bookingId, amount, paymentType, userEmail, userName }
+Razorpay modal opens with { key: NEXT_PUBLIC_RAZORPAY_KEY_ID, amount: round(amount*100),
+                            currency: 'INR', name: "Rina's Tours and Travels", order_id: orderId }
+On success Razorpay returns { razorpay_order_id, razorpay_payment_id, razorpay_signature }
+```
 
-  HMAC verification:
-    expectedSig = HMAC-SHA256(orderId + "|" + paymentId, RAZORPAY_KEY_SECRET)
-    if expectedSig !== signature → return 400 "Invalid payment signature"
+**Phase 3 — verify & confirm** (`POST /api/payment/verify`)
+```
+Input: { orderId, paymentId, signature, bookingId, amount, paymentType, userEmail, userName, ... }
+  expected = HMAC_SHA256(orderId + "|" + paymentId, RAZORPAY_KEY_SECRET)
+  if expected !== signature → 400 "Invalid payment signature"
+  UPDATE payments SET txn_status='success', txn_id=paymentId,
+                      payment_status = (paymentType==='partial' ? 'partial' : 'paid')
+  UPDATE bookings SET booking_status='confirmed'
+  invoice_number = generateInvoiceNumber()
+  INSERT payment_records { payment_id, booking_id, txn_type:'online', txn_id, gateway:'razorpay',
+                           amount, currency:'INR', status:'success', razorpay_order_id, invoice_number }
+  sendBookingConfirmation({ to: userEmail, ... })   // via Resend
+  → { success: true, bookingId, invoiceNumber }
+```
 
-  UPDATE payments SET
-    txn_status = 'paid',
-    txn_id = paymentId,
-    payment_status = paymentType === 'partial' ? 'partial' : 'paid'
-  WHERE booking_id = bookingId
+**Cash collection** (`POST /api/payment/confirm-cash`, admin) — sets `amount_cash_paid`, `cash_paid_at`, `cash_collected_by`; helper `markCashPaymentCollected()` in `lib/payment-db.ts`.
 
-  UPDATE bookings SET
-    booking_status = 'confirmed'
-  WHERE booking_id = bookingId
-
-  Generate invoiceNumber = "INV-" + format(now, "yyyyMMdd") + "-" + sequential
-
-  sendBookingConfirmation({ to: userEmail, bookingId, invoiceNumber, ... })
-
-  Return: { success: true, bookingId, invoiceNumber }
+**Payment-amount math** (`lib/payment-utils.ts`, client-safe):
+```ts
+calculatePaymentAmounts(total, 'full')    // { amountOnlinePaid: total,        amountCashPaid: 0 }
+calculatePaymentAmounts(total, 'partial') // online = round(total*0.3*100)/100; cash = round((total-online)*100)/100
+validatePaymentAmounts('full',   total, online) // |online - total| < 0.01
+validatePaymentAmounts('partial',total, online) // |online - round(total*0.3*100)/100| < 0.01
 ```
 
 ### 6.4 Vehicle Availability Algorithm
 
 ```
-GET /api/cars/available-models
-Query params: booking_date, start_time, end_time
+GET /api/cars/available-models?booking_date=YYYY-MM-DD&start_time=HH:MM&end_time=HH:MM
 
-const requestedStart = new Date(`${booking_date}T${start_time}`)
-const requestedEnd   = new Date(`${booking_date}T${end_time}`)
+reqStart = combine(booking_date, start_time)
+reqEnd   = combine(booking_date, end_time)
 
-// All active cars
-const allCars = supabaseAdmin.from('cars').select('*').eq('is_active', true)
+allCars       = SELECT * FROM cars WHERE is_active = true
+occupiedCarIds = SELECT car_id FROM vehicle_assignments
+                 WHERE start_datetime < reqEnd AND end_datetime > reqStart   -- overlap
 
-// Find car IDs that are assigned during the requested window
-// Overlap condition: assignment_start < requestedEnd AND assignment_end > requestedStart
-const occupiedCarIds = supabaseAdmin
-  .from('vehicle_assignments')
-  .select('car_id')
-  .lt('start_datetime', requestedEnd.toISOString())
-  .gt('end_datetime', requestedStart.toISOString())
-
-// Available cars = all - occupied
-const availableCars = allCars.filter(car => !occupiedCarIds.includes(car.id))
-
-// Group by model and return with count
-const models = groupBy(availableCars, 'model_name').map(group => ({
-  model_name: group.model_name,
-  class: group.class,
-  capacity: group.capacity,
-  per_km_charge: group.per_km_charge,
-  per_hr_charge: group.per_hr_charge,
-  available_count: group.cars.length
-}))
-
-Return: { models }
+availableCars = allCars where id ∉ occupiedCarIds
+models        = group availableCars by model_name → for each:
+                { model_name, class, capacity, per_km_charge, per_hr_charge,
+                  available_count = count of free units of that model }
+→ { models }
 ```
+
+Users only ever see the **model-level** projection. The number plate, driver, and specific `car_id` are revealed only after an admin assigns a vehicle via `POST /api/bookings/assign-vehicle`.
 
 ### 6.5 Conflict Control System
 
-The `conflict_control_enabled` key in the `app_settings` table acts as a global toggle.
-
-| Value | Behaviour |
-|-------|-----------|
-| `'true'` (default) | Vehicle conflicts are blocked at booking creation. Customers cannot book if no units are free. |
-| `'false'` | Conflict check is skipped. Admin can manually manage overlapping assignments. |
-
-Toggle endpoint: `POST /api/admin/settings` with `{ key: 'conflict_control_enabled', value: 'true' | 'false' }`.
+- Stored as `app_settings.conflict_control_enabled` (text `'true'`/`'false'`, default `'true'`).
+- **ON** — `POST /api/bookings/create` and `assign-vehicle` reject overlapping commitments.
+- **OFF** — no automatic blocking; the admin manages conflicts manually. The Misc tab's **conflict scanner** (`GET /api/admin/conflicts`) reports two classes:
+  - **Assignment conflicts** — the *same specific car* committed to overlapping windows.
+  - **Model conflicts** — more bookings of a model than there are units of that model in an overlapping window (over-subscription), which can arise in tour flows.
+- Toggle via `POST /api/admin/settings { key:'conflict_control_enabled', value:'true'|'false' }`. Turning it OFF shows a warning modal first.
 
 ### 6.6 Invoice Generation
 
-```typescript
-// lib/invoice.ts
-interface InvoiceData {
-  invoiceNumber: string
-  bookingId: string
-  customerName: string
-  customerEmail: string
-  customerPhone: string
-  serviceType: string        // 'Airport Taxi' | 'Tour Package' | 'Hourly Taxi'
-  bookingDate: string
-  pickupTime: string
-  vehicleModel: string
-  passengers: number
-  amountTotal: number
-  amountOnlinePaid: number   // 30% or 100%
-  amountCashDue: number      // 70% or 0
-  paymentType: 'partial' | 'full'
-}
+`lib/invoice.ts` builds a PDF entirely client-side (jsPDF, with html2canvas for any rendered fragments):
 
-// generateInvoicePDF(data: InvoiceData): jsPDF
-//   Builds PDF with:
-//   - Company header (Rina's Tours and Travels, logo, contact)
-//   - Invoice meta (number, date, booking ID)
-//   - Customer details table
-//   - Service details table
-//   - Payment breakdown table (online paid / cash due / total)
-//   - Footer with terms
 ```
+InvoiceData {
+  invoiceNumber, bookingId,
+  customerName, customerEmail, customerPhone,
+  serviceType,                      // "Airport Taxi" | "Tour Package" | "Hourly Taxi"
+  bookingDate, pickupTime,
+  vehicleModel, passengers,
+  amountTotal, amountOnlinePaid, amountCashDue,
+  paymentType                       // 'partial' | 'full'
+}
+```
+Layout: company header ("Rina's Tours and Travels") · invoice meta (number, date, booking ID) · customer block · service block · payment-breakdown table (online paid / cash due / total) · footer/terms. Triggered from the Booking Confirmed page and from My Bookings.
+
+### 6.7 Stale-Booking Cleanup
+
+`POST /api/admin/cleanup-pending` (called by Vercel Cron `0 0 * * *`) deletes bookings where `booking_status = 'pending'` and `created_at < now() − 24h`. The cleanup window is configurable from the Misc tab (1–30 days) and the auto-cleanup can be toggled off; a manual "run now" button is also provided.
 
 ---
 
@@ -684,295 +695,302 @@ interface InvoiceData {
 
 ### 7.1 Frontend Architecture
 
-**State Management:**
+**State strategy**
 
-| State Type | Tool | Examples |
-|------------|------|---------|
-| Authentication state | `AuthContext` (Supabase session) | `user`, `isLoading`, `signOut()` |
-| Admin session | `AdminContext` (JWT + localStorage) | `isAdmin`, `adminEmail`, `login()` |
-| UI / cross-component | Zustand store | Form data bridging pages |
-| Local component state | `useState` | Form fields, toggles, loading flags |
-| Server data | Direct Supabase calls in components | Bookings, tours, cars lists |
+| State | Mechanism | Examples |
+|-------|-----------|----------|
+| Customer auth | `AuthContext` (Supabase session) | `user`, `isLoading`, `signInWithEmail`, `signUpWithEmail`, `signInWithOAuth`, `resendVerificationEmail`, `signOut` |
+| Admin session | `AdminContext` (JWT in `localStorage`) | `isAdmin`, `adminEmail`, `adminFullName`, `isLoading`, `login`, `logout`, `updateAdminProfile` |
+| Cross-page handoff | `sessionStorage` | `bookingData` / `tourBookingData` passed from booking flow to `/payment` |
+| Global UI | Zustand | misc shared UI flags |
+| Local | `useState` / `useRef` | wizard step, form fields, modals; refs keep focus across re-renders |
 
-**Page Rendering Strategy:**
+**Page-render strategy**
 
-| Page | Strategy | Reason |
-|------|----------|--------|
-| Homepage | CSR | Animation-heavy (GSAP, Lottie), interactive |
-| Book Taxi | CSR | Dynamic car availability, form-driven |
-| Tours Listing | CSR | Fetches from Supabase client, dynamic filters |
-| Tour Detail | CSR | Per-tour content with reviews |
-| Booking Confirmed | CSR | Auth-dependent, payment state |
-| My Bookings | CSR | User-specific, always-fresh data |
-| Admin Dashboard | CSR | Real-time data, protected, no SEO needed |
-| SEO Pages (`*-airport-taxi`, `arunachal-tours`) | Static with dynamic review section | Organic traffic; core content is static |
+| Page(s) | Strategy | Reason |
+|---------|----------|--------|
+| `/` | CSR | Heavy GSAP/Lottie animation, interactive |
+| `/book-taxi`, `/tours/[id]/book`, `/payment`, `/bookings`, `/booking-confirmed` | CSR | Dynamic, auth-dependent, talk to Supabase client |
+| `/tours`, `/tours/[id]/reviews` | CSR | Live data + reviews |
+| `/admin`, `/admin/docs` | CSR | Protected, real-time, no SEO need |
+| SEO pages (`*-airport-taxi`, `*-tours`) | Static content | Optimised for organic search |
 
-**Root Layout Structure:**
-```
-app/layout.tsx
-  └── AuthContext.Provider (Supabase session)
-      └── AdminContext.Provider (JWT)
-          ├── AppSplashLoader   ← First-load splash animation
-          ├── RouteScrollUnlocker
-          ├── Header
-          ├── {page content}
-          └── Footer
-```
+**Root layout** (`app/layout.tsx`): `AuthContext.Provider → AdminContext.Provider → AppSplashLoader → RouteScrollUnlocker → Header → {page} → Footer`. `SmoothScrollWrapper` wraps animated pages.
 
 ### 7.2 API Design Conventions
 
-- All handlers live in `app/api/**/route.ts` (Next.js App Router)
-- Standard response envelope:
-  ```json
-  { "success": true, "data": {}, "message": "optional" }
-  { "success": false, "error": "description" }
-  ```
-- HTTP status codes used correctly: `200 OK`, `201 Created`, `400 Bad Request`, `401 Unauthorized`, `403 Forbidden`, `404 Not Found`, `409 Conflict`, `500 Internal Server Error`
-- Admin routes: JWT extracted from `Authorization: Bearer <token>` header, verified before business logic
-- Supabase usage rule:
-  - `supabase` (anon key) — client-accessible, RLS enforced
-  - `supabaseAdmin` (service role) — server-only, bypasses RLS
+- Handlers live in `app/api/**/route.ts` (App Router Route Handlers).
+- Response envelope: `{ success: boolean, ...data }` or `{ success: false, error: string }`. Some read endpoints return a named collection (e.g. `{ bookings: [...] }`, `{ models: [...] }`).
+- HTTP codes used per semantics: `200`, `201`, `400`, `401`, `403`, `404`, `409`, `500`.
+- Admin routes verify `Authorization: Bearer <jwt>` first.
+- Supabase client choice: anon (`lib/supabase.ts`) for customer reads under RLS; service-role (`lib/supabase-admin.ts`) for privileged server-side writes (the admin client is module-cached to survive Vercel warm starts).
 
 ### 7.3 Database Client Usage Matrix
 
-| Operation | Client Used | Library |
-|-----------|------------|---------|
-| Read user's own bookings | `supabase` (RLS) | `lib/db.ts` |
-| Create/update bookings (server) | `supabaseAdmin` | `lib/db.ts` |
-| All payment operations | `supabaseAdmin` | `lib/payment-db.ts` |
-| Admin CRUD (tours, cars, etc.) | `supabaseAdmin` | `lib/database.ts` |
-| User auth operations | Supabase Auth SDK | `lib/supabase.ts` |
-| Admin auth (admins table) | `supabaseAdmin` | Direct in route handler |
+| Operation | Client | Library |
+|-----------|--------|---------|
+| Customer reads own bookings | anon (RLS) | `lib/db.ts` (`fetchBookingsByEmail`, `fetchBookingById`) |
+| Create / update bookings (server) | service role | `lib/db.ts` (`createBooking`, `updateBooking`, `updateBookingPaymentStatus`) |
+| Payment writes | service role | `lib/payment-db.ts` (`createPaymentInDB`, `getPaymentByBookingId`, `updatePaymentStatus`, `createPaymentRecord`, `getPaymentRecordsByPaymentId`, `markCashPaymentCollected`) |
+| Tours / destinations / pricing CRUD | service role | `lib/database.ts` |
+| Tour fetch + rating stats (customer) | anon | `lib/db.ts` (`fetchAllTours`, `fetchTourById`, `fetchAllTourRatingStats`), `lib/reviews.ts` |
+| Auth | Supabase Auth SDK | `lib/supabase.ts` |
+| Admin auth (admins table) | service role | direct in `app/api/admin/login` |
 
 ### 7.4 Email Notification System
 
-**Primary channel**: Resend API (`lib/resend-notifications.ts`)  
-**Fallback channel**: SMTP via Nodemailer (`lib/notifications.ts`)
+Primary: **Resend** (`lib/resend-notifications.ts`). Fallback: **SMTP via Nodemailer** (`lib/notifications.ts`).
 
-| Trigger | Recipient | Template |
-|---------|-----------|----------|
-| Payment verified | Customer | Booking confirmation with invoice number and trip details |
-| Vehicle assigned by admin | Driver | Assignment notification with booking details and customer contact |
-| Cancellation processed | Customer | Cancellation confirmation with refund notes if applicable |
+| Trigger | Recipient | Content |
+|---------|-----------|---------|
+| Payment verified | Customer | Booking confirmation: booking ID, invoice number, trip details, payment breakdown |
+| Vehicle assigned / reassigned | Driver | Assignment: booking details + customer name & phone |
+| Cancellation processed | Customer | Cancellation confirmation + refund notes if any |
+
+SMS / WhatsApp are placeholders only (currently console-logged).
 
 ### 7.5 Cron Jobs
 
-| Job | Vercel Schedule | Endpoint | Action |
-|-----|----------------|----------|--------|
-| Cleanup Stale Pending Bookings | `0 0 * * *` (daily 00:00 UTC) | `POST /api/admin/cleanup-pending` | Deletes bookings with `status='pending'` and `created_at < NOW() - INTERVAL '24 hours'` |
+| Job | Schedule (`vercel.json`) | Endpoint | Action |
+|-----|--------------------------|----------|--------|
+| Cleanup stale pending bookings | `0 0 * * *` (daily 00:00 UTC) | `POST /api/admin/cleanup-pending` | Delete `pending` bookings older than the configured window (default 24 h) |
 
-### 7.6 Utility Functions Reference (`lib/utils.ts`)
+### 7.6 Utility Functions
 
-| Function | Signature | Output |
-|----------|-----------|--------|
-| `formatCurrency` | `(amount: number) => string` | `₹1,500.00` |
-| `formatDate` | `(date: string) => string` | `21 Apr 2026` |
-| `formatDateTime` | `(dt: string) => string` | `21 Apr 2026, 10:30 AM` |
-| `formatTime` | `(time: string) => string` | `10:30 AM` |
-| `generateBookingId` | `() => string` | `BK20260512ABC123` |
-| `generateInvoiceNumber` | `() => string` | `INV-20260512-001` |
+`lib/utils.ts`:
+| Function | Signature | Notes |
+|----------|-----------|-------|
+| `formatCurrency` | `(amount: number, currency = 'INR') => string` | e.g. `₹1,500.00` |
+| `formatDate` | `(date: string \| Date) => string` | e.g. `21 Apr 2026` |
+| `formatDateTime` | `(date: string \| Date) => string` | date + time |
+| `formatTime` | `(time: string) => string` | e.g. `10:30 AM` |
+| `validateEmail` / `validatePhoneNumber` / `validateName` | `(v: string) => boolean` | quick boolean checks (stricter checks live in `lib/validation.ts`) |
 | `calculateAdvancePayment` | `(total: number) => number` | 30% of total |
 | `calculateRemainingPayment` | `(total: number) => number` | 70% of total |
-| `canCancelBooking` | `(startDatetime: string) => boolean` | `true` if >24h before trip |
-| `getBookingStatus` | `(status: string) => string` | Human-readable label |
-| `getPaymentStatusBadge` | `(status: string) => object` | `{ label, color }` |
+| `calculateTotalPrice` | `(basePrice: number, hours?: number, days?: number) => number` | hourly/daily totals |
+| `generateBookingId` | `() => string` | `BK` + timestamp suffix |
+| `generateInvoiceNumber` | `() => string` | sequential-style invoice number |
+| `canCancelBooking` | `(bookingDate: string) => boolean` | true if > 24 h before trip |
+| `getBookingStatus` | `(status: string) => { label, color, icon }` | UI badge meta |
+| `getPaymentStatusBadge` | `(status: string) => { label, color }` | UI badge meta |
+| `truncateString` / `capitalizeFirstLetter` / `toTitleCase` | string helpers | — |
+| `sleep` | `(ms: number) => Promise<void>` | — |
+| `isDevelopment` / `isProduction` | `() => boolean` | env checks |
 
-### 7.7 Input Validation (`lib/validation.ts`)
+`lib/payment-utils.ts`: `calculatePaymentAmounts(total, type)`, `validatePaymentAmounts(type, total, online)` — see [§6.3](#63-payment-processing).
 
-| Validator | Rules | Return |
-|-----------|-------|--------|
-| `validateEmail` | Valid email format | `{ valid: boolean, error?: string }` |
-| `validatePassword` | Min 6, max 128 characters | `{ valid: boolean, error?: string }` |
-| `validateFullName` | Minimum 2 words | `{ valid: boolean, error?: string }` |
-| `validatePhoneNumber` | 10-digit Indian mobile format | `{ valid: boolean, error?: string }` |
+### 7.7 Validation Rules (`lib/validation.ts`)
 
-### 7.8 Error Handling Strategy
+| Validator | Rules | Returns |
+|-----------|-------|---------|
+| `validateEmail(email)` | non-empty, ≤ 254 chars, matches `^[^\s@]+@[^\s@]+\.[^\s@]+$` | `{ valid, error? }` |
+| `validatePassword(password)` | 6–128 chars | `{ valid, error? }` |
+| `validateFullName(name)` | 2–100 chars; only `[a-zA-Z\s'-]`; ≥ 2 words | `{ valid, error? }` |
+| `validatePhoneNumber(phone)` | exactly 10 digits after stripping non-digits | `{ valid, error? }` |
 
-**Client-side:**
-- `react-hot-toast` for all user-facing error and success messages
-- Form-level validation via `lib/validation.ts` before any API call
-- Caught API errors display the `error` field from response envelope
+### 7.8 Error Handling
 
-**Server-side:**
-- All route handlers wrapped in `try/catch`
-- Known errors return specific messages with appropriate status codes
-- Unknown errors return generic `500 Internal Server Error`
-- No error tracking service integrated yet (Sentry listed as a TODO)
+- **Client:** `react-hot-toast` for user-facing errors/success; form validation runs before API calls; API errors surface the `error` field.
+- **Server:** every handler wrapped in `try/catch`; known failures return precise messages with the right status; unknown failures return generic `500`. (Sentry/Rollbar is a planned addition.)
 
-### 7.9 Performance Considerations
+### 7.9 Performance Notes
 
-- Next.js `<Image>` component used for all images (automatic WebP conversion, lazy loading)
-- Tailwind CSS unused class purging in production build
-- GSAP animations scoped to component lifecycle (cleanup on unmount)
-- Lottie JSON assets loaded asynchronously
-- `supabaseAdmin` client instance is module-level cached to survive Vercel warm starts
-- SEO pages are lightweight static pages to maximize Core Web Vitals
+- Next.js `<Image>` for all images (auto WebP, lazy-loading); `next.config.js` allows arbitrary remote hosts because tour images are external URLs.
+- Tailwind purges unused classes in production.
+- GSAP timelines are scoped to component lifecycle.
+- Lottie JSON loaded async.
+- `supabaseAdmin` is module-cached.
+- SEO pages are lightweight static content for good Core Web Vitals.
 
 ---
 
 ## 8. Entity-Relationship Diagram (ERD)
 
-### 8.1 Full ER Diagram
+> All 10 tables are defined in `sql/` (see `sql/README.md` for execution order). The ERD below reflects the exact columns present in those files.
 
-> **Note:** Text representation — replace with a visual ERD (e.g., dbdiagram.io, Lucidchart) using this schema.
+**Diagram A — Core Transactions** (bookings, payments, vehicle assignments)
 
-```
-┌────────────────────────┐           ┌────────────────────────┐
-│        BOOKINGS        │    1:1    │        PAYMENTS        │
-├────────────────────────┤◄─────────►├────────────────────────┤
-│ PK  id            UUID │           │ PK  id            UUID │
-│     booking_id    TEXT │           │     booking_id    TEXT │ ← FK → bookings
-│     booking_type  TEXT │           │     payment_type  TEXT │   'partial'|'full'
-│     user_name     TEXT │           │     amount_total  NUM  │
-│     user_email    TEXT │           │     amount_online NUM  │
-│     phone         TEXT │           │     amount_cash   NUM  │
-│     passenger_cnt INT  │           │     txn_status    TEXT │
-│     start_datetime TSTZ│           │     txn_id        TEXT │
-│     end_datetime  TSTZ │           │     gateway       TEXT │
-│ FK  destination_id UUID│           │     payment_status TEXT│
-│ FK  tour_pkg_id   UUID │           │     cash_paid_at  TSTZ │
-│     no_of_hours   INT  │           │     cash_coll_by  TEXT │
-│     car_model     TEXT │           │     refund_status TEXT │
-│     amount_total  NUM  │           │     refund_amount NUM  │
-│     booking_status TEXT│           │     refund_id     TEXT │
-│     cancel_req_at TSTZ │           │     refunded_at   TSTZ │
-│     cancel_reason TEXT │           │     refund_notes  TEXT │
-│     created_at    TSTZ │           │     created_at    TSTZ │
-└────────────┬───────────┘           └────────────┬───────────┘
-             │ 1:N                                │ 1:N
-             ▼                                    ▼
-┌────────────────────────┐           ┌────────────────────────┐
-│   VEHICLE_ASSIGNMENTS  │           │    PAYMENT_RECORDS     │
-├────────────────────────┤           ├────────────────────────┤
-│ PK  id            UUID │           │ PK  id            UUID │
-│ FK  booking_id    TEXT │           │ FK  payment_id    UUID │
-│ FK  car_id        UUID │           │     record_type   TEXT │
-│     driver_name   TEXT │           │     amount        NUM  │
-│     driver_phone  TEXT │           │     status        TEXT │
-│     start_datetime TSTZ│           │     created_at    TSTZ │
-│     end_datetime  TSTZ │           └────────────────────────┘
-│     assigned_at   TSTZ │
-│     assigned_by   TEXT │
-└────────────┬───────────┘
-             │ N:1
-             ▼
-┌────────────────────────┐
-│          CARS          │
-├────────────────────────┤
-│ PK  id            UUID │
-│     model_name    TEXT │
-│     class         TEXT │   'Standard' | 'Premium' | 'SUV'
-│     capacity      INT  │
-│     number_plate  TEXT │
-│     per_km_charge NUM  │
-│     per_hr_charge NUM  │
-│     is_active     BOOL │
-│     created_at    TSTZ │
-└────────────────────────┘
+```mermaid
+erDiagram
+    BOOKINGS {
+        uuid    id               PK
+        uuid    booking_id       UK
+        string  booking_type        "airport | hourly | tour"
+        string  user_name
+        string  user_email
+        string  phone
+        int     passenger_count
+        timestamp start_datetime
+        timestamp end_datetime
+        uuid    destination_id   FK  "airport bookings only → DESTINATIONS"
+        uuid    tour_package_id  FK  "tour bookings only → TOUR_PACKAGES"
+        numeric no_of_hours         "hourly bookings only"
+        string  car_model           "chosen model name"
+        numeric amount_total
+        string  booking_status      "pending|confirmed|completed|cancelled"
+        timestamp cancellation_requested_at
+        string  cancellation_reason
+        timestamp created_at
+    }
+    PAYMENTS {
+        uuid    id               PK
+        uuid    booking_id       FK  "→ BOOKINGS (1-to-1)"
+        string  payment_type        "partial | full"
+        numeric amount_total
+        numeric amount_online_paid
+        numeric amount_cash_paid
+        string  txn_status          "pending | success | failed"
+        string  txn_id
+        string  gateway             "razorpay"
+        string  payment_status      "pending | partial | paid"
+        timestamp cash_paid_at
+        string  cash_collected_by
+        string  refund_status       "none | pending | processed | failed"
+        numeric refund_amount
+        string  refund_id
+        timestamp refunded_at
+        string  refund_notes
+        timestamp created_at
+    }
+    PAYMENT_RECORDS {
+        uuid    id               PK
+        uuid    payment_id       FK  "→ PAYMENTS"
+        string  booking_id           "denorm text reference"
+        string  txn_type            "online | cash"
+        string  txn_id
+        string  gateway
+        numeric amount
+        string  currency            "INR"
+        string  status              "success | failed | pending"
+        string  razorpay_order_id
+        string  collected_by
+        timestamp collected_at
+        string  invoice_number   UK
+        string  notes
+        timestamp created_at
+    }
+    VEHICLE_ASSIGNMENTS {
+        uuid    id               PK
+        uuid    booking_id       FK  "→ BOOKINGS"
+        uuid    car_id           FK  "→ CARS"
+        timestamp start_datetime
+        timestamp end_datetime
+        timestamp assigned_at
+        timestamp created_at
+    }
+    CARS {
+        uuid    id               PK
+        string  model_name
+        string  class               "Economy|Premium|Luxury|Group"
+        string  number_plate     UK
+        numeric per_km_charge       "used for airport pricing"
+        numeric per_hr_charge       "used for hourly pricing"
+        int     capacity
+        string  driver_name
+        string  driver_phone
+        string  driver_email
+        string  driver_license_number
+        date    driver_license_expiry
+        boolean driver_verified
+        boolean is_active
+        timestamp created_at
+        timestamp updated_at
+    }
 
-┌────────────────────────┐    1:N    ┌────────────────────────┐
-│      DESTINATIONS      │◄─────────►│        BOOKINGS        │
-├────────────────────────┤           │ FK destination_id      │
-│ PK  id            UUID │           └────────────────────────┘
-│     name          TEXT │
-│     region        TEXT │
-│     is_active     BOOL │
-└────────────┬───────────┘
-             │ 1:N
-             ▼
-┌────────────────────────┐
-│     PRICING_RULES      │
-├────────────────────────┤
-│ PK  id            UUID │
-│ FK  destination_id UUID│
-│     car_type      TEXT │
-│     base_fare     NUM  │
-│     per_km_rate   NUM  │
-└────────────────────────┘
-
-┌────────────────────────┐    1:N    ┌────────────────────────┐
-│     TOUR_PACKAGES      │◄─────────►│        BOOKINGS        │
-├────────────────────────┤           │ FK tour_package_id     │
-│ PK  id            UUID │           └────────────────────────┘
-│     name          TEXT │
-│     description   TEXT │
-│     price         NUM  │
-│     duration_hours INT │
-│     max_passengers INT │
-│     car_model     TEXT │
-│     image_url     TEXT │
-│     image_urls    TEXT[]
-│     itinerary     TEXT │
-│     highlights    TEXT[]
-│     is_active     BOOL │
-│     created_at    TSTZ │
-│     updated_at    TSTZ │
-└────────────┬───────────┘
-             │ 1:N  (polymorphic)
-             ▼
-┌────────────────────────┐
-│        REVIEWS         │◄── Also linked to BOOKINGS polymorphically
-├────────────────────────┤
-│ PK  id            UUID │
-│     reviewable_type TEXT│  'tour' | 'taxi_booking'
-│     reviewable_id UUID  │  FK → tour_packages.id OR bookings.id
-│     user_id       UUID  │  nullable → auth.users.id
-│     user_email    TEXT  │
-│     user_name     TEXT  │
-│     rating        INT   │  CHECK (1–5)
-│     title         TEXT  │
-│     comment       TEXT  │
-│     is_visible    BOOL  │
-│     created_at    TSTZ  │
-│     updated_at    TSTZ  │
-└────────────────────────┘
-  UNIQUE (user_email, reviewable_type, reviewable_id)
-
-┌────────────────────────┐
-│      HOURLY_RATES      │
-├────────────────────────┤
-│ PK  id            UUID │
-│     car_type      TEXT │
-│     per_hr_rate   NUM  │
-│     per_day_rate  NUM  │
-└────────────────────────┘
-
-┌────────────────────────┐
-│         ADMINS         │
-├────────────────────────┤
-│ PK  id            UUID │
-│     email         TEXT │  UNIQUE NOT NULL
-│     password_hash TEXT │  bcrypt hash
-│     full_name     TEXT │
-│     role          TEXT │  DEFAULT 'admin'
-│     is_active     BOOL │
-│     last_login    TSTZ │
-│     created_at    TSTZ │
-│     updated_at    TSTZ │
-└────────────────────────┘
-
-┌────────────────────────┐
-│      APP_SETTINGS      │
-├────────────────────────┤
-│ PK  key           TEXT │  e.g. 'conflict_control_enabled'
-│     value         TEXT │  e.g. 'true'
-│     updated_at    TSTZ │
-└────────────────────────┘
+    BOOKINGS         ||--o|  PAYMENTS            : "has payment"
+    PAYMENTS         ||--o{  PAYMENT_RECORDS     : "has records"
+    BOOKINGS         ||--o{  VEHICLE_ASSIGNMENTS : "assigned vehicle"
+    CARS             ||--o{  VEHICLE_ASSIGNMENTS : "used in assignment"
 ```
 
-### 8.2 Relationships Summary
+**Diagram B — Reference & Lookup Tables**
 
-| From | To | Cardinality | Foreign Key |
-|------|----|-------------|-------------|
-| `bookings` | `payments` | One-to-One | `payments.booking_id` |
-| `payments` | `payment_records` | One-to-Many | `payment_records.payment_id` |
-| `bookings` | `vehicle_assignments` | One-to-Many | `vehicle_assignments.booking_id` |
-| `cars` | `vehicle_assignments` | One-to-Many | `vehicle_assignments.car_id` |
-| `destinations` | `bookings` | One-to-Many | `bookings.destination_id` |
-| `destinations` | `pricing_rules` | One-to-Many | `pricing_rules.destination_id` |
-| `tour_packages` | `bookings` | One-to-Many | `bookings.tour_package_id` |
-| `tour_packages` | `reviews` | Polymorphic 1:N | `reviewable_type='tour'` |
-| `bookings` | `reviews` | Polymorphic 1:N | `reviewable_type='taxi_booking'` |
+```mermaid
+erDiagram
+    BOOKINGS {
+        uuid    booking_id  PK
+        string  booking_type   "airport | hourly | tour"
+        uuid    destination_id FK
+        uuid    tour_package_id FK
+    }
+    DESTINATIONS {
+        uuid    id               PK
+        string  name             UK
+        string  description
+        numeric distance_km         "km FROM Hollongi Airport"
+        int     estimated_duration_minutes
+        boolean is_active
+        timestamp created_at
+        timestamp updated_at
+    }
+    TOUR_PACKAGES {
+        uuid    id               PK
+        string  name
+        string  description
+        timestamp arrival_time
+        int     duration_hours
+        numeric price               "fixed fare"
+        int     max_passengers
+        string  car_model           "recommended vehicle"
+        string  itinerary
+        string_array highlights
+        string_array image_urls
+        boolean is_active
+        timestamp created_at
+        timestamp updated_at
+    }
+    REVIEWS {
+        uuid    id               PK
+        string  reviewable_type     "tour | taxi_booking"
+        uuid    reviewable_id       "→ TOUR_PACKAGES.id or BOOKINGS.booking_id"
+        uuid    user_id
+        string  user_email
+        string  user_name
+        int     rating              "1..5 CHECK"
+        string  title
+        string  comment
+        boolean is_visible
+        timestamp created_at
+        timestamp updated_at
+    }
+    ADMINS {
+        uuid    id               PK
+        string  email            UK
+        string  password_hash       "bcrypt"
+        string  full_name
+        string  role                "admin"
+        boolean is_active
+        timestamp last_login
+        timestamp created_at
+        timestamp updated_at
+    }
+    APP_SETTINGS {
+        string  key              PK
+        string  value
+        timestamp updated_at
+    }
+
+    DESTINATIONS   ||--o{  BOOKINGS      : "airport transfer to"
+    TOUR_PACKAGES  ||--o{  BOOKINGS      : "tour booked"
+    TOUR_PACKAGES  ||--o{  REVIEWS       : "reviewed (type=tour)"
+    BOOKINGS       ||--o{  REVIEWS       : "reviewed (type=taxi_booking)"
+```
+
+### 8.1 Relationships Summary
+
+| From | To | Cardinality | Via | Notes |
+|------|----|-------------|-----|-------|
+| `bookings` | `payments` | 1 : 0..1 | `payments.booking_id` | one payment record per booking |
+| `payments` | `payment_records` | 1 : N | `payment_records.payment_id` | one row per online/cash transaction |
+| `bookings` | `payment_records` | 1 : N | `payment_records.booking_id` | denormalised text back-reference |
+| `bookings` | `vehicle_assignments` | 1 : N | `vehicle_assignments.booking_id` | usually one; reassignment adds rows |
+| `cars` | `vehicle_assignments` | 1 : N | `vehicle_assignments.car_id` | a car is used in many assignments over time |
+| `destinations` | `bookings` | 1 : N | `bookings.destination_id` | **airport bookings only** — FROM Hollongi Airport TO this destination |
+| `tour_packages` | `bookings` | 1 : N | `bookings.tour_package_id` | **tour bookings only** |
+| `tour_packages` | `reviews` | 1 : N | polymorphic (`reviewable_type = 'tour'`) | |
+| `bookings` | `reviews` | 1 : N | polymorphic (`reviewable_type = 'taxi_booking'`) | |
+| `admins` | — | standalone | — | JWT-based admin auth, no FK to bookings |
+| `app_settings` | — | standalone | — | key/value feature flags (e.g. `conflict_control_enabled`) |
 
 ---
 
@@ -980,142 +998,78 @@ app/layout.tsx
 
 ### 9.1 Level 0 — Context Diagram
 
-> **Note:** Text representation — replace with visual DFD diagram.
-
-```
-                         ┌──────────────────────────────┐
-    Booking Request      │                              │   Booking Confirmation
-[CUSTOMER] ────────────► │                              │ ──────────────────────► [CUSTOMER]
-                         │     TaxiHollongi System      │
-[ADMIN] ───────────────► │                              │ ──────────────────────► [ADMIN]
-    Management Actions   │                              │   Dashboard Data
-                         └────────────┬─────────────────┘
-                                      │
-                    ┌─────────────────┼─────────────────────┐
-                    ▼                 ▼                      ▼
-               [Razorpay]         [Resend]            [Supabase]
-               Payment GW         Email API           Database + Auth
+```mermaid
+flowchart LR
+    Customer(["Customer"]) -- booking request / payment --> Sys["RT&T System"]
+    Sys -- confirmation / invoice / status --> Customer
+    Admin(["Admin / Operator"]) -- management actions --> Sys
+    Sys -- dashboards / lists --> Admin
+    Sys <-- queries / writes --> DB[("Supabase DB + Auth")]
+    Sys -- create order / verify --> RZP["Razorpay"]
+    Sys -- send mail --> Email["Resend"]
 ```
 
-### 9.2 Level 1 — Main Process Flows
+### 9.2 Level 1 — Major Processes
 
+**Customer Flow**
+
+```mermaid
+flowchart LR
+    C(["👤 Customer"])
+
+    C -->|credentials| P1["P1 · Auth"] --> SA[("Supabase Auth")]
+
+    C -->|booking details| P2["P2 · Booking Engine"]
+    P2 -->|write pending| D1[("bookings")]
+    P2 -->|check availability| D3[("cars & assignments")]
+    P2 -->|read tours & routes| D4[("tours & destinations")]
+    P2 -->|check conflict flag| D6[("app_settings")]
+
+    C -->|pay| P3["P3 · Payment"] <-->|order / verify| RZP["Razorpay"]
+    P3 -->|confirm booking| D1
+    P3 -->|write record| D2[("payments")]
+    P3 -->|send confirmation| P4["P4 · Notify"] --> Resend["Resend"]
+
+    C -->|request PDF| P5["P5 · Invoice"] -.->|client-side PDF| C
+    C -->|submit review| P7["P7 · Reviews"] <-->|read / write| D5[("reviews")]
 ```
-[CUSTOMER]
-    │
-    │ ① Register / Login
-    ▼
-┌────────────────────┐
-│   P1: AUTH         │ ◄────────────────────► Supabase Auth
-│   User Management  │
-└────────┬───────────┘
-         │
-    ② Select Service + Enter Details
-         ▼
-┌────────────────────┐             ┌─────────────────┐
-│   P2: BOOKING      │ ───────────► │ D1: bookings    │
-│   Engine           │ ◄─────────── │ (Supabase PG)   │
-└────────┬───────────┘             └─────────────────┘
-         │
-    ③ Initiate Payment
-         ▼
-┌────────────────────┐
-│   P3: PAYMENT      │ ────────────► Razorpay API
-│   Processing       │ ◄──────────── Payment Confirmation
-└────────┬───────────┘
-         │                          ┌─────────────────┐
-    ④    └─────────────────────────► │ D2: payments    │
-                                    │ (Supabase PG)   │
-                                    └─────────────────┘
-    ⑤ Booking Confirmed
-         ▼
-┌────────────────────┐
-│   P4: NOTIFICATION │ ────────────► Resend API ─────────► [CUSTOMER Email]
-│   Service          │                                      [DRIVER Email]
-└────────┬───────────┘
-         │
-    ⑥ Download Invoice
-         ▼
-┌────────────────────┐
-│   P5: INVOICE      │ ────────────► jsPDF (client-side) → Browser Download
-│   Generation       │
-└────────────────────┘
 
-[ADMIN]
-    │ ① JWT Login
-    │ ② View All Bookings
-    │ ③ Assign Vehicle/Driver
-    │ ④ Confirm Cash Payment
-    │ ⑤ Manage Content (CRUD)
-    ▼
-┌────────────────────┐
-│   P6: ADMIN OPS    │ ────────────► D1 (bookings), D2 (payments),
-│   Dashboard        │               D3 (cars), D4 (tours), D5 (destinations)
-└────────────────────┘
+**Admin Flow**
+
+```mermaid
+flowchart LR
+    A(["🔧 Admin"])
+
+    A -->|JWT login| P6["P6 · Admin Ops"]
+
+    P6 -->|assign vehicle| D3[("cars & assignments")]
+    P6 -->|update status / cancel| D1[("bookings")]
+    P6 -->|confirm cash payment| D2[("payments")]
+    P6 -->|manage tours & routes| D4[("tours & destinations")]
+    P6 -->|toggle conflict control| D6[("app_settings")]
+    P6 -->|trigger driver email| P4["P4 · Notify"] --> Resend["Resend"]
 ```
 
 ### 9.3 Level 2 — Payment Sub-Process
 
-```
-Customer Browser
-    │
-    │ { bookingId, amount, paymentType }
-    ▼
-POST /api/payment/create-payment
-    │
-    ├──► razorpay.orders.create(amount_paise, 'INR', receipt=bookingId)
-    │         └──► Returns: { orderId }
-    │
-    ├──► INSERT INTO payments {
-    │      booking_id, payment_type, amount_total,
-    │      amount_online_paid=amount, txn_status='initiated'
-    │    }
-    │
-    └──► Return { orderId, amount } to client
-
-Client: Open Razorpay modal
-    │
-    │ User pays
-    │
-    ▼ Razorpay returns: { orderId, paymentId, signature }
-
-POST /api/payment/verify
-    │
-    ├──► Compute: HMAC-SHA256(orderId + "|" + paymentId, secret)
-    │         └──► Mismatch → 400 Bad Request "Invalid signature"
-    │
-    ├──► UPDATE payments SET txn_status='paid', txn_id=paymentId,
-    │                        payment_status='partial'|'paid'
-    │
-    ├──► UPDATE bookings SET booking_status='confirmed'
-    │
-    ├──► sendBookingConfirmation(email) via Resend API
-    │
-    └──► Return { success, bookingId, invoiceNumber }
-```
-
-### 9.4 Level 2 — Admin Vehicle Assignment Sub-Process
-
-```
-Admin Browser
-    │
-    │ { bookingId, carId, driverName, driverPhone, start, end }
-    ▼
-POST /api/bookings/assign-vehicle
-    │  Authorization: Bearer <JWT>
-    │
-    ├──► jwt.verify(token) → admin identity
-    │
-    ├──► INSERT INTO vehicle_assignments {
-    │      booking_id, car_id, driver_name, driver_phone,
-    │      start_datetime, end_datetime, assigned_by=adminEmail
-    │    }
-    │
-    ├──► UPDATE bookings SET booking_status='confirmed'
-    │         (if not already confirmed)
-    │
-    ├──► sendDriverNotification(driverPhone?, driverEmail?) via Resend
-    │
-    └──► Return { success: true }
+```mermaid
+flowchart TD
+    A[Customer chooses Partial 30% or Full 100%] --> B["POST /api/payment/create-order<br/>{ amount, bookingId, currency }"]
+    B --> C["razorpay.orders.create(amount*100, INR)"]
+    C --> D["INSERT/UPSERT payments<br/>txn_status='pending'"]
+    D --> E["return { orderId } to browser"]
+    E --> F[Browser opens Razorpay modal]
+    F --> G{User pays?}
+    G -- No / fails --> H[Return to payment page — retry]
+    G -- Yes --> I["Razorpay → { orderId, paymentId, signature }"]
+    I --> J["POST /api/payment/verify"]
+    J --> K{"HMAC_SHA256(orderId|paymentId, secret) == signature?"}
+    K -- No --> L[400 Invalid payment signature]
+    K -- Yes --> M["UPDATE payments txn_status='success', payment_status=partial|paid"]
+    M --> N["UPDATE bookings booking_status='confirmed'"]
+    N --> O["INSERT payment_records (+invoice_number)"]
+    O --> P["sendBookingConfirmation() → Resend"]
+    P --> Q["return { success, bookingId, invoiceNumber }"]
 ```
 
 ---
@@ -1124,1024 +1078,741 @@ POST /api/bookings/assign-vehicle
 
 ### 10.1 Use Case Diagram
 
-> **Note:** Text representation — replace with UML diagram tool export (e.g., PlantUML, draw.io).
+```mermaid
+flowchart LR
+    subgraph Actors
+        C(["Customer"])
+        A(["Admin"])
+        R(["Razorpay"])
+        E(["Resend"])
+    end
 
-```
-System Boundary: TaxiHollongi
+    subgraph CustomerUC["Customer use cases"]
+        UC1["Register / Verify email"]
+        UC2["Log in / Log out / Change password"]
+        UC3["Book airport taxi"]
+        UC4["Book hourly taxi"]
+        UC5["Book tour package"]
+        UC6["Pay online (partial / full)"]
+        UC7["Download invoice (PDF)"]
+        UC8["View my bookings"]
+        UC9["Cancel booking (>24h before)"]
+        UC10["Submit review (1–5 stars)"]
+    end
 
-Actors:  [Customer]  [Admin]  [Razorpay]  [Resend Email Service]
+    subgraph AdminUC["Admin use cases"]
+        UC11["Admin login (JWT)"]
+        UC12["View / filter all bookings"]
+        UC13["Assign vehicle & driver"]
+        UC14["Confirm cash payment"]
+        UC15["Process cancellation"]
+        UC16["Manage cars / destinations / pricing / tours"]
+        UC17["View analytics"]
+        UC18["Toggle conflict control / scan conflicts"]
+        UC19["Manage pending-booking cleanup"]
+        UC20["Edit profile / add admin"]
+    end
 
-─── Customer Use Cases ────────────────────────────────────────────
-
-UC01  Register Account
-UC02  Verify Email Address
-UC03  Login / Logout
-UC04  Change Password
-UC05  Book Airport Taxi          ── includes ──► UC-CHK: Check Availability
-UC06  Book Tour Package          ── includes ──► UC-CHK: Check Availability
-UC07  Book Hourly Taxi           ── includes ──► UC-CHK: Check Availability
-UC08  Pay Online (30% or 100%)  ── extends  ──► [Razorpay]
-UC09  Download Invoice PDF
-UC10  View My Bookings
-UC11  Cancel Booking             ── guards   ──► (>24h before trip)
-UC12  Submit Review (Tour/Taxi)
-
-─── Admin Use Cases ───────────────────────────────────────────────
-
-UC13  Admin Login (JWT)
-UC14  View All Bookings (filtered by status)
-UC15  Assign Vehicle & Driver    ── triggers ──► UC-E2: Driver Notification
-UC16  Confirm Cash Payment Received
-UC17  Process Cancellation Request
-UC18  Manage Cars (Create, Read, Update, Delete)
-UC19  Manage Tour Packages (CRUD + image upload)
-UC20  Manage Destinations (CRUD)
-UC21  Manage Pricing Rules (CRUD)
-UC22  Toggle Conflict Control On/Off
-UC23  View Booking Conflicts
-UC24  Create New Admin Account
-
-─── System-triggered Email Use Cases ─────────────────────────────
-
-UC-E1  Send Booking Confirmation   ◄── triggered by UC08 success
-         └──────────────────────────────────────────────► [Resend]
-UC-E2  Send Driver Assignment Notification ◄── triggered by UC15
-         └──────────────────────────────────────────────► [Resend]
-UC-E3  Send Cancellation Confirmation ◄── triggered by UC17
-         └──────────────────────────────────────────────► [Resend]
+    C --- UC1 & UC2 & UC3 & UC4 & UC5 & UC6 & UC7 & UC8 & UC9 & UC10
+    A --- UC11 & UC12 & UC13 & UC14 & UC15 & UC16 & UC17 & UC18 & UC19 & UC20
+    UC6 --> R
+    UC6 -. triggers .-> UC_E1["Send confirmation email"]
+    UC13 -. triggers .-> UC_E2["Send driver email"]
+    UC15 -. triggers .-> UC_E3["Send cancellation email"]
+    UC_E1 & UC_E2 & UC_E3 --> E
 ```
 
-### 10.2 Class Diagram
+### 10.2 Class Diagram (domain model)
 
-> **Note:** Text representation — replace with UML class diagram tool.
-
-```
-┌─────────────────────────────────────────────┐
-│                   Booking                   │
-├─────────────────────────────────────────────┤
-│ + id: string                                │
-│ + booking_id: string                        │
-│ + booking_type: BookingType                 │
-│ + user_name: string                         │
-│ + user_email: string                        │
-│ + phone: string                             │
-│ + passenger_count: number                   │
-│ + start_datetime: Date                      │
-│ + end_datetime: Date                        │
-│ + destination_id?: string                   │
-│ + tour_package_id?: string                  │
-│ + no_of_hours?: number                      │
-│ + car_model: string                         │
-│ + amount_total: number                      │
-│ + booking_status: BookingStatus             │
-│ + created_at: Date                          │
-│ + cancellation_requested_at?: Date          │
-│ + cancellation_reason?: string              │
-├─────────────────────────────────────────────┤
-│ + canCancel(): boolean                      │
-│ + getPayment(): Promise<Payment>            │
-│ + getAssignment(): Promise<Assignment>      │
-└────────────┬────────────────────────────────┘
-             │ "associated with"
-             ▼
-┌─────────────────────────────────────────────┐
-│                  Payment                    │
-├─────────────────────────────────────────────┤
-│ + id: string                                │
-│ + booking_id: string                        │
-│ + payment_type: 'partial' | 'full'         │
-│ + amount_total: number                      │
-│ + amount_online_paid: number                │
-│ + amount_cash_paid: number                  │
-│ + txn_status: TxnStatus                     │
-│ + txn_id?: string                           │
-│ + payment_status: PaymentStatus             │
-│ + cash_paid_at?: Date                       │
-│ + cash_collected_by?: string                │
-│ + refund_status?: RefundStatus              │
-│ + refund_amount?: number                    │
-├─────────────────────────────────────────────┤
-│ + getRemainingCash(): number                │
-│ + isFullyPaid(): boolean                    │
-└─────────────────────────────────────────────┘
-
-┌─────────────────────────────────────────────┐
-│               TourPackage                   │
-├─────────────────────────────────────────────┤
-│ + id: string                                │
-│ + name: string                              │
-│ + description: string                       │
-│ + price: number                             │
-│ + duration_hours: number                    │
-│ + max_passengers: number                    │
-│ + car_model: string                         │
-│ + image_url: string                         │
-│ + image_urls: string[]                      │
-│ + itinerary: string                         │
-│ + highlights: string[]                      │
-│ + is_active: boolean                        │
-├─────────────────────────────────────────────┤
-│ + getReviews(): Promise<Review[]>           │
-│ + getRatingStats(): Promise<RatingStats>    │
-└─────────────────────────────────────────────┘
-
-┌─────────────────────────────────────────────┐
-│                  Review                     │
-├─────────────────────────────────────────────┤
-│ + id: string                                │
-│ + reviewable_type: 'tour'|'taxi_booking'   │
-│ + reviewable_id: string                     │
-│ + user_email: string                        │
-│ + user_name: string                         │
-│ + rating: 1 | 2 | 3 | 4 | 5              │
-│ + title?: string                            │
-│ + comment?: string                          │
-│ + is_visible: boolean                       │
-│ + created_at: Date                          │
-└─────────────────────────────────────────────┘
-
-┌─────────────────────────────────────────────┐
-│                  Car                        │
-├─────────────────────────────────────────────┤
-│ + id: string                                │
-│ + model_name: string                        │
-│ + class: string                             │
-│ + capacity: number                          │
-│ + number_plate: string                      │
-│ + per_km_charge: number                     │
-│ + per_hr_charge: number                     │
-│ + is_active: boolean                        │
-└─────────────────────────────────────────────┘
-
-┌─────────────────────────────────────────────┐
-│            VehicleAssignment                │
-├─────────────────────────────────────────────┤
-│ + id: string                                │
-│ + booking_id: string                        │
-│ + car_id: string                            │
-│ + driver_name: string                       │
-│ + driver_phone: string                      │
-│ + start_datetime: Date                      │
-│ + end_datetime: Date                        │
-│ + assigned_at: Date                         │
-│ + assigned_by: string                       │
-└─────────────────────────────────────────────┘
-
-Enumerations:
-  BookingType   = 'airport_taxi' | 'tour' | 'hourly'
-  BookingStatus = 'pending' | 'confirmed' | 'completed' | 'cancelled'
-  TxnStatus     = 'initiated' | 'paid' | 'failed'
-  PaymentStatus = 'pending' | 'partial' | 'paid' | 'refunded'
-  RefundStatus  = 'none' | 'requested' | 'processed'
-```
-
-### 10.3 Sequence Diagrams
-
-#### SEQ-01: Customer Booking and Payment
-
-> **Note:** Text representation — replace with UML sequence diagram (PlantUML, draw.io).
-
-```
-Customer   Browser      API Layer         Razorpay      Supabase     Resend
-   │          │              │                │             │            │
-   │ select   │              │                │             │            │
-   │ service  │              │                │             │            │
-   ├─────────►│              │                │             │            │
-   │          │ GET /api/cars/available-models │             │            │
-   │          ├─────────────►│                │             │            │
-   │          │              │ query cars+assignments        │            │
-   │          │              ├────────────────────────────► │            │
-   │          │              │◄────────────────────────────  │            │
-   │          │◄─────────────┤ { models[] }   │             │            │
-   │          │              │                │             │            │
-   │ fill     │              │                │             │            │
-   │ form     │              │                │             │            │
-   ├─────────►│              │                │             │            │
-   │          │ POST /api/bookings/create      │             │            │
-   │          ├─────────────►│                │             │            │
-   │          │              │ INSERT booking (pending)      │            │
-   │          │              ├────────────────────────────► │            │
-   │          │◄─────────────┤ { booking_id } │             │            │
-   │          │              │                │             │            │
-   │ choose   │              │                │             │            │
-   │ payment  │              │                │             │            │
-   ├─────────►│              │                │             │            │
-   │          │ POST /api/payment/create-payment             │            │
-   │          ├─────────────►│                │             │            │
-   │          │              │ orders.create()│             │            │
-   │          │              ├───────────────►│             │            │
-   │          │              │◄───────────────┤ { orderId } │            │
-   │          │              │ INSERT payment record         │            │
-   │          │              ├────────────────────────────► │            │
-   │          │◄─────────────┤ { orderId }    │             │            │
-   │          │              │                │             │            │
-   │ pay via  │              │                │             │            │
-   │ Razorpay │ openModal()  │                │             │            │
-   │          ├──────────────────────────────►│             │            │
-   │          │              │      user completes payment   │            │
-   │          │◄─────────────────────────────┤             │            │
-   │          │ { orderId, paymentId, sig }   │             │            │
-   │          │              │                │             │            │
-   │          │ POST /api/payment/verify       │             │            │
-   │          ├─────────────►│                │             │            │
-   │          │              │ verifyHMAC()   │             │            │
-   │          │              │ UPDATE payments + bookings    │            │
-   │          │              ├────────────────────────────► │            │
-   │          │              │ sendConfirmation()            │            │
-   │          │              ├──────────────────────────────────────────►│
-   │          │◄─────────────┤ { success, invoiceNumber }   │            │
-   │          │              │                │             │            │
-   │ view     │              │                │             │            │
-   │ confirm  │              │                │             │            │
-   ├─────────►│              │                │             │            │
-```
-
-#### SEQ-02: Admin Login and Vehicle Assignment
-
-```
-Admin     Browser       /api/admin/*      Supabase       Resend
-  │          │               │               │              │
-  │ enter    │               │               │              │
-  │ creds    │               │               │              │
-  ├─────────►│               │               │              │
-  │          │ POST /api/admin/login          │              │
-  │          ├──────────────►│               │              │
-  │          │               │ SELECT admin  │              │
-  │          │               ├──────────────►│              │
-  │          │               │◄──────────────┤ admin record │
-  │          │               │ bcrypt.compare()             │
-  │          │               │ jwt.sign(...)  │              │
-  │          │◄──────────────┤ { token }      │              │
-  │          │ localStorage('adminToken')      │              │
-  │          │               │               │              │
-  │ view all │               │               │              │
-  │ bookings │               │               │              │
-  ├─────────►│               │               │              │
-  │          │ GET /api/bookings/admin        │              │
-  │          │ Authorization: Bearer <token>  │              │
-  │          ├──────────────►│               │              │
-  │          │               │ jwt.verify()   │              │
-  │          │               │ SELECT bookings│              │
-  │          │               ├──────────────►│              │
-  │          │◄──────────────┤◄──────────────┤ bookings[]   │
-  │          │               │               │              │
-  │ assign   │               │               │              │
-  │ vehicle  │               │               │              │
-  ├─────────►│               │               │              │
-  │          │ POST /api/bookings/assign-vehicle             │
-  │          ├──────────────►│               │              │
-  │          │               │ jwt.verify()   │              │
-  │          │               │ INSERT vehicle_assignments    │
-  │          │               ├──────────────►│              │
-  │          │               │ UPDATE bookings status        │
-  │          │               ├──────────────►│              │
-  │          │               │ sendDriverNotification()      │
-  │          │               ├──────────────────────────────►│
-  │          │◄──────────────┤ { success }    │              │
-```
-
-### 10.4 Component Diagram
-
-> **Note:** Text representation — replace with UML component diagram.
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                     TaxiHollongi Application                    │
-│                                                                 │
-│  ┌──────────────────────────────────────────────────────────┐  │
-│  │                      Pages Layer                          │  │
-│  │  HomePage · BookTaxi · Tours · TourDetail · Payment      │  │
-│  │  BookingConfirmed · MyBookings · AdminDashboard           │  │
-│  │  Login · Signup · AuthVerify · AdminLogin                 │  │
-│  │  SEO: ArunachalTours · ItanagarTours · AirportTaxi*      │  │
-│  └─────────────────────────┬────────────────────────────────┘  │
-│                            │ uses                               │
-│  ┌─────────────────────────▼────────────────────────────────┐  │
-│  │                   Components Layer                        │  │
-│  │  Header · Footer · ReviewForm · ReviewCard · Loader      │  │
-│  │  AppSplashLoader · ProtectedAdminPage · Logo             │  │
-│  │  HeroBackground · SmoothScrollWrapper                    │  │
-│  └─────────────────────────┬────────────────────────────────┘  │
-│                            │ subscribes to                      │
-│  ┌─────────────────────────▼────────────────────────────────┐  │
-│  │                Context / State Layer                      │  │
-│  │  AuthContext (Supabase session)                          │  │
-│  │  AdminContext (JWT + bcrypt + localStorage)              │  │
-│  │  Zustand Store                                           │  │
-│  └─────────────────────────┬────────────────────────────────┘  │
-│                            │ HTTP calls                         │
-│  ┌─────────────────────────▼────────────────────────────────┐  │
-│  │                   API Routes Layer                        │  │
-│  │  /api/admin/*  /api/auth/*  /api/bookings/*              │  │
-│  │  /api/cars/*   /api/destinations/*  /api/payment/*       │  │
-│  │  /api/tours/*  /api/reviews/*                            │  │
-│  └─────────────────────────┬────────────────────────────────┘  │
-│                            │ uses                               │
-│  ┌─────────────────────────▼────────────────────────────────┐  │
-│  │                      Lib Layer                            │  │
-│  │  db.ts · payment-db.ts · payment.ts · payment-utils.ts   │  │
-│  │  utils.ts · validation.ts · reviews.ts · invoice.ts      │  │
-│  │  database.ts · supabase.ts · supabase-admin.ts           │  │
-│  │  notifications.ts · resend-notifications.ts              │  │
-│  └─────────────────────────┬────────────────────────────────┘  │
-│                            │                                    │
-└────────────────────────────┼────────────────────────────────────┘
-                             │ external connections
-             ┌───────────────┼──────────────────────┐
-             ▼               ▼                      ▼
-    ┌──────────────┐  ┌────────────┐       ┌──────────────┐
-    │   Supabase   │  │  Razorpay  │       │   Resend     │
-    │  PostgreSQL  │  │  Payment   │       │  Email API   │
-    │  + Auth      │  │  Gateway   │       │              │
-    └──────────────┘  └────────────┘       └──────────────┘
-```
-
-### 10.5 Booking Status State Machine
-
-> **Note:** Text representation — replace with UML state diagram.
-
-```
-                    ┌──────────────────────────────────┐
-                    │               PENDING             │
-                    │   (booking created, not paid yet) │
-                    └──────┬───────────────────┬────────┘
-                           │                   │
-               Payment     │                   │  >24h elapsed
-               verified    │                   │  (no payment)
-                           │                   │
-                           ▼                   ▼
-                    ┌──────────────┐    ┌───────────────┐
-                    │  CONFIRMED   │    │  Auto-deleted  │
-                    │              │    │  (cron job)    │
-                    └──────┬───────┘    └───────────────┘
-                           │
-              ┌────────────┴────────────┐
-              │                         │
-         Trip done               Cancellation
-         (admin marks)           request processed
-              │                  (admin action)
-              ▼                         ▼
-       ┌────────────┐           ┌────────────────┐
-       │ COMPLETED  │           │   CANCELLED    │
-       └────────────┘           └────────────────┘
-
-  Note: Cancellation requests can come from:
-  - Customer (must be >24h before start_datetime)
-  - Admin (any time, manual override)
-```
-
-### 10.6 Payment Status State Machine
-
-```
-                    ┌────────────────────────────────┐
-                    │            PENDING             │
-                    │ (Razorpay order created,       │
-                    │  awaiting payment)             │
-                    └──────┬─────────────┬───────────┘
-                           │             │
-                    Partial payment  Full payment
-                    (30% online)     (100% online)
-                           │             │
-                    ┌──────▼───┐   ┌─────▼──────┐
-                    │ PARTIAL  │   │    PAID    │
-                    │ (online  │   │            │
-                    │ paid,    │   └────────────┘
-                    │ cash due)│
-                    └──────┬───┘
-                           │
-                    Admin marks
-                    cash collected
-                    (70% received)
-                           │
-                    ┌──────▼──────┐
-                    │    PAID     │
-                    └──────┬──────┘
-                           │
-                    Refund issued
-                    (manual, admin)
-                           │
-                    ┌──────▼──────┐
-                    │  REFUNDED  │
-                    └─────────────┘
-```
-
----
-
-## 11. API Documentation
-
-### 11.1 Base URLs
-
-| Environment | Base URL |
-|-------------|----------|
-| Development | `http://localhost:3000` |
-| Production | `https://<your-domain>.vercel.app` |
-
-### 11.2 Authentication
-
-**User Auth (Supabase)**  
-Supabase session managed automatically via `@supabase/auth-helpers-nextjs`. No manual headers needed from the client — the session cookie is attached automatically.
-
-**Admin Auth (JWT)**  
-Include the JWT token in every admin request:
-```
-Authorization: Bearer <token>
-```
-Token is obtained from `POST /api/admin/login` and expires in 24 hours.
-
-### 11.3 Standard Response Format
-
-```json
-// Success
-{ "success": true, "data": { ... }, "message": "Optional human-readable message" }
-
-// Error
-{ "success": false, "error": "Error description" }
-```
-
----
-
-### 11.4 Admin Endpoints
-
-#### `POST /api/admin/login`
-Authenticate an admin and receive a JWT token.
-
-**Request:**
-```json
-{ "email": "admin@taxihollongi.com", "password": "Secure@Admin123" }
-```
-
-**Response 200:**
-```json
-{
-  "success": true,
-  "token": "eyJ...",
-  "admin": { "email": "admin@taxihollongi.com", "fullName": "Admin Name", "role": "admin" }
-}
-```
-
-**Error 401:** Invalid credentials &nbsp; **Error 403:** Account inactive
-
----
-
-#### `POST /api/admin/logout`
-Invalidate the admin session.  
-**Headers:** `Authorization: Bearer <token>`  
-**Response 200:** `{ "success": true }`
-
----
-
-#### `POST /api/admin/verify-session`
-Validate a JWT token and return admin info.  
-**Headers:** `Authorization: Bearer <token>`  
-**Response 200:** `{ "valid": true, "admin": { ... } }`  
-**Response 401:** Token expired or invalid
-
----
-
-#### `POST /api/admin/create-admin`
-Create a new admin account.  
-**Headers:** `Authorization: Bearer <token>`
-
-**Request:**
-```json
-{ "email": "newadmin@example.com", "password": "NewPass@123", "fullName": "New Admin" }
-```
-
-**Response 201:** `{ "success": true, "message": "Admin created" }`
-
----
-
-#### `GET /api/admin/settings`
-Retrieve application settings.  
-**Headers:** `Authorization: Bearer <token>`  
-**Response 200:** `{ "conflict_control_enabled": "true" }`
-
----
-
-#### `POST /api/admin/settings`
-Update an application setting.  
-**Headers:** `Authorization: Bearer <token>`
-
-**Request:**
-```json
-{ "key": "conflict_control_enabled", "value": "false" }
-```
-
-**Response 200:** `{ "success": true }`
-
----
-
-#### `GET /api/admin/conflicts`
-Get list of conflicting vehicle assignments.  
-**Headers:** `Authorization: Bearer <token>`  
-**Response 200:**
-```json
-{
-  "conflicts": [
-    {
-      "booking_id": "BK20260512ABC123",
-      "car_model": "Toyota Innova",
-      "start_datetime": "2026-05-14T08:00:00Z",
-      "conflicting_with": ["BK20260512XYZ456"]
+```mermaid
+classDiagram
+    class Booking {
+        +string id
+        +string booking_id
+        +string booking_type  "airport|tour|hourly"
+        +string user_name
+        +string user_email
+        +string phone
+        +int passenger_count
+        +Date start_datetime
+        +Date end_datetime
+        +string destination_id
+        +string tour_package_id
+        +int no_of_hours
+        +string car_model
+        +number amount_total
+        +string booking_status  "pending|confirmed|completed|cancelled"
+        +Date created_at
+        +canCancel() boolean
     }
-  ]
-}
-```
-
----
-
-#### `POST /api/admin/process-cancellation`
-Process a booking cancellation request.  
-**Headers:** `Authorization: Bearer <token>`
-
-**Request:**
-```json
-{ "booking_id": "BK20260512ABC123", "refund_notes": "Customer requested 48h before trip" }
-```
-
-**Response 200:** `{ "success": true }`
-
----
-
-### 11.5 Booking Endpoints
-
-#### `POST /api/bookings/create`
-Create a new booking.
-
-**Request:**
-```json
-{
-  "booking_type": "airport_taxi",
-  "user_name": "John Doe",
-  "user_email": "john@example.com",
-  "phone": "9876543210",
-  "passenger_count": 3,
-  "start_datetime": "2026-05-20T06:00:00Z",
-  "end_datetime": "2026-05-20T08:00:00Z",
-  "destination_id": "uuid-here",
-  "car_model": "Toyota Innova",
-  "amount_total": 1500
-}
-```
-
-**Response 201:**
-```json
-{ "success": true, "booking_id": "BK20260520ABC123" }
-```
-
-**Response 409:** Booking conflict (car unavailable for time window)
-
----
-
-#### `GET /api/bookings/user`
-Get all bookings for a specific user.  
-**Query:** `?email=user@example.com`  
-**Response 200:** `{ "bookings": [ { booking_id, booking_type, booking_status, start_datetime, amount_total, car_model } ] }`
-
----
-
-#### `GET /api/bookings/admin`
-Get all bookings (admin only).  
-**Headers:** `Authorization: Bearer <token>`  
-**Query (optional):** `?status=confirmed&limit=50&offset=0`  
-**Response 200:** `{ "bookings": [ ... ] }`
-
----
-
-#### `POST /api/bookings/assign-vehicle`
-Assign a vehicle and driver to a booking.  
-**Headers:** `Authorization: Bearer <token>`
-
-**Request:**
-```json
-{
-  "booking_id": "BK20260520ABC123",
-  "car_id": "uuid-car",
-  "driver_name": "Ram Singh",
-  "driver_phone": "9876543210",
-  "start_datetime": "2026-05-20T06:00:00Z",
-  "end_datetime": "2026-05-20T08:00:00Z"
-}
-```
-
-**Response 200:** `{ "success": true }`
-
----
-
-#### `PUT /api/bookings/update-status`
-Update the status of a booking.  
-**Headers:** `Authorization: Bearer <token>`
-
-**Request:**
-```json
-{ "booking_id": "BK20260520ABC123", "status": "completed" }
-```
-
-**Response 200:** `{ "success": true }`
-
----
-
-#### `POST /api/bookings/cancel-request`
-Submit a cancellation request (customer).
-
-**Request:**
-```json
-{ "booking_id": "BK20260520ABC123", "reason": "Change of plans" }
-```
-
-**Validation:** Trip must be more than 24 hours away.  
-**Response 200:** `{ "success": true }`  
-**Response 400:** `{ "error": "Cannot cancel within 24 hours of trip" }`
-
----
-
-### 11.6 Payment Endpoints
-
-#### `POST /api/payment/create-payment`
-Create a Razorpay order and initialize the payment record.
-
-**Request:**
-```json
-{ "bookingId": "BK20260520ABC123", "amount": 450, "currency": "INR", "paymentType": "partial" }
-```
-
-**Response 200:**
-```json
-{ "success": true, "orderId": "order_XXXXXXXXXXX", "amount": 45000, "currency": "INR" }
-```
-
-> `amount` in response is in paise (multiply by 100). Pass directly to Razorpay SDK.
-
----
-
-#### `POST /api/payment/verify`
-Verify Razorpay payment signature and confirm the booking.
-
-**Request:**
-```json
-{
-  "orderId": "order_XXXXXXXXXXX",
-  "paymentId": "pay_XXXXXXXXXXX",
-  "signature": "hmac-sha256-hash",
-  "bookingId": "BK20260520ABC123",
-  "amount": 450,
-  "paymentType": "partial",
-  "userEmail": "john@example.com",
-  "userName": "John Doe"
-}
-```
-
-**Response 200:**
-```json
-{ "success": true, "message": "Payment verified", "bookingId": "BK20260520ABC123", "invoiceNumber": "INV-20260520-001" }
-```
-
-**Response 400:** `{ "success": false, "error": "Invalid payment signature" }`
-
----
-
-#### `POST /api/payment/confirm-cash`
-Mark cash payment as collected (admin).  
-**Headers:** `Authorization: Bearer <token>`
-
-**Request:**
-```json
-{ "booking_id": "BK20260520ABC123", "collected_by": "Admin Name", "amount_collected": 1050 }
-```
-
-**Response 200:** `{ "success": true }`
-
----
-
-#### `GET /api/payment/get-payment`
-Get payment record for a booking.  
-**Query:** `?booking_id=BK20260520ABC123`  
-**Response 200:**
-```json
-{
-  "payment": {
-    "id": "uuid",
-    "booking_id": "BK20260520ABC123",
-    "payment_type": "partial",
-    "amount_total": 1500,
-    "amount_online_paid": 450,
-    "amount_cash_paid": 0,
-    "payment_status": "partial",
-    "txn_status": "paid",
-    "txn_id": "pay_XXXXXXXXXXX"
-  }
-}
-```
-
----
-
-### 11.7 Car / Vehicle Endpoints
-
-#### `GET /api/cars/available-models`
-Get available car models for a time window.  
-**Query:** `?booking_date=2026-05-20&start_time=06:00&end_time=08:00`
-
-**Response 200:**
-```json
-{
-  "models": [
-    {
-      "model_name": "Toyota Innova",
-      "class": "Premium",
-      "capacity": 6,
-      "per_km_charge": 25,
-      "per_hr_charge": 300,
-      "available_count": 2
+    class Payment {
+        +string id
+        +string booking_id
+        +string payment_type  "partial|full"
+        +number amount_total
+        +number amount_online_paid
+        +number amount_cash_paid
+        +string txn_status  "pending|success|failed"
+        +string txn_id
+        +string payment_status  "pending|partial|paid"
+        +Date cash_paid_at
+        +string cash_collected_by
+        +string refund_status  "none|pending|processed|failed"
+        +remainingCash() number
+        +isFullyPaid() boolean
     }
-  ]
-}
-```
-
----
-
-#### `GET /api/cars`
-Get all cars (admin).  
-**Response 200:** `{ "cars": [ { id, model_name, class, capacity, number_plate, is_active, per_km_charge, per_hr_charge } ] }`
-
----
-
-#### `POST /api/cars`
-Add a new car.  
-**Headers:** `Authorization: Bearer <token>`
-
-**Request:**
-```json
-{
-  "model_name": "Maruti Ertiga",
-  "class": "Standard",
-  "capacity": 6,
-  "number_plate": "AR-01-AB-1234",
-  "per_km_charge": 18,
-  "per_hr_charge": 200
-}
-```
-
-**Response 201:** `{ "success": true, "car": { ... } }`
-
----
-
-#### `PUT /api/cars/[id]`
-Update a car record.  
-**Headers:** `Authorization: Bearer <token>`  
-**Response 200:** `{ "success": true }`
-
----
-
-#### `DELETE /api/cars/[id]`
-Remove a car from inventory.  
-**Headers:** `Authorization: Bearer <token>`  
-**Response 200:** `{ "success": true }`
-
----
-
-### 11.8 Tour Endpoints
-
-#### `GET /api/tours`
-Get all active tour packages.  
-**Response 200:**
-```json
-{
-  "tours": [
-    {
-      "id": "uuid",
-      "name": "Tawang Monastery Tour",
-      "description": "...",
-      "price": 8000,
-      "duration_hours": 48,
-      "max_passengers": 6,
-      "car_model": "Toyota Innova",
-      "image_url": "https://...",
-      "image_urls": ["https://..."],
-      "highlights": ["Tawang Monastery", "Madhuri Lake"],
-      "is_active": true
+    class PaymentRecord {
+        +string id
+        +string payment_id
+        +string booking_id
+        +string txn_type  "online|cash"
+        +number amount
+        +string currency
+        +string status
+        +string razorpay_order_id
+        +string invoice_number
     }
-  ]
-}
-```
-
----
-
-#### `GET /api/tours/[id]`
-Get a specific tour package.  
-**Response 200:** `{ "tour": { ... } }`
-
----
-
-#### `POST /api/tours`
-Create a tour package.  
-**Headers:** `Authorization: Bearer <token>`
-
-**Request:**
-```json
-{
-  "name": "Ziro Valley Tour",
-  "description": "Experience the pristine Ziro Valley...",
-  "price": 5000,
-  "duration_hours": 24,
-  "max_passengers": 4,
-  "car_model": "Toyota Innova",
-  "itinerary": "Day 1: ...",
-  "highlights": ["Ziro Valley", "Apatani Culture", "Pine Forests"]
-}
-```
-
-**Response 201:** `{ "success": true, "tour": { ... } }`
-
----
-
-#### `PUT /api/tours/[id]`
-Update a tour package.  
-**Headers:** `Authorization: Bearer <token>`  
-**Response 200:** `{ "success": true }`
-
----
-
-#### `POST /api/tours/upload-image`
-Upload a tour image.  
-**Headers:** `Authorization: Bearer <token>`  
-**Body:** `multipart/form-data` with image file  
-**Response 200:** `{ "success": true, "url": "https://..." }`
-
----
-
-### 11.9 Review Endpoints
-
-#### `GET /api/reviews`
-Get reviews for a tour or booking.  
-**Query:** `?reviewable_type=tour&reviewable_id=uuid`
-
-**Response 200:**
-```json
-{
-  "reviews": [
-    {
-      "id": "uuid",
-      "user_name": "John Doe",
-      "rating": 5,
-      "title": "Amazing experience!",
-      "comment": "Great tour, very professional driver.",
-      "created_at": "2026-05-10T14:00:00Z"
+    class VehicleAssignment {
+        +string id
+        +string booking_id
+        +string car_id
+        +Date start_datetime
+        +Date end_datetime
+        +Date assigned_at
+        +Date created_at
     }
-  ],
-  "stats": {
-    "average_rating": 4.7,
-    "total_reviews": 12,
-    "breakdown": { "5": 9, "4": 2, "3": 1, "2": 0, "1": 0 }
-  }
-}
+    class Car {
+        +string id
+        +string model_name
+        +string class
+        +string number_plate
+        +number per_km_charge
+        +number per_hr_charge
+        +int capacity
+        +string driver_name
+        +string driver_phone
+        +string driver_email
+        +string driver_license_number
+        +Date driver_license_expiry
+        +boolean driver_verified
+        +boolean is_active
+    }
+    class TourPackage {
+        +string id
+        +string name
+        +string description
+        +number price
+        +int duration_hours
+        +int max_passengers
+        +string car_model
+        +string[] highlights
+        +string[] image_urls
+        +boolean is_active
+        +ratingStats() RatingStats
+    }
+    class Destination {
+        +string id
+        +string name
+        +string description
+        +number distance_km
+        +int estimated_duration_minutes
+        +boolean is_active
+    }
+    class Review {
+        +string id
+        +string reviewable_type  "tour|taxi_booking"
+        +string reviewable_id
+        +string user_email
+        +string user_name
+        +int rating  "1..5"
+        +string title
+        +string comment
+        +boolean is_visible
+    }
+    class RatingStats {
+        +number avg
+        +number count
+        +Map~1..5,number~ distribution
+    }
+
+    Booking "1" --> "0..1" Payment
+    Payment "1" --> "0..*" PaymentRecord
+    Booking "1" --> "0..*" VehicleAssignment
+    Car "1" --> "0..*" VehicleAssignment
+    Destination "1" --> "0..*" Booking
+    TourPackage "1" --> "0..*" Booking
+    TourPackage "1" --> "0..*" Review
+    Booking "1" --> "0..*" Review
+    TourPackage --> RatingStats
+```
+
+### 10.3 Sequence — Customer Booking & Payment
+
+```mermaid
+sequenceDiagram
+    actor C as Customer
+    participant B as Browser
+    participant API as Next.js API
+    participant RZP as Razorpay
+    participant DB as Supabase
+    participant M as Resend
+
+    C->>B: Pick service, fill wizard steps
+    B->>API: GET /api/cars/available-models?date&start&end
+    API->>DB: SELECT cars, vehicle_assignments (overlap)
+    DB-->>API: free models + counts
+    API-->>B: { models }
+    C->>B: Choose model, choose payment mode
+    B->>API: POST /api/bookings/create
+    API->>DB: INSERT booking (status=pending)
+    DB-->>API: booking_id
+    API-->>B: { booking_id }
+    B->>API: POST /api/payment/create-order { amount, bookingId }
+    API->>RZP: orders.create(amount*100, INR)
+    RZP-->>API: { orderId }
+    API->>DB: INSERT/UPSERT payments (txn_status=pending)
+    API-->>B: { orderId }
+    B->>RZP: Open checkout (key, amount, order_id)
+    Note over B,RZP: Customer completes payment
+    RZP-->>B: { orderId, paymentId, signature }
+    B->>API: POST /api/payment/verify
+    API->>API: HMAC-SHA256 verify(orderId|paymentId, secret)
+    API->>DB: UPDATE payments (success, payment_status)
+    API->>DB: UPDATE bookings (confirmed)
+    API->>DB: INSERT payment_records (+invoice_number)
+    API->>M: sendBookingConfirmation()
+    M-->>C: Confirmation email
+    API-->>B: { success, invoiceNumber }
+    B-->>C: Booking Confirmed page (+ download invoice)
+```
+
+### 10.4 Sequence — Admin Login & Vehicle Assignment
+
+```mermaid
+sequenceDiagram
+    actor A as Admin
+    participant B as Browser
+    participant API as /api/admin & /api/bookings
+    participant DB as Supabase
+    participant M as Resend
+
+    A->>B: Enter email & password
+    B->>API: POST /api/admin/login
+    API->>DB: SELECT * FROM admins WHERE email=? AND is_active
+    DB-->>API: admin row
+    API->>API: bcrypt.compare(password, password_hash)
+    API->>API: jwt.sign({id,email,role}, JWT_SECRET, 24h)
+    API->>DB: UPDATE admins SET last_login=now()
+    API-->>B: { token, admin }
+    B->>B: localStorage.adminToken = token
+
+    A->>B: Open Bookings tab
+    B->>API: GET /api/bookings/admin  (Authorization: Bearer token)
+    API->>API: jwt.verify(token, JWT_SECRET)
+    API->>DB: SELECT * FROM bookings
+    DB-->>API: bookings[]
+    API-->>B: { bookings }
+
+    A->>B: Assign car + driver to a booking
+    B->>API: POST /api/bookings/assign-vehicle (Bearer token)
+    API->>API: jwt.verify(...)  + (if conflict control ON) overlap check
+    API->>DB: INSERT vehicle_assignments
+    API->>DB: UPDATE bookings (status=confirmed)
+    API->>M: sendDriverNotification()
+    M-->>A: Driver email sent
+    API-->>B: { success }
+```
+
+### 10.5 State Machine — Booking Status
+
+```mermaid
+stateDiagram-v2
+    [*] --> pending : booking created (unpaid)
+    pending --> confirmed : Razorpay payment verified
+    pending --> cancelled : customer cancels (>24h before trip)
+    pending --> [*] : auto-deleted by cron (>24h unpaid)
+    confirmed --> completed : admin marks trip done
+    confirmed --> cancelled : admin processes cancellation
+    completed --> [*]
+    cancelled --> [*]
+
+    note right of pending
+        booking_id assigned
+        no successful payment yet
+        eligible for cleanup cron
+    end note
+    note right of confirmed
+        payment verified
+        invoice_number generated
+        confirmation email sent
+        vehicle/driver assigned by admin
+    end note
+```
+
+### 10.6 State Machine — Payment Status
+
+```mermaid
+stateDiagram-v2
+    [*] --> pending : Razorpay order created
+    pending --> partial : 30% paid online (partial mode)
+    pending --> paid : 100% paid online (full mode)
+    partial --> paid : admin confirms 70% cash collected
+    paid --> [*]
+
+    state refund_status {
+        [*] --> none
+        none --> pending : refund requested
+        pending --> processed : refund completed
+        pending --> failed : refund failed
+    }
+
+    note right of partial
+        amount_online_paid = 30%
+        amount_cash_paid = 0 (until collected)
+        balance due on the trip
+    end note
+```
+
+### 10.7 Component Diagram
+
+```mermaid
+flowchart TB
+    subgraph PagesLayer["Pages"]
+        Home["/"]
+        BookTaxi["/book-taxi"]
+        Tours["/tours · /tours/[id]/book · /tours/[id]/reviews"]
+        Payment["/payment"]
+        Bookings["/bookings · /booking-confirmed"]
+        AdminP["/admin · /admin/docs"]
+        SEO["SEO pages"]
+        AuthPages["/login · /signup · /change · /auth/verify · /admin-login"]
+    end
+    subgraph ComponentsLayer["Components"]
+        Header
+        Footer
+        ReviewForm
+        ReviewCard
+        Loader["Loader / AppSplashLoader"]
+        ProtectedAdminPage
+        PaymentTestAlert
+    end
+    subgraph ContextLayer["Context / State"]
+        AuthCtx["AuthContext (Supabase)"]
+        AdminCtx["AdminContext (JWT)"]
+        Z["Zustand store"]
+    end
+    subgraph APILayer["API Routes"]
+        A1["/api/admin/*"]
+        A2["/api/auth/*"]
+        A3["/api/bookings/*"]
+        A4["/api/cars/*"]
+        A5["/api/destinations/*"]
+        A6["/api/payment/*"]
+        A7["/api/tours/*"]
+        A8["/api/reviews/*"]
+    end
+    subgraph LibLayer["Lib"]
+        L1["db.ts · database.ts"]
+        L2["payment-db.ts · payment.ts · payment-utils.ts"]
+        L3["utils.ts · validation.ts"]
+        L4["notifications.ts · resend-notifications.ts"]
+        L5["invoice.ts (client PDF)"]
+        L6["supabase.ts (anon) · supabase-admin.ts (service role)"]
+    end
+    subgraph Ext["External"]
+        SB[("Supabase")]
+        RZP["Razorpay"]
+        RS["Resend"]
+    end
+
+    PagesLayer --> ComponentsLayer
+    PagesLayer --> ContextLayer
+    PagesLayer --> APILayer
+    PagesLayer --> L5
+    APILayer --> LibLayer
+    LibLayer --> Ext
 ```
 
 ---
 
-#### `POST /api/reviews`
-Submit a review.
+## 11. Feature Reference
 
-**Request:**
-```json
-{
-  "reviewable_type": "tour",
-  "reviewable_id": "uuid",
-  "user_email": "john@example.com",
-  "user_name": "John Doe",
-  "rating": 5,
-  "title": "Excellent!",
-  "comment": "Highly recommended tour."
-}
+### 11.1 Airport Taxi Booking
+
+- **Where:** `/book-taxi` (mode = airport).
+- **Flow:** `contact → route → schedule → car → confirm`.
+- **Direction:** always **FROM Hollongi Airport (Donyi Polo Airport)** TO a chosen destination. The source is fixed; customers pick their destination from the `destinations` list.
+- **Inputs:** name, phone, email (locked if logged in); destination from `destinations` (carries `distance_km`, `estimated_duration_minutes`, `description`); date; time; passenger count.
+- **Availability:** `GET /api/cars/available-models` with the computed `start`/`end`; only models with a free unit appear, each with `available_count`.
+- **Pricing:** `destination.distance_km × car.per_km_charge`. No separate pricing table — the rate is stored on the `cars` row per car class. The confirm step shows the fare breakdown and payment split.
+- **Constraints:** `passenger_count ≤ car.capacity`; conflict control (if ON) blocks overlapping commitments.
+- **Output:** a `pending` booking → `/payment` (data passed via `sessionStorage.bookingData`).
+
+### 11.2 Hourly Taxi Booking
+
+- **Where:** `/book-taxi` (mode = hourly), and SEO entry `/hourly-taxi-itanagar`.
+- **Flow:** `contact → details → schedule → car → confirm`.
+- **Inputs:** name/phone/email; passenger count; date; start time; duration as **days + hours** (helper `formatDuration` renders e.g. `1d 4h`).
+- **Pricing:** `no_of_hours × car.per_hr_charge`. Rate is stored on the `cars` row — no separate hourly-rates table.
+- **Availability:** same overlap check over the full `[start, start+duration]` window.
+- **Output:** `pending` booking → `/payment`.
+
+### 11.3 Tour Package Booking
+
+- **Where:** `/tours` (catalogue), `/tours/[id]/book`, `/tours/[id]/reviews`; category landings `/arunachal-tours`, `/itanagar-tours`.
+- **Tour detail page:** name, description, `arrival_time`, `duration_hours`, `price`, `max_passengers`, `car_model`, `itinerary`, `highlights[]`, `image_url` + `image_urls[]` gallery, average rating & reviews (`fetchAllTourRatingStats`, `lib/reviews.ts`).
+- **Booking:** select date & passengers (≤ `max_passengers`); availability is checked (tour vehicles are linked into the same conflict system); price is the fixed tour `price`.
+- **Output:** `pending` booking with `tour_package_id` set → `/payment` (data via `sessionStorage.tourBookingData`, `type=tour`).
+
+### 11.4 Payment System
+
+- **Modes:** `partial` (30% online + 70% cash) and `full` (100% online).
+- **Math:** advance `= round(total × 0.30 × 100)/100`; cash `= total − advance` (see `lib/payment-utils.ts`).
+- **Gateway:** Razorpay hosted checkout; merchant name shown as **"Rina's Tours and Travels"**; amount in paise.
+- **Server flow:** `POST /api/payment/create-order` → Razorpay order + `payments` row (`txn_status='pending'`); `POST /api/payment/verify` → HMAC check → `payments` (`success` + `payment_status`), `bookings` (`confirmed`), `payment_records` (+`invoice_number`), confirmation email.
+- **Cash reconciliation:** admin → `POST /api/payment/confirm-cash` → sets `amount_cash_paid`, `cash_paid_at`, `cash_collected_by`.
+- **Statuses:** `payments.payment_status ∈ {pending, partial, paid}`; `txn_status ∈ {pending, success, failed}`; `refund_status ∈ {none, pending, processed, failed}` (refunds are processed manually by an admin).
+- **Helper library:** `lib/payment-db.ts` — `calculatePaymentAmounts`, `createPaymentInDB`, `getPaymentByBookingId`, `updatePaymentStatus`, `createPaymentRecord`, `getPaymentRecordsByPaymentId`, `markCashPaymentCollected`.
+- **Test mode:** Razorpay test card `4111 1111 1111 1111` (any future expiry, any CVV); UPI `success@razorpay` / `failure@razorpay`.
+
+### 11.5 Invoice System
+
+- Client-side PDF (`lib/invoice.ts`, jsPDF + html2canvas) — no server round-trip.
+- Contents: company header, invoice number, date, booking ID, customer block, service block, payment breakdown (online paid / cash due / total), footer.
+- Available from Booking Confirmed and My Bookings; the invoice number originates from `payment_records.invoice_number` written at verification time.
+
+### 11.6 Review System
+
+- **Eligibility:** authenticated users; one review per `(user_email, reviewable_type, reviewable_id)` — DB unique index.
+- **Data:** `reviewable_type ∈ {tour, taxi_booking}`, `rating` 1–5 (DB `CHECK`), optional `title`/`comment`, `is_visible` flag.
+- **Display:** `components/ReviewCard.tsx` on tour pages; `components/ReviewForm.tsx` for submission; aggregate stats `{ avg, count, distribution{5..1} }` via `lib/reviews.ts` / `fetchAllTourRatingStats`.
+- **Moderation:** admins toggle `is_visible`.
+- **API:** `GET /api/reviews?reviewable_type=&reviewable_id=`, `POST /api/reviews`.
+
+### 11.7 Email Notifications
+
+- **Provider:** Resend (`lib/resend-notifications.ts`); SMTP via Nodemailer as fallback (`lib/notifications.ts`).
+- **Events:** booking confirmation (on payment verify) → customer; vehicle assignment / reassignment → driver; cancellation processed → customer.
+- **Note:** SMS & WhatsApp are placeholders (console-logged) — see TODOs.
+
+### 11.8 Conflict Control System
+
+- **Toggle:** `app_settings.conflict_control_enabled` (default ON).
+- **ON:** booking creation and vehicle assignment reject overlaps (`existing.start < new.end AND existing.end > new.start`).
+- **OFF:** manual management; the Misc-tab scanner (`GET /api/admin/conflicts`) lists **assignment conflicts** (same car, overlapping windows) and **model conflicts** (model over-subscribed in a window).
+- **UX:** turning the toggle OFF shows a confirmation warning first.
+
+### 11.9 SEO & Marketing Pages
+
+| Route | Targets search intent |
+|-------|-----------------------|
+| `/hollongi-airport-taxi` | "Hollongi airport taxi" |
+| `/donyi-polo-airport-taxi` | "Donyi Polo airport taxi" |
+| `/itanagar-airport-taxi` | "Itanagar airport taxi" (legacy `/airport-taxi-itanagar` → 301 here) |
+| `/hourly-taxi-itanagar` | "hourly taxi Itanagar" |
+| `/arunachal-tours` | "Arunachal Pradesh tours" |
+| `/itanagar-tours` | "Itanagar tours" |
+| `/faq`, `/terms`, `/privacy` | informational / trust pages |
+
+All use semantic HTML and the Next.js Metadata API; tour images may be arbitrary external URLs (allowed in `next.config.js`).
+
+---
+
+## 12. Admin Dashboard Reference
+
+`app/admin/page.tsx` — wrapped in `ProtectedAdminPage`; tab state in `activeTab`; dark mode in `darkMode` (`localStorage.adminDarkMode`), applied via `data-admin-theme`. Tabs: **overview, bookings, car-management, destinations, tours, analytics, misc**. The Bookings tab badge shows the count of pending cancellations.
+
+### 12.1 Overview Tab (`renderOverview`)
+Stat cards: **Total Bookings**, **Total Revenue** (`Rs. {total}`), **Active Bookings**, **Completed Today**, **Pending Bookings** (filtered), **Cancelled Bookings** (filtered). Below: **Recent Bookings** list — each row links to a detail modal; desktop shows a 6-column grid (Booking ID, Customer, Type, Start Date, Amount, Status), mobile a stacked card.
+
+### 12.2 Bookings Tab (`renderBookings`)
+Full booking list with filters and the pending-cancellation badge. Per-booking actions: open details; **assign vehicle & driver** (`/api/bookings/assign-vehicle`, `/update-assignment`, `/get-assignments`); **update status** (`/api/bookings/update-status`); **confirm cash** (`/api/payment/confirm-cash`); **process cancellation** (`/api/admin/process-cancellation`). Hard-delete of a booking is also supported. Statuses revert to `confirmed` after a marked state is undone where applicable.
+
+### 12.3 Cars Tab (`renderCarManagement`)
+CRUD over `cars` (`GET/POST /api/cars`, `GET/PUT/DELETE /api/cars/[id]`): `model_name`, `class`, `capacity`, `number_plate`, `per_km_charge`, `per_hr_charge`, `is_active`. Adding a car runs a strict validation check (e.g. plate uniqueness, sane numbers). Active/inactive toggle controls availability listings.
+
+### 12.4 Destinations Tab (`renderDestinations`)
+CRUD over `destinations` (`GET/POST /api/destinations`, `GET/PUT/DELETE /api/destinations/[id]`): `name`, `distance_km`, `estimated_duration_minutes`, `description`, `is_active`. Distances are measured FROM Hollongi Airport. Distance and duration feed airport-fare calculation and ETAs shown to customers.
+
+### 12.5 Tours Tab (`renderTours`)
+CRUD over `tour_packages` (`GET/POST /api/tours`, `GET/PUT /api/tours/[id]`, `POST /api/tours/[id]/availability`, `POST /api/tours/upload-image`): `name`, `description`, `arrival_time`, `duration_hours`, `price`, `max_passengers`, `car_model`, `itinerary`, `highlights[]`, `image_url`, `image_urls[]` (multi-image), `is_active`. Tour vehicles are linked into the conflict system.
+
+### 12.6 Analytics Tab (`renderAnalytics`)
+- **Key metrics:** Total Revenue, Completed Bookings, Avg Booking Value, Fleet Utilization %.
+- **Status overview:** booking status breakdown (pending / completed / cancelled / total), fleet info (total cars / destinations / active tours / total services), revenue breakdown (online collected / cash collected / total collected).
+- **Weekly booking trend:** 7-day bar chart of bookings + revenue per day (`analytics.bookingTrend`).
+- **Top destinations** (`analytics.topDestinations`) and **Top tours** (`analytics.topTours`, with revenue).
+Backing data is computed into an `analytics` object: `totalRevenue`, `completedBookings`, `averageBookingValue`, `fleetUtilization`, `pendingBookings`, `cancelledBookings`, `totalPaid`, `totalCashCollected`, `bookingTrend[]`, `topDestinations[]`, `topTours[]`.
+
+### 12.7 Misc Tab (`renderMisc`)
+- **Settings:** dark-mode toggle; "Admin Panel Version v2.0"; "Last Updated" (today).
+- **Documentation:** tag chips + **"Go to Docs"** button → `/admin/docs` (this document, rendered with live Mermaid diagrams).
+- **Booking Conflict Control:** ON/OFF toggle (warns before disabling); conflict scanner (`GET /api/admin/conflicts`) listing assignment conflicts and model conflicts.
+- **Pending Booking Management:** auto-cleanup ON/OFF; cleanup window 1–30 days; "run cleanup now"; current pending count.
+- **Your Profile:** view/edit name & email; optional password change (`PUT /api/admin/update-profile`).
+- **Admin Management:** add a new admin (`POST /api/admin/create-admin`).
+
+### 12.8 Admin Authentication Quick Reference
+- **Login page:** `/admin-login`. **Default credentials (change immediately):** `admin@rinastoursandtravels.in` / *(set at setup)*.
+- **Architecture:** bcrypt hash → JWT (24 h) → `localStorage.adminToken`. Required env var: `JWT_SECRET` (generate with `openssl rand -base64 32`).
+- **Key files:** `context/AdminContext.tsx`, `components/ProtectedAdminPage.tsx`, `scripts/generate-admin-hash.js`, `sql/admin_schema.sql`.
+- **Admin SQL ops:**
+```sql
+-- add admin (hash first: node scripts/generate-admin-hash.js "pass")
+INSERT INTO public.admins (email, password_hash, full_name, role, is_active)
+VALUES ('admin@yourdomain.com', '$2b$10$...hash...', 'Admin Name', 'admin', true);
+-- change password
+UPDATE public.admins SET password_hash = '$2b$10$...newhash...' WHERE email = 'admin@yourdomain.com';
+-- disable
+UPDATE public.admins SET is_active = false WHERE email = 'admin@yourdomain.com';
+-- login history
+SELECT email, full_name, last_login, is_active FROM public.admins ORDER BY last_login DESC;
 ```
-
-**Response 201:** `{ "success": true }`  
-**Response 409:** `{ "error": "You have already reviewed this item" }`
+- Clear token in browser console: `localStorage.removeItem('adminToken')`.
 
 ---
 
-### 11.10 Destination Endpoints
+## 13. API Documentation
 
-#### `GET /api/destinations`
-Get all active destinations.  
-**Response 200:** `{ "destinations": [ { id, name, region } ] }`
+**Base URL:** `http://localhost:3000` (dev) / `https://www.rinastoursandtravels.in` (prod).
+**Auth:** customer routes rely on the Supabase session cookie; admin routes require `Authorization: Bearer <jwt>` (from `POST /api/admin/login`, 24 h expiry).
+**Envelope:** `{ success: true, ... }` or `{ success: false, error }`; some reads return a named collection.
+
+### 13.1 Admin
+
+| Method & Path | Auth | Body / Query | Returns |
+|---------------|------|--------------|---------|
+| `POST /api/admin/login` | — | `{ email, password }` | `{ success, token, admin:{ email, fullName, role } }` · 401 invalid · 403 inactive |
+| `POST /api/admin/logout` | Bearer | — | `{ success }` |
+| `POST /api/admin/verify-session` | Bearer | — | `{ valid, admin }` · 401 if invalid/expired |
+| `POST /api/admin/create-admin` | Bearer | `{ email, password, fullName }` | `{ success }` |
+| `PUT /api/admin/update-profile` | Bearer | `{ full_name?, email?, currentPassword?, newPassword? }` | `{ success }` |
+| `GET /api/admin/settings` | Bearer | — | `{ conflict_control_enabled, ... }` |
+| `POST /api/admin/settings` | Bearer | `{ key, value }` | `{ success }` |
+| `GET /api/admin/conflicts` | Bearer | — | `{ assignment_conflicts:[], model_conflicts:[], total }` |
+| `POST /api/admin/process-cancellation` | Bearer | `{ booking_id, refund_notes? }` | `{ success }` |
+| `POST /api/admin/cleanup-pending` | Bearer / cron | — | `{ success, deleted }` — invoked daily by Vercel Cron |
+
+### 13.2 Auth
+
+| Method & Path | Auth | Body / Query | Returns |
+|---------------|------|--------------|---------|
+| `GET /auth/callback` | — | `?code=&redirect=` | server-side route: on `code` → redirects to `/auth/verify?code=&redirect=`; on error → redirects to `/auth/verify?error=&error_description=`; shared entry point for both email verification links and Google OAuth callback |
+| `POST /api/auth/exchange-code` | — | `{ code }` | server-side code exchange (no PKCE verifier required, enabling cross-device verification); returns `{ success, session, user }` on success; used by `/auth/verify` for both email verification and Google OAuth |
+
+### 13.3 Bookings
+
+| Method & Path | Auth | Body / Query | Returns |
+|---------------|------|--------------|---------|
+| `POST /api/bookings/create` | session | `{ booking_type, user_name, user_email, phone, passenger_count, start_datetime, end_datetime, destination_id?, tour_package_id?, no_of_hours?, car_model, amount_total }` | `{ success, booking_id }` · 409 conflict |
+| `GET /api/bookings/user` | session | `?email=` | `{ bookings:[...] }` |
+| `GET /api/bookings/admin` | Bearer | `?status=&limit=&offset=` | `{ bookings:[...] }` |
+| `POST /api/bookings/assign-vehicle` | Bearer | `{ booking_id, car_id, driver_name, driver_phone, start_datetime, end_datetime }` | `{ success }` |
+| `PUT /api/bookings/update-assignment` | Bearer | `{ assignment_id, ... }` | `{ success }` |
+| `GET /api/bookings/get-assignments` | Bearer | `?booking_id=` | `{ assignments:[...] }` |
+| `GET /api/bookings/user-assignments` | session | `?email=` | `{ assignments:[...] }` |
+| `PUT /api/bookings/update-status` | Bearer | `{ booking_id, status }` | `{ success }` |
+| `POST /api/bookings/resume` | session | `{ booking_id }` | resume an incomplete booking |
+| `POST /api/bookings/cancel-request` | session | `{ booking_id, reason }` | `{ success }` · 400 if ≤ 24 h before trip |
+
+### 13.4 Payment
+
+| Method & Path | Auth | Body / Query | Returns |
+|---------------|------|--------------|---------|
+| `POST /api/payment/create-order` | session | `{ amount, bookingId, currency:'INR' }` | `{ orderId }` (amount echoed in paise) |
+| `POST /api/payment/create-payment` | session | `{ bookingId, amount, currency, paymentType }` | `{ success, orderId, amount, currency }` |
+| `POST /api/payment/verify` | session | `{ orderId, paymentId, signature, bookingId, amount, paymentType, userEmail, userName, ... }` | `{ success, bookingId, invoiceNumber }` · 400 invalid signature |
+| `POST /api/payment/confirm-cash` | Bearer | `{ booking_id, collected_by, amount_collected }` | `{ success }` |
+| `GET /api/payment/get-payment` | session/Bearer | `?booking_id=` | `{ payment:{...} }` |
+| `GET /api/payment/get-all` | Bearer | `?limit=&offset=` | `{ payments:[...] }` |
+
+### 13.5 Cars / Vehicles
+
+| Method & Path | Auth | Body / Query | Returns |
+|---------------|------|--------------|---------|
+| `GET /api/cars/available-models` | — | `?booking_date=&start_time=&end_time=` | `{ models:[{ model_name, class, capacity, per_km_charge, per_hr_charge, available_count }] }` |
+| `GET /api/cars` | Bearer | — | `{ cars:[...] }` |
+| `POST /api/cars` | Bearer | `{ model_name, class, capacity, number_plate, per_km_charge, per_hr_charge }` | `{ success, car }` |
+| `GET /api/cars/[id]` | Bearer | — | `{ car }` |
+| `PUT /api/cars/[id]` | Bearer | partial car | `{ success }` |
+| `DELETE /api/cars/[id]` | Bearer | — | `{ success }` |
+
+### 13.6 Tours
+
+| Method & Path | Auth | Body / Query | Returns |
+|---------------|------|--------------|---------|
+| `GET /api/tours` | — | — | `{ tours:[...] }` |
+| `GET /api/tours/[id]` | — | — | `{ tour }` |
+| `POST /api/tours` | Bearer | tour fields | `{ success, tour }` |
+| `PUT /api/tours/[id]` | Bearer | partial tour | `{ success }` |
+| `POST /api/tours/[id]/availability` | — | `{ date, passengers }` | `{ available, ... }` |
+| `POST /api/tours/upload-image` | Bearer | `multipart/form-data` | `{ success, url }` |
+
+### 13.7 Destinations
+
+| Method & Path | Auth | Body | Returns |
+|---------------|------|------|---------|
+| `GET /api/destinations` | — | — | `{ destinations:[...] }` |
+| `POST /api/destinations` | Bearer | `{ name, distance_km, estimated_duration_minutes, description? }` | `{ success, destination }` |
+| `GET /api/destinations/[id]` | — | — | `{ destination }` |
+| `PUT /api/destinations/[id]` | Bearer | partial | `{ success }` |
+| `DELETE /api/destinations/[id]` | Bearer | — | `{ success }` |
+
+### 13.8 Reviews
+
+| Method & Path | Auth | Body / Query | Returns |
+|---------------|------|--------------|---------|
+| `GET /api/reviews` | — | `?reviewable_type=&reviewable_id=` | `{ reviews:[...], stats:{ avg, count, distribution } }` |
+| `POST /api/reviews` | session | `{ reviewable_type, reviewable_id, user_email, user_name, rating, title?, comment? }` | `{ success }` · 409 if already reviewed |
+
+### 13.9 Misc
+
+| Method & Path | Auth | Returns |
+|---------------|------|---------|
+| `GET /api/changelog` | — | parsed changelog entries |
+| `GET /api/admin/docs` | Bearer (admin page) | `{ content }` — raw markdown of this document, used by `/admin/docs` |
+| `POST /api/test-email` | dev | sends a test email |
 
 ---
 
-#### `POST /api/destinations`
-Create a destination.  
-**Headers:** `Authorization: Bearer <token>`
+## 14. Development Documentation
 
-**Request:**
-```json
-{ "name": "Hollongi Airport", "region": "Papum Pare" }
-```
+### 14.1 Prerequisites
+Node.js 18+, npm 9+, a Supabase project, a Razorpay account (test + live keys), a Resend account (or SMTP credentials).
 
-**Response 201:** `{ "success": true, "destination": { ... } }`
-
----
-
-#### `PUT /api/destinations/[id]` / `DELETE /api/destinations/[id]`
-Update or delete a destination.  
-**Headers:** `Authorization: Bearer <token>`  
-**Response 200:** `{ "success": true }`
-
----
-
-## 12. Development Documentation
-
-### 12.1 Prerequisites
-
-- Node.js 18+
-- npm 9+
-- Supabase account and project
-- Razorpay account (test and live keys)
-- Resend account (or SMTP credentials)
-
-### 12.2 Local Setup
-
+### 14.2 Local Setup
 ```bash
 git clone <repo-url>
-cd TaxiHollongi
+cd TaxiHollongi        # repo folder name
 npm install
-cp .env.example .env.local
-# Fill all variables in .env.local
-npm run dev
-# → http://localhost:3000
+cp .env.example .env.local        # fill in all values
+npm run dev                       # http://localhost:3000
 ```
 
-### 12.3 Environment Variables
+### 14.3 Environment Variables
 
 | Variable | Required | Exposure | Description |
 |----------|----------|----------|-------------|
-| `NEXT_PUBLIC_SUPABASE_URL` | Yes | Public | Supabase project URL |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Yes | Public | Supabase anonymous key |
-| `SUPABASE_SERVICE_ROLE_KEY` | Yes | **Server only** | Supabase service role key (bypasses RLS) |
-| `NEXT_PUBLIC_RAZORPAY_KEY_ID` | Yes | Public | Razorpay publishable key |
-| `RAZORPAY_KEY_SECRET` | Yes | **Server only** | Razorpay secret key |
-| `JWT_SECRET` | Yes | **Server only** | Secret for admin JWT signing |
-| `RESEND_API_KEY` | Yes | **Server only** | Resend email API key |
-| `RESEND_FROM_EMAIL` | Yes | **Server only** | Sender email address |
-| `ADMIN_EMAIL` | Yes | **Server only** | Primary admin email address |
-| `NEXT_PUBLIC_APP_URL` | Yes | Public | Full production URL (e.g., `https://taxihollongi.com`) |
-| `NODE_ENV` | Auto | — | Set by Next.js (`development` / `production`) |
-| `SMTP_HOST` | No | Server only | SMTP host (fallback email) |
-| `SMTP_PORT` | No | Server only | SMTP port |
-| `SMTP_USER` | No | Server only | SMTP username |
-| `SMTP_PASS` | No | Server only | SMTP password |
+| `NEXT_PUBLIC_SUPABASE_URL` | yes | public | Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | yes | public | Supabase anon key |
+| `SUPABASE_SERVICE_ROLE_KEY` | yes | **server only** | Supabase service-role key (bypasses RLS) |
+| `NEXT_PUBLIC_RAZORPAY_KEY_ID` | yes | public | Razorpay publishable key (`rzp_test_…` / `rzp_live_…`) |
+| `RAZORPAY_KEY_SECRET` | yes | **server only** | Razorpay secret (HMAC verification) |
+| `JWT_SECRET` | yes | **server only** | Admin JWT signing secret |
+| `RESEND_API_KEY` | yes | **server only** | Resend API key |
+| `RESEND_FROM_EMAIL` | yes | **server only** | Verified sender address |
+| `ADMIN_EMAIL` | yes | **server only** | Primary admin / ops contact email |
+| `NEXT_PUBLIC_APP_URL` | yes | public | Full app URL (used in emails, links) |
+| `NODE_ENV` | auto | — | `development` / `production` |
+| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` | no | server only | SMTP fallback for email |
 
-> Variables marked **Server only** must NEVER appear in `NEXT_PUBLIC_*` names.
+> Anything that must stay secret must **not** be named `NEXT_PUBLIC_*`. `next.config.js` re-exports only the three `NEXT_PUBLIC_*` values used in the browser.
 
-### 12.4 Available Commands
-
+### 14.4 Commands
 ```bash
-npm run dev        # Start development server (localhost:3000)
-npm run build      # Production build (also generates changelog)
-npm start          # Start production server
-npm run lint       # ESLint check
+npm run dev      # dev server (localhost:3000)
+npm run build    # production build (also regenerates changelog from git log)
+npm start        # serve the production build
+npm run lint     # ESLint
 ```
 
-### 12.5 Project Structure
+### 14.5 Project Structure
 
 ```
-TaxiHollongi/
-├── app/
-│   ├── api/
-│   │   ├── admin/          # login, logout, verify-session, create-admin,
-│   │   │                   # settings, conflicts, process-cancellation, cleanup-pending
-│   │   ├── auth/           # exchange-code
-│   │   ├── bookings/       # create, user, admin, assign-vehicle, update-assignment,
-│   │   │                   # get-assignments, user-assignments, update-status, resume, cancel-request
-│   │   ├── cars/           # [id], available-models
-│   │   ├── destinations/   # [id]
-│   │   ├── payment/        # create-payment, create-order, verify, confirm-cash,
-│   │   │                   # get-payment, get-all
-│   │   ├── reviews/
-│   │   ├── tours/          # [id], [id]/availability, upload-image
-│   │   ├── changelog/
-│   │   └── test-email/
-│   ├── admin/              # Admin dashboard (protected)
-│   ├── book-taxi/
-│   ├── booking-confirmed/
-│   ├── bookings/
-│   ├── payment/
+TaxiHollongi/                        # repo root — RT&T platform
+│
+├── app/                             # Next.js App Router
+│   │
+│   ├── api/                         # Serverless API route handlers
+│   │   ├── admin/
+│   │   │   ├── login/               # POST  — admin credential login, issues JWT
+│   │   │   ├── logout/              # POST  — invalidate admin session
+│   │   │   ├── verify-session/      # GET   — validate JWT
+│   │   │   ├── create-admin/        # POST  — add a new admin account
+│   │   │   ├── update-profile/      # PUT   — update admin name/password
+│   │   │   ├── settings/            # GET/PUT — app_settings table (e.g. conflict_control_enabled)
+│   │   │   ├── conflicts/           # GET   — vehicle assignment conflicts
+│   │   │   ├── process-cancellation/ # POST — process refund & cancel booking
+│   │   │   ├── cleanup-pending/     # POST  — delete stale pending bookings (daily cron)
+│   │   │   └── docs/                # GET   — serve app docs.md content
+│   │   │
+│   │   ├── auth/
+│   │   │   └── exchange-code/       # POST  — server-side PKCE code → session exchange
+│   │   │
+│   │   ├── bookings/
+│   │   │   ├── create/              # POST  — create booking (airport / tour / hourly)
+│   │   │   ├── user/                # GET   — bookings for a customer (by email)
+│   │   │   ├── admin/               # GET   — all bookings (admin, paginated)
+│   │   │   ├── assign-vehicle/      # POST  — assign car + driver to a booking
+│   │   │   ├── update-assignment/   # PUT   — edit an existing assignment
+│   │   │   ├── get-assignments/     # GET   — assignments for a booking
+│   │   │   ├── user-assignments/    # GET   — assignments visible to a customer
+│   │   │   ├── update-status/       # PUT   — change booking_status
+│   │   │   ├── resume/              # POST  — re-open a cancelled booking
+│   │   │   └── cancel-request/      # POST  — customer cancellation request
+│   │   │
+│   │   ├── cars/
+│   │   │   ├── [id]/                # GET/PUT/DELETE — single car record
+│   │   │   └── available-models/    # GET   — models free for a given time window
+│   │   │
+│   │   ├── destinations/
+│   │   │   └── [id]/                # GET   — destination detail (distance, duration)
+│   │   │
+│   │   ├── payment/
+│   │   │   ├── create-order/        # POST  — create Razorpay order
+│   │   │   ├── create-payment/      # POST  — insert initial payments row
+│   │   │   ├── verify/              # POST  — verify Razorpay signature, confirm booking
+│   │   │   ├── confirm-cash/        # POST  — record cash payment
+│   │   │   ├── get-payment/         # GET   — payment record for a booking
+│   │   │   └── get-all/             # GET   — all payment records (admin)
+│   │   │
+│   │   ├── reviews/                 # GET/POST — submit & list reviews
+│   │   │
+│   │   ├── tours/
+│   │   │   ├── [id]/                # GET/PUT/DELETE — single tour package
+│   │   │   ├── [id]/availability/   # GET   — check car availability for a date
+│   │   │   └── upload-image/        # POST  — upload tour image to storage
+│   │   │
+│   │   ├── changelog/               # GET   — serve changelog.md content
+│   │   └── test-email/              # POST  — send a test email (dev only)
+│   │
+│   ├── admin/
+│   │   ├── page.tsx                 # Admin dashboard
+│   │   └── docs/page.tsx            # This document viewer
+│   │
+│   ├── book-taxi/                   # Taxi booking wizard (airport + hourly)
 │   ├── tours/
-│   │   └── [id]/
-│   │       ├── book/
-│   │       └── reviews/
-│   ├── login/ signup/ change/
-│   ├── auth/verify/
-│   ├── admin-login/
-│   ├── arunachal-tours/    # SEO landing
-│   ├── itanagar-tours/     # SEO landing
-│   ├── hollongi-airport-taxi/
+│   │   ├── page.tsx                 # Tour listing
+│   │   ├── [id]/book/               # Tour booking wizard
+│   │   └── [id]/reviews/            # Tour reviews page
+│   ├── payment/                     # Payment page (Razorpay checkout)
+│   ├── booking-confirmed/           # Post-payment confirmation
+│   ├── bookings/                    # Customer bookings list
+│   │
+│   ├── login/                       # Email+password login
+│   ├── signup/                      # Email+password signup
+│   ├── change/                      # Password change
+│   ├── auth/
+│   │   ├── callback/                # GET route — OAuth/email verification callback
+│   │   └── verify/                  # Client page — exchanges code for session
+│   ├── admin-login/                 # Admin login page
+│   │
+│   ├── hollongi-airport-taxi/       # SEO landing pages
 │   ├── donyi-polo-airport-taxi/
 │   ├── itanagar-airport-taxi/
 │   ├── hourly-taxi-itanagar/
-│   ├── faq/ terms/ privacy/
-│   ├── layout.tsx          # Root layout with all context providers
-│   ├── page.tsx            # Homepage
+│   ├── arunachal-tours/
+│   ├── itanagar-tours/
+│   │
+│   ├── faq/                         # FAQ page
+│   ├── terms/                       # Terms of service
+│   ├── privacy/                     # Privacy policy
+│   │
+│   ├── layout.tsx                   # Root layout (AuthProvider → AdminProvider → Header)
+│   ├── page.tsx                     # Home / landing page
 │   └── globals.css
-├── components/
+│
+├── components/                      # Shared React components
 │   ├── Header.tsx
 │   ├── Footer.tsx
 │   ├── Logo.tsx
@@ -2154,176 +1825,146 @@ TaxiHollongi/
 │   ├── RouteScrollUnlocker.tsx
 │   ├── ProtectedAdminPage.tsx
 │   └── PaymentTestAlert.tsx
+│
 ├── context/
-│   ├── AuthContext.tsx      # Supabase user session
-│   └── AdminContext.tsx     # JWT admin session
-├── lib/
-│   ├── db.ts               # Core DB operations (bookings, payments, tours)
-│   ├── payment-db.ts       # Server-only payment DB (service role)
-│   ├── payment.ts          # Razorpay integration
-│   ├── payment-utils.ts    # Payment calculation helpers (client-safe)
-│   ├── utils.ts            # Formatting, validation, ID generation
-│   ├── validation.ts       # Strict input validators
-│   ├── reviews.ts          # Review fetch and stat calculation
-│   ├── invoice.ts          # PDF invoice generation (jsPDF)
-│   ├── database.ts         # Additional CRUD (destinations, pricing, cars)
-│   ├── supabase.ts         # Supabase anon client
-│   ├── supabase-admin.ts   # Supabase service role client (server only)
-│   ├── notifications.ts    # Email setup (Resend + SMTP fallback)
-│   └── resend-notifications.ts  # Resend-specific email templates
-├── sql/
+│   ├── AuthContext.tsx               # Supabase session, signIn/signUp/OAuth/signOut
+│   └── AdminContext.tsx              # JWT admin session
+│
+├── lib/                             # Shared utilities & data-access
+│   ├── db.ts                        # Supabase queries (tours, destinations, cars)
+│   ├── database.ts                  # Booking & assignment queries
+│   ├── payment-db.ts                # Payment record queries
+│   ├── payment.ts                   # Razorpay helpers
+│   ├── payment-utils.ts             # Fare calculation utilities
+│   ├── utils.ts                     # generateBookingId, misc helpers
+│   ├── validation.ts                # Email, phone, name validators
+│   ├── reviews.ts                   # Review queries
+│   ├── invoice.ts                   # Invoice number generation
+│   ├── supabase.ts                  # Supabase client (browser)
+│   ├── supabase-admin.ts            # Supabase service-role client (server)
+│   ├── notifications.ts             # Notification helpers
+│   └── resend-notifications.ts      # Resend email templates & dispatch
+│
+├── sql/                             # Database schema files (run in Supabase SQL Editor)
+│   ├── cars_schema.sql
+│   ├── destinations_schema.sql
+│   ├── tour_packages.sql
+│   ├── bookings_and_payments_schema.sql
+│   ├── assignments_schema.sql
 │   ├── admin_schema.sql
 │   ├── reviews_schema.sql
-│   └── app_settings_schema.sql
+│   ├── app_settings_schema.sql
+│   └── README.md                    # Execution order & notes
+│
 ├── scripts/
-│   └── generate-admin-hash.js
-├── public/                 # Static assets (images, icons)
-├── database.sql            # Main database schema
+│   └── generate-admin-hash.js       # Bcrypt hash generator for admin passwords
+│
+├── public/                          # Static assets (images, icons, fonts)
+│
 ├── next.config.js
 ├── tailwind.config.js
 ├── tsconfig.json
-├── vercel.json
-├── package.json
-├── .env.example
+├── vercel.json                      # Build config, cron schedule, region
+├── postcss.config.js
 ├── README.md
 ├── DEVREF.md
-└── changelog.md
+├── changelog.md
+└── "app docs.md"                    # This file
 ```
 
-### 12.6 Database Setup (Supabase)
+### 14.6 Database Setup
+All 10 tables are in `sql/`. Run them in order in the Supabase SQL Editor (see `sql/README.md`):
 
-Run SQL files in Supabase SQL Editor in this order:
+1. `sql/cars_schema.sql` — `cars` table (vehicles + driver info, per-km/hr rates)
+2. `sql/destinations_schema.sql` — `destinations` table (FROM-airport routes + distance)
+3. `sql/tour_packages.sql` — `tour_packages` table (+ seed data)
+4. `sql/bookings_and_payments_schema.sql` — `bookings`, `payments`, `payment_records` (+ enum types, constraints, alterations)
+5. `sql/assignments_schema.sql` — `vehicle_assignments` table (booking ↔ car FK)
+6. `sql/admin_schema.sql` — `admins` table (+ default admin, RLS, indexes)
+7. `sql/reviews_schema.sql` — `reviews` table (polymorphic, + unique index)
+8. `sql/app_settings_schema.sql` — `app_settings` table (+ seeds `conflict_control_enabled='true'`)
 
-1. `database.sql` — Main tables (bookings, payments, cars, tours, destinations, pricing_rules, etc.)
-2. `sql/admin_schema.sql` — `admins` table
-3. `sql/reviews_schema.sql` — `reviews` table
-4. `sql/app_settings_schema.sql` — `app_settings` table (seeds default `conflict_control_enabled = 'true'`)
-
-### 12.7 Admin Account Setup
-
+### 14.7 Admin Account Setup
 ```bash
-# 1. Generate a bcrypt hash for your password
-node scripts/generate-admin-hash.js "YourPassword123"
-# → $2b$10$...hash...
-
-# 2. Insert admin in Supabase SQL Editor
+node scripts/generate-admin-hash.js "YourStrongPassword"      # → $2b$10$...
+# then in Supabase SQL Editor:
 INSERT INTO public.admins (email, password_hash, full_name, role, is_active)
-VALUES ('admin@yourdomain.com', '$2b$10$...hash...', 'Admin Name', 'admin', true);
-
-# 3. Generate JWT_SECRET
+VALUES ('admin@yourdomain.com', '$2b$10$...', 'Admin Name', 'admin', true);
+# set JWT_SECRET in .env.local:
 openssl rand -base64 32
-
-# 4. Set JWT_SECRET in .env.local
-
-# 5. Login at /admin-login
+# log in at /admin-login
 ```
 
-**Change password:**
-```sql
-UPDATE public.admins SET password_hash = '$2b$10$...newhash...' WHERE email = 'admin@yourdomain.com';
-```
-
-**Disable account:**
-```sql
-UPDATE public.admins SET is_active = false WHERE email = 'admin@yourdomain.com';
-```
-
-**View login history:**
-```sql
-SELECT email, full_name, last_login, is_active FROM public.admins ORDER BY last_login DESC;
-```
-
-### 12.8 Payment Testing
-
-| Method | Test Value |
+### 14.8 Payment Testing
+| Method | Test value |
 |--------|------------|
-| Card | `4111 1111 1111 1111` — any future expiry, any CVV |
-| UPI (success) | `success@razorpay` |
-| UPI (failure) | `failure@razorpay` |
-| Key prefix (test) | `rzp_test_...` |
-| Key prefix (live) | `rzp_live_...` |
+| Card | `4111 1111 1111 1111`, any future expiry, any CVV |
+| UPI success | `success@razorpay` |
+| UPI failure | `failure@razorpay` |
+Switch to live by replacing `NEXT_PUBLIC_RAZORPAY_KEY_ID` (`rzp_live_…`) and `RAZORPAY_KEY_SECRET`.
 
-Switch to live: replace both `NEXT_PUBLIC_RAZORPAY_KEY_ID` and `RAZORPAY_KEY_SECRET` with live credentials.
+### 14.9 Deployment (Vercel)
+1. Push to GitHub → import at vercel.com → New Project.
+2. Add all env vars under Settings → Environment Variables.
+3. Deploy. Build: `npm run build`; install: `npm install`; region `iad1`; cron `0 0 * * *` → `/api/admin/cleanup-pending` (all in `vercel.json`).
+4. Custom domain DNS: `A @ 76.76.19.165` and `CNAME www cname.vercel-dns.com`.
+5. Rollback: Vercel → Deployments → pick a previous one → Promote to Production.
 
-### 12.9 Deployment — Vercel
+### 14.10 Coding Conventions
+| Topic | Rule |
+|-------|------|
+| Booking ID | `generateBookingId()` — `BK` + timestamp suffix |
+| Invoice number | `generateInvoiceNumber()` — written into `payment_records.invoice_number` at verify time |
+| Currency | INR; display via `formatCurrency()`; Razorpay amounts in paise (× 100) |
+| Dates | ISO 8601 UTC in DB; displayed in IST (UTC+5:30) via `date-fns` |
+| Supabase clients | anon (`lib/supabase.ts`) for customer reads; service-role (`lib/supabase-admin.ts`) **server-only** for privileged writes |
+| Validation | run `lib/validation.ts` before any submit |
+| Tailwind | dark bg `bg-primary-950` (`#1a1512`); accent `bg-secondary-500` (`#ffda00`); `.btn-primary` / `.btn-secondary` / `.card` / `.input-field` |
+| Security headers | set globally in `next.config.js` |
 
-**Initial deployment:**
-1. Push repository to GitHub
-2. Import at `vercel.com` → New Project
-3. Add all environment variables under Settings → Environment Variables
-4. Deploy
+### 14.11 Debugging
+Browser console (F12) · `npm run dev` terminal for server logs · Supabase dashboard (Table Editor / Logs) · DevTools Network tab · verify `.env.local` values. Test cards as above.
 
-**Custom domain DNS records:**
-```
-A      @    76.76.19.165
-CNAME  www  cname.vercel-dns.com
-```
-
-**Rollback:** Vercel Dashboard → Deployments → select previous deployment → Promote to Production
-
-**Cron job** (`vercel.json`): `/api/admin/cleanup-pending` fires daily at 00:00 UTC automatically.
-
-### 12.10 Coding Conventions
-
-| Convention | Rule |
-|------------|------|
-| Booking ID | `BK` + `YYYYMMDD` + 6 random uppercase alphanumeric chars |
-| Invoice Number | `INV-` + `YYYYMMDD` + `-` + sequential number |
-| Currency storage | INR as numeric (integer or decimal). Display via `formatCurrency()` |
-| Dates storage | ISO 8601 UTC in Supabase. Display converted to IST (UTC+5:30) via `date-fns` |
-| Amounts in Razorpay | Multiply by 100 (paise). Divide by 100 for display |
-| Supabase admin client | Server-only. Never import `supabase-admin.ts` in client components |
-| Validation | Always run `lib/validation.ts` before API calls from client |
-| Tailwind dark bg | `bg-primary-950` (`#1a1512`) |
-| Tailwind accent | `bg-secondary-500` (`#ffda00`) |
-
-### 12.11 Key Files Quick Reference
-
-| Need to change… | File |
-|----------------|------|
-| Homepage content | `app/page.tsx` |
-| Header / navigation | `components/Header.tsx` |
-| Footer links | `components/Footer.tsx` |
-| Taxi booking form | `app/book-taxi/page.tsx` |
-| Tours listing | `app/tours/page.tsx` |
-| Payment flow | `app/payment/page.tsx` |
-| Booking confirmation | `app/booking-confirmed/page.tsx` |
-| Admin dashboard | `app/admin/page.tsx` |
-| Database functions | `lib/database.ts`, `lib/db.ts` |
-| Razorpay integration | `lib/payment.ts` |
-| Email templates | `lib/resend-notifications.ts` |
-| PDF invoice | `lib/invoice.ts` |
-| Utility helpers | `lib/utils.ts` |
-| Input validation | `lib/validation.ts` |
-| Supabase client | `lib/supabase.ts` |
-| Supabase admin | `lib/supabase-admin.ts` |
-| Database schema | `database.sql` |
-| Global styles | `app/globals.css` |
-| Tailwind theme | `tailwind.config.js` |
-| Next.js config | `next.config.js` |
-| Vercel config + cron | `vercel.json` |
-
-### 12.12 Outstanding TODOs
-
-| Priority | Category | Item |
-|----------|----------|------|
-| High | Security | Password reset flow for admin accounts |
+### 14.12 Outstanding TODOs
+| Priority | Area | Item |
+|----------|------|------|
 | High | Security | Rate limiting on `POST /api/admin/login` |
 | High | Security | 2FA for admin accounts |
 | Medium | Notifications | Real SMS integration (currently console-logged) |
 | Medium | Notifications | Real WhatsApp integration (currently console-logged) |
-| Medium | Features | Refund management UI for admin |
-| Medium | Features | Push notifications for booking updates |
-| Low | Features | Real-time driver tracking (GPS) |
-| Low | Features | Driver-facing mobile application |
-| Low | Features | Advanced analytics and reporting dashboard |
-| Low | Features | Multi-language support (Hindi, Bengali) |
-| Low | Infrastructure | Error tracking integration (Sentry / Rollbar) |
-| Low | Infrastructure | Uptime monitoring |
-| Low | Infrastructure | Audit logging for admin actions |
-| Low | Infrastructure | Penetration testing / security audit |
+| Medium | Features | Refund management UI for admins |
+| Medium | Features | Push notifications |
+| Low | Features | Real-time driver tracking |
+| Low | Features | Driver mobile app |
+| Low | Features | Advanced analytics / reporting |
+| Low | Features | Multi-language UI |
+| Low | Infra | Error tracking (Sentry / Rollbar) |
+| Low | Infra | Uptime monitoring |
+| Low | Infra | Audit logging for admin actions |
+| Low | Infra | Penetration test / security audit |
 
 ---
 
-*TaxiHollongi — Complete Application Documentation v1.0*  
-*Generated: 2026-05-12 | Branch: v2-unstable*
+## 15. Glossary
+
+| Term | Meaning |
+|------|---------|
+| **Booking** | A customer's order for a trip (airport, tour, or hourly). Identified by `booking_id`. |
+| **Booking type** | `airport` \| `tour` \| `hourly`. |
+| **Booking status** | `pending` → `confirmed` → `completed` \| `cancelled`. |
+| **Payment type** | `partial` (30% online + 70% cash) or `full` (100% online). |
+| **Payment status** | `pending` \| `partial` \| `paid`. |
+| **Txn status** | Transaction state on the `payments` row: `pending` \| `success` \| `failed`. |
+| **Refund status** | `none` \| `pending` \| `processed` \| `failed` (refunds are manual). |
+| **Car model vs car** | Customers pick a *model* (name/class/capacity/price/available count); admins later assign a specific *car* (with number plate) and driver. |
+| **Vehicle assignment** | A row linking a specific car + driver to a booking for a time window; basis of conflict detection. |
+| **Conflict control** | The toggle (`app_settings.conflict_control_enabled`) that, when ON, blocks overlapping vehicle commitments. |
+| **Overlap** | Two windows overlap iff `start_A < end_B AND end_A > start_B`. |
+| **Advance / cash split** | Advance = `round(total × 0.30 × 100)/100`; cash = `total − advance`. |
+| **Invoice number** | Generated at payment verification; stored on the `payment_records` row; rendered into the PDF. |
+| **Cleanup cron** | Daily job (`/api/admin/cleanup-pending`, `0 0 * * *`) deleting stale `pending` bookings. |
+| **Service role / anon client** | Two Supabase clients: anon (RLS-enforced, customer reads) and service role (bypasses RLS, server-side privileged writes). |
+
+---
+
+*Rina's Tours and Travels — Complete Application Documentation v2.0 · Generated 2026-05-12 (branch v2-unstable). Diagrams rendered via Mermaid in the in-app viewer at /admin/docs.*

@@ -29,8 +29,25 @@ CREATE INDEX IF NOT EXISTS idx_admins_is_active ON public.admins(is_active);
 INSERT INTO public.admins (email, password_hash, full_name, role, is_active)
 VALUES (
   'admin@taxihollongi.com',
-  '$2b$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcg7b3XeKeUxWdeS86E36P4/KFm', -- bcrypt hash of "Secure@Admin123"
+  '$2b$10$JN8LuHyhqBQ7wQbEVd.vJOVgsTtVfmWr', -- bcrypt hash of "Secure@Admin123"
   'Administrator',
   'admin',
   true
 ) ON CONFLICT (email) DO NOTHING;
+
+
+UPDATE public.admins
+SET password_hash = '$2b$10$JN8LuHyhqBQ7wQbEVd.vJOVgsTtVfmWrIo1x8eGtQFaMAskNlRx26'
+WHERE email = 'admin@taxihollongi.com';
+
+
+
+INSERT INTO public.admins (email, password_hash, full_name, role, is_active)
+VALUES (
+  'admin@rinastoursandtravels.in',
+  '$2b$10$VPJK0BWsjKx2zRKN/tM0behz1Ib594t/GQcEYTSS9d2Y46cFU5oKu',
+  'Pankaj Kar',
+  'admin',
+  true
+);
+

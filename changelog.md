@@ -9,6 +9,7 @@ All notable changes to TaxiHollongi will be documented in this file.
 **Author:** Yami
 
 ### Changes
+- update: add docs
 - fix: payments, cleanup
 - Update: cancellation and manual refund flow
 - fix: vercel limit on hobby mode

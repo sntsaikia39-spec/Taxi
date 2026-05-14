@@ -222,6 +222,7 @@ export default function AdminDashboard() {
   const [loadingCars, setLoadingCars] = useState(true)
   const [loadingDestinations, setLoadingDestinations] = useState(true)
   const [loadingTours, setLoadingTours] = useState(true)
+  const [navigatingToDocs, setNavigatingToDocs] = useState(false)
   const [expandedBookingId, setExpandedBookingId] = useState<string | null>(null)
   const [expandedCarId, setExpandedCarId] = useState<string | null>(null)
   const [expandedTourId, setExpandedTourId] = useState<string | null>(null)
@@ -4146,37 +4147,6 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      {/* ── Documentation ───────────────────────────────────────────── */}
-      <div className={`rounded-lg shadow-lg p-4 md:p-6 ${darkMode ? 'bg-primary-800 border border-primary-700' : 'bg-white'}`}>
-        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-          <div className="flex-1 min-w-0">
-            <h2 className={`text-lg md:text-xl font-bold mb-1 ${darkMode ? 'text-white' : 'text-gray-900'}`}>Documentation</h2>
-            <p className={`text-xs md:text-sm mb-4 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-              Complete technical and product documentation for the TaxiHollongi platform — PRD, SRS, BRD, SAD, API docs, ERDs, UML diagrams, and more.
-            </p>
-            <div className="flex flex-wrap gap-1.5 mb-4">
-              {['BRD', 'PRD', 'SRS', 'SAD', 'HLD', 'LLD', 'TDD', 'ERD', 'DFDs', 'UML', 'API Docs'].map(tag => (
-                <span
-                  key={tag}
-                  className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${darkMode ? 'bg-primary-700 text-gray-300' : 'bg-gray-100 text-gray-500'}`}
-                >
-                  {tag}
-                </span>
-              ))}
-            </div>
-          </div>
-        </div>
-        <button
-          onClick={() => router.push('/admin/docs')}
-          className="flex items-center gap-2 px-4 py-2.5 bg-secondary-500 hover:bg-yellow-400 text-primary-950 font-semibold rounded-lg transition-colors text-sm shadow-sm"
-        >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-          </svg>
-          Go to Docs
-        </button>
-      </div>
-
       {/* ── Conflict Control Toggle ─────────────────────────────────── */}
       <div className="bg-white rounded-lg shadow-lg p-4 md:p-6">
         <h2 className="text-lg md:text-xl font-bold mb-1">Booking Conflict Control</h2>
@@ -4930,25 +4900,50 @@ export default function AdminDashboard() {
     <ProtectedAdminPage>
       <div className="scrollbar-thin-modern flex h-[100dvh] flex-col overflow-y-auto overflow-x-hidden" data-admin-theme={darkMode ? 'dark' : 'light'}>
       {/* Admin Panel Header */}
-      <header className="sticky top-0 z-50 bg-primary-950 text-white shadow-lg">
+      <header className="sticky top-0 z-50 bg-primary-950/95 backdrop-blur-md border-b border-white/[0.07]">
         <div className="container mx-auto px-4">
-          <div className="flex justify-between items-center py-4">
-            <div className="flex items-center gap-3">
-              <span className="text-3xl">🛡️</span>
-              <div>
-                
-                <h2 className="text-xl font-bold">Hello! {adminFirstName}</h2>
-                {adminEmail && <p className="text-xs text-gray-300">Logged in as: {adminEmail}</p>}
+          <div className="flex justify-between items-center h-14">
+
+            {/* Identity */}
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-full bg-secondary-500 flex items-center justify-center text-primary-950 font-black text-sm shrink-0 select-none">
+                {adminFirstName[0].toUpperCase()}
+              </div>
+              <div className="leading-tight">
+                <p className="text-sm font-semibold text-white">{adminFirstName}</p>
+                {adminEmail && <p className="text-[11px] text-gray-500 truncate max-w-[180px]">{adminEmail}</p>}
               </div>
             </div>
-            <button
-              onClick={handleAdminLogout}
-              className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition font-semibold"
-              title="Logout from Admin Panel"
-            >
-              <LogOut size={18} />
-              <span className="hidden sm:inline">Logout</span>
-            </button>
+
+            {/* Actions */}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => { setNavigatingToDocs(true); router.push('/admin/docs') }}
+                disabled={navigatingToDocs}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-gray-300 hover:text-white rounded-lg border border-white/10 hover:border-white/25 hover:bg-white/8 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {navigatingToDocs ? (
+                  <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                ) : (
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                )}
+                {navigatingToDocs ? 'Loading…' : 'Docs'}
+              </button>
+
+              <button
+                onClick={handleAdminLogout}
+                title="Logout from Admin Panel"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-red-400 hover:text-white hover:bg-red-500/20 rounded-lg border border-red-500/20 hover:border-red-500/50 transition-all"
+              >
+                <LogOut size={14} />
+                <span className="hidden sm:inline">Logout</span>
+              </button>
+            </div>
+
           </div>
         </div>
       </header>

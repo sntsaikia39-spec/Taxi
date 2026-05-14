@@ -24,6 +24,7 @@
     "jsonwebtoken": "^9.0.3",
     "jspdf": "^2.5.1",
     "lucide-react": "^0.292.0",
+    "mermaid": "^11.15.0",
     "next": "^14.0.0",
     "nodemailer": "^6.9.7",
     "postcss": "^8.4.30",

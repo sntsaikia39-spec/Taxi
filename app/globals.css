@@ -420,6 +420,73 @@ html, body {
   }
 }
 
+/* ─── Docs page print / download ────────────────────────────────────────── */
+@media print {
+  /* ① Hide chrome — keep display type intact, just remove from output */
+  #docs-shell > header,
+  #docs-body > aside,
+  #docs-body > main footer {
+    display: none !important;
+  }
+
+  /* ② Reset html/body overflow so all content is reachable */
+  html,
+  body {
+    overflow: visible !important;
+    height: auto !important;
+    background: #fff !important;
+  }
+
+  /* ③ Remove height cap + clipping from the outer shell.
+        Keep display:flex so flex children still lay out correctly. */
+  #docs-shell {
+    height: auto !important;
+    overflow: visible !important;
+    background: #fff !important;
+  }
+
+  /* ④ Same for the sidebar+main row */
+  #docs-body {
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  /* ⑤ Remove scroll-container constraints from main.
+        flex:none prevents it trying to fill a now-unconstrained parent. */
+  #docs-body > main {
+    flex: none !important;
+    width: 100% !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  /* ⑥ scroll-margin-top is for the sticky nav — causes an 80px gap before
+        every heading in the PDF. Zero it out for print. */
+  h1, h2, h3, h4, h5, h6 {
+    scroll-margin-top: 0 !important;
+  }
+
+  /* ⑦ Article text */
+  article {
+    color: #000 !important;
+  }
+
+  /* ⑧ Prevent code blocks overflowing the page width */
+  pre,
+  code {
+    white-space: pre-wrap !important;
+    word-break: break-word !important;
+  }
+
+  /* ⑨ Avoid splitting code blocks, tables, and quotes across pages */
+  pre,
+  table,
+  blockquote {
+    break-inside: avoid;
+  }
+}
+
 /* Hide animated hero and stats elements by default so they stay invisible
    while the splash is showing. GSAP will animate them to visible when
    the splashFinished event fires. */
