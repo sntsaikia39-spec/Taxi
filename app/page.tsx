@@ -107,10 +107,9 @@ export default function Home() {
       ctx = gsap.context(() => {
         // Set initial 3D state for hero cards
         gsap.set('.hero-img-main', { transformPerspective: 1200, rotateY: -8, rotateX: 2, z: 0 })
-        gsap.set('.hero-img-back', { transformPerspective: 1200, rotateY: -16, rotateX: 4, x: 36, y: 22, z: -50 })
-        
+
         // Initially hide all hero and stats elements and disable interaction
-        gsap.set('.hero-badge, .hero-line, .hero-btns > *, .hero-sub, .hero-mini-stat, .hero-img-back, .hero-img-main, .hero-float-1, .hero-float-2, .stat-item', { opacity: 0, pointerEvents: 'none' })
+        gsap.set('.hero-badge, .hero-line, .hero-btns > *, .hero-sub, .hero-mini-stat, .hero-img-main, .stat-item', { opacity: 0, pointerEvents: 'none' })
 
         // Hero entrance — animate TO visible state
         const tl = gsap.timeline({ delay: 0.08 })
@@ -120,10 +119,7 @@ export default function Home() {
           .to('.hero-btns > *', { y: 0, opacity: 1, pointerEvents: 'auto', stagger: 0.1, duration: 0.38, ease: 'power2.out' }, 0.4)
           .to('.hero-sub', { y: 0, opacity: 1, duration: 0.36, ease: 'power2.out' }, 0.58)
           .to('.hero-mini-stat', { y: 0, opacity: 1, pointerEvents: 'auto', stagger: 0.06, duration: 0.3, ease: 'power2.out' }, 0.7)
-          .to('.hero-img-back', { x: 0, opacity: 1, pointerEvents: 'auto', duration: 0.75, ease: 'power3.out' }, 0.38)
           .to('.hero-img-main', { x: 0, opacity: 1, duration: 0.7, ease: 'power3.out' }, 0.52)
-          .to('.hero-float-1', { y: 0, opacity: 1, duration: 0.5, ease: 'back.out(2)' }, 0.72)
-          .to('.hero-float-2', { y: 0, opacity: 1, duration: 0.5, ease: 'back.out(2)' }, 0.84)
 
         // Stats — animate in and counter on load
         gsap.to('.stat-item', { y: 0, opacity: 1, stagger: 0.09, duration: 0.5, ease: 'power2.out', delay: 0.9 })
@@ -504,21 +500,62 @@ export default function Home() {
     }
   }, [])
 
-  // ── Hero 3D mouse parallax ──
+  // ── Hero radar rings + 3D phone parallax ──
   useEffect(() => {
     const hero = document.querySelector('.hero-section') as HTMLElement | null
     if (!hero) return
+
+    // Each ring expands from r=8 → r=310, fading out, staggered so they pulse continuously
+    const ringEls = Array.from(document.querySelectorAll<SVGCircleElement>('.radar-ring'))
+    const D = 5       // seconds per full ring expansion
+    const N = ringEls.length
+    const speedProxy = { v: 1 }
+
+    const tweens = ringEls.map((ring, i) => {
+      const t = gsap.fromTo(
+        ring,
+        { attr: { r: 8 }, opacity: 0.55 },
+        { attr: { r: 310 }, opacity: 0, duration: D, ease: 'power1.out', repeat: -1 }
+      )
+      // Seek each ring to its phase offset so they're already staggered on load
+      t.seek(i * (D / N))
+      return t
+    })
+
+    // Smoothly animates all ring timeScales together via a proxy value
+    const setSpeed = (target: number, dur: number, ease: string) => {
+      gsap.to(speedProxy, {
+        v: target, duration: dur, ease,
+        onUpdate() { tweens.forEach(t => t.timeScale(speedProxy.v)) },
+      })
+    }
+
+    let settleTimer: ReturnType<typeof setTimeout>
+
     const onMove = (e: MouseEvent) => {
       const rect = hero.getBoundingClientRect()
       const x = (e.clientX - rect.left) / rect.width - 0.5
       const y = (e.clientY - rect.top) / rect.height - 0.5
       gsap.to('.hero-img-main', { rotateY: -8 + x * -12, rotateX: 2 + y * 7, duration: 0.75, ease: 'power2.out' })
-      gsap.to('.hero-img-back', { rotateY: -16 + x * -8, rotateX: 4 + y * 4, x: 36 + x * 20, y: 22 + y * 14, duration: 0.95, ease: 'power2.out' })
-      gsap.to('.hero-float-1', { x: x * -24, y: y * -18, duration: 1, ease: 'power2.out' })
-      gsap.to('.hero-float-2', { x: x * 18, y: y * 12, duration: 1.1, ease: 'power2.out' })
+      // Speed up rings while mouse is moving, ease back to calm when it stops
+      setSpeed(4.5, 0.25, 'power2.out')
+      clearTimeout(settleTimer)
+      settleTimer = setTimeout(() => setSpeed(1, 0.8, 'power2.inOut'), 120)
     }
+
+    const onLeave = () => {
+      clearTimeout(settleTimer)
+      setSpeed(1, 0.8, 'power1.inOut')
+    }
+
     hero.addEventListener('mousemove', onMove)
-    return () => hero.removeEventListener('mousemove', onMove)
+    hero.addEventListener('mouseleave', onLeave)
+    return () => {
+      hero.removeEventListener('mousemove', onMove)
+      hero.removeEventListener('mouseleave', onLeave)
+      clearTimeout(settleTimer)
+      tweens.forEach(t => t.kill())
+    }
   }, [])
 
   // ── Tour card setup for scroll-jacked reveal + 3D tilt ──
@@ -529,8 +566,6 @@ export default function Home() {
     const mouseCleanup: Array<() => void> = []
 
     cards.forEach((card) => {
-      const imgWrapper = card.querySelector<HTMLElement>('.tour-img')
-      const imgEl = imgWrapper?.querySelector<HTMLElement>('img')
       const heading = card.querySelector<HTMLElement>('h3')
       const desc = card.querySelector<HTMLElement>('p')
       const meta = card.querySelector<HTMLElement>('.flex.items-center.justify-between')
@@ -587,14 +622,14 @@ export default function Home() {
 
         {/* Two-column layout */}
         <div className="container mx-auto px-4 lg:px-8 relative z-10 flex-1 flex flex-col justify-center -mt-10">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-center">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-0 lg:gap-2 items-center">
 
             {/* ── Left: text + CTAs ── */}
             <div className="flex flex-col justify-start">
               {/* Badge */}
               <div className="hero-badge inline-flex items-center gap-2 px-4 py-2 rounded-full border border-secondary-500/25 bg-secondary-500/8 text-secondary-400 text-xs font-semibold tracking-widest uppercase mb-4">
                 <span className="w-1.5 h-1.5 rounded-full bg-secondary-500 animate-pulse" />
-                Hollongi Airport #1 Service
+                Donyi Polo Airport #1 Service
               </div>
 
               {/* Headline */}
@@ -626,7 +661,7 @@ export default function Home() {
 
               {/* Subtitle */}
               <p className="hero-sub text-gray-500 text-xs md:text-sm mb-5 leading-relaxed max-w-md">
-                Pre-book airport taxis and curated tours from Hollongi. Transparent pricing, verified drivers — no surprises.
+                Pre-book airport taxis and curated tours from Donyi Polo Airport. Transparent pricing, verified drivers — no surprises.
               </p>
 
               {/* Trust badges */}
@@ -644,73 +679,271 @@ export default function Home() {
               </div>
             </div>
 
-            {/* ── Right: 3D image stack ── */}
-            <div className="hidden lg:flex relative items-center justify-center h-[380px]">
-              {/* Back card */}
-              <div
-                className="hero-img-back absolute rounded-2xl overflow-hidden"
-                style={{
-                  width: '240px', height: '320px',
-                  boxShadow: '0 30px 80px rgba(0,0,0,0.6)',
-                  transformStyle: 'preserve-3d',
-                }}
-              >
-                <Image src={TOUR_IMAGES[1]} alt="Tour" fill className="object-cover" />
-                <div className="absolute inset-0 bg-primary-950/50" />
+            {/* ── Right: App flow — single phone ── */}
+            <div className="hidden lg:block relative h-[460px] overflow-visible">
+
+              {/* ── Radar background layer — fixed, never tilts ── */}
+              <div className="hero-radar-bg absolute inset-0 pointer-events-none" style={{ overflow: 'visible' }}>
+                <svg
+                  className="w-full h-full"
+                  viewBox="0 0 560 450"
+                  xmlns="http://www.w3.org/2000/svg"
+                  preserveAspectRatio="xMidYMid meet"
+                  aria-hidden="true"
+                  style={{ overflow: 'visible' }}
+                >
+                  <defs>
+                    <filter id="radarglow" x="-80%" y="-80%" width="260%" height="260%">
+                      <feGaussianBlur stdDeviation="12" result="b"/>
+                      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+                    </filter>
+                  </defs>
+
+                  {/* Soft central aura — fixed warm fill behind the phone */}
+                  <ellipse cx="280" cy="225" rx="210" ry="198" fill="rgba(255,218,0,0.032)"/>
+                  <ellipse cx="280" cy="225" rx="125" ry="118" fill="rgba(255,218,0,0.038)"/>
+
+                  {/* Radar rings — GSAP drives r (8→310) and opacity (0.55→0), staggered */}
+                  <circle className="radar-ring" cx="280" cy="225" r="8" fill="none" stroke="rgba(255,218,0,0.52)" strokeWidth="1.2"/>
+                  <circle className="radar-ring" cx="280" cy="225" r="8" fill="none" stroke="rgba(255,218,0,0.52)" strokeWidth="1.2"/>
+                  <circle className="radar-ring" cx="280" cy="225" r="8" fill="none" stroke="rgba(255,218,0,0.52)" strokeWidth="1.2"/>
+                  <circle className="radar-ring" cx="280" cy="225" r="8" fill="none" stroke="rgba(255,218,0,0.52)" strokeWidth="1.2"/>
+                  <circle className="radar-ring" cx="280" cy="225" r="8" fill="none" stroke="rgba(255,218,0,0.52)" strokeWidth="1.2"/>
+
+                  {/* Edge bokeh — ambient warmth at screen corners */}
+                  <circle cx="-18" cy="145" r="52" fill="rgba(255,218,0,0.045)" filter="url(#radarglow)"/>
+                  <circle cx="32"  cy="318" r="36" fill="rgba(255,218,0,0.035)" filter="url(#radarglow)"/>
+                  <circle cx="580" cy="130" r="46" fill="rgba(255,218,0,0.045)" filter="url(#radarglow)"/>
+                  <circle cx="532" cy="326" r="32" fill="rgba(255,218,0,0.035)" filter="url(#radarglow)"/>
+                  {/* Scattered particles */}
+                  <circle cx="-14" cy="108" r="2.2" fill="rgba(255,218,0,0.22)"/>
+                  <circle cx="25"  cy="195" r="1.5" fill="rgba(255,218,0,0.17)"/>
+                  <circle cx="-8"  cy="272" r="1.8" fill="rgba(255,218,0,0.19)"/>
+                  <circle cx="50"  cy="82"  r="1.3" fill="rgba(255,218,0,0.14)"/>
+                  <circle cx="575" cy="112" r="2.2" fill="rgba(255,218,0,0.22)"/>
+                  <circle cx="538" cy="208" r="1.5" fill="rgba(255,218,0,0.17)"/>
+                  <circle cx="570" cy="295" r="1.8" fill="rgba(255,218,0,0.19)"/>
+                  <circle cx="504" cy="76"  r="1.3" fill="rgba(255,218,0,0.14)"/>
+                </svg>
               </div>
 
-              {/* Main card */}
-              <div
-                className="hero-img-main relative rounded-2xl overflow-hidden"
-                style={{
-                  width: '240px', height: '320px',
-                  boxShadow: '0 0 0 1px rgba(255,218,0,0.18), 0 40px 90px rgba(0,0,0,0.65), 0 0 80px rgba(255,218,0,0.06)',
-                  transformStyle: 'preserve-3d',
-                }}
-              >
-                <Image src={TOUR_IMAGES[0]} alt="Arunachal Pradesh" fill className="object-cover" priority />
-                <div className="absolute inset-0 bg-gradient-to-t from-primary-950/85 via-primary-950/10 to-transparent" />
-                {/* Featured pill */}
-                <div className="absolute top-4 left-4 px-2.5 py-1 bg-secondary-500 text-primary-950 text-[10px] font-black rounded-lg tracking-widest">
-                  FEATURED
-                </div>
-                {/* Bottom info */}
-                <div className="absolute bottom-0 left-0 right-0 p-4">
-                  <div className="flex items-center gap-0.5 mb-1.5">
-                    {[1,2,3,4,5].map(s => <Star key={s} size={9} className="text-secondary-500 fill-secondary-500" />)}
-                    <span className="text-white/80 text-xs ml-1">4.8 · 120 reviews</span>
-                  </div>
-                  <p className="text-white font-bold text-sm">Arunachal Pradesh</p>
-                  <p className="text-gray-400 text-xs">Starting from ₹999</p>
-                </div>
-              </div>
+              {/* ── Phone (tilts on mouse via hero-img-main) ── */}
+              <div className="hero-img-main absolute inset-0" style={{ transformStyle: 'preserve-3d', overflow: 'visible' }}>
+                <svg
+                  className="w-full h-full overflow-visible"
+                  viewBox="0 0 560 450"
+                  xmlns="http://www.w3.org/2000/svg"
+                  preserveAspectRatio="xMidYMid meet"
+                  aria-hidden="true"
+                  style={{ overflow: 'visible' }}
+                >
+                  <defs>
+                    <filter id="pglow" x="-80%" y="-80%" width="260%" height="260%">
+                      <feGaussianBlur stdDeviation="8" result="b"/>
+                      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+                    </filter>
+                    <filter id="pglow-sm" x="-120%" y="-120%" width="340%" height="340%">
+                      <feGaussianBlur stdDeviation="3" result="b"/>
+                      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+                    </filter>
+                    <clipPath id="screenclip">
+                      <rect x="178" y="62" width="204" height="318" rx="5"/>
+                    </clipPath>
+                    {/* Step 1 bloom — circle expands from screen centre on each loop */}
+                    <clipPath id="step1-bloom">
+                      <circle cx="280" cy="221" r="0">
+                        <animate attributeName="r" values="0;222;212;212" keyTimes="0;0.025;0.042;1"
+                          dur="18s" repeatCount="indefinite"
+                          calcMode="spline" keySplines="0.1 0.8 0.2 1;0.4 0 0.6 1;0 0 0 0"/>
+                      </circle>
+                    </clipPath>
+                    <pattern id="dotgrid2" x="0" y="0" width="32" height="32" patternUnits="userSpaceOnUse">
+                      <circle cx="0" cy="0" r="0.9" fill="rgba(255,218,0,0.06)"/>
+                    </pattern>
+                  </defs>
 
-              {/* Floating badge 1 — verified */}
-              <div
-                className="hero-float-1 absolute top-8 -left-4 bg-white rounded-2xl p-3 flex items-center gap-2"
-                style={{ boxShadow: '0 20px 60px rgba(0,0,0,0.25)', minWidth: '140px' }}
-              >
-                <div className="w-8 h-8 bg-green-50 rounded-xl flex items-center justify-center shrink-0">
-                  <CheckCircle size={16} className="text-green-500" />
-                </div>
-                <div>
-                  <p className="text-primary-950 font-bold text-xs leading-none mb-0.5">Verified</p>
-                  <p className="text-gray-400 text-[9px]">All drivers checked</p>
-                </div>
-              </div>
+                  <rect width="560" height="450" fill="url(#dotgrid2)" />
 
-              {/* Floating badge 2 — instant */}
-              <div
-                className="hero-float-2 absolute -bottom-2 -right-4 bg-secondary-500 rounded-2xl p-3 flex items-center gap-2"
-                style={{ boxShadow: '0 20px 50px rgba(255,218,0,0.35)', minWidth: '130px' }}
-              >
-                <div className="w-8 h-8 bg-primary-950/15 rounded-xl flex items-center justify-center shrink-0">
-                  <Zap size={16} className="text-primary-950" />
-                </div>
-                <div>
-                  <p className="text-primary-950 font-bold text-xs leading-none mb-0.5">Instant</p>
-                  <p className="text-primary-800 text-[9px]">Book in 2 min</p>
-                </div>
+                  {/* Phone ambient glow */}
+                  <rect x="158" y="4" width="244" height="442" rx="40" fill="rgba(255,218,0,0.04)" filter="url(#pglow)"/>
+
+                  {/* ── Phone body ── */}
+                  <rect x="168" y="14" width="224" height="422" rx="34" fill="rgba(6,4,3,0.98)" stroke="rgba(255,218,0,0.32)" strokeWidth="1.6"/>
+                  {/* Side buttons */}
+                  <rect x="166" y="140" width="3" height="32" rx="1.5" fill="rgba(255,218,0,0.15)"/>
+                  <rect x="166" y="180" width="3" height="32" rx="1.5" fill="rgba(255,218,0,0.15)"/>
+                  <rect x="391" y="155" width="3" height="50" rx="1.5" fill="rgba(255,218,0,0.15)"/>
+                  {/* Screen bg */}
+                  <rect x="178" y="62" width="204" height="318" rx="5" fill="rgba(10,7,5,0.99)"/>
+                  {/* Camera punch-hole */}
+                  <circle cx="280" cy="38" r="8" fill="rgba(3,2,1,1)" stroke="rgba(255,218,0,0.07)" strokeWidth="0.6"/>
+                  <circle cx="280" cy="38" r="4" fill="rgba(14,10,7,1)"/>
+                  {/* Status bar */}
+                  <text x="192" y="54" fontSize="8.5" fill="rgba(255,218,0,0.55)" fontFamily="monospace" fontWeight="bold">9:41</text>
+                  <circle cx="330" cy="50" r="2.5" fill="rgba(80,220,80,0.6)"/>
+                  <rect x="344" y="45" width="20" height="9" rx="2" fill="none" stroke="rgba(255,218,0,0.35)" strokeWidth="0.8"/>
+                  <rect x="345" y="46" width="14" height="7" rx="1.5" fill="rgba(255,218,0,0.48)"/>
+                  <rect x="364" y="47.5" width="3" height="4" rx="1" fill="rgba(255,218,0,0.25)"/>
+                  <rect x="334" y="47" width="2.5" height="6" rx="0.5" fill="rgba(255,218,0,0.5)"/>
+                  <rect x="337.5" y="48.5" width="2.5" height="4.5" rx="0.5" fill="rgba(255,218,0,0.38)"/>
+                  <rect x="341" y="50" width="2.5" height="3" rx="0.5" fill="rgba(255,218,0,0.25)"/>
+                  {/* Home bar */}
+                  <rect x="251" y="412" width="58" height="5" rx="2.5" fill="rgba(255,218,0,0.18)"/>
+
+                  {/* ══ Animated steps — clipped to screen ══ */}
+                  {/* Cycle: 18s total, 3s per step. Step 1 enters via circular bloom from centre. */}
+                  <g clipPath="url(#screenclip)">
+
+                    {/* Step 1 — Sign In (0–3s) — bloom entry, opacity-only exit */}
+                    <g clipPath="url(#step1-bloom)">
+                      <animate attributeName="opacity" values="1;1;0;0" keyTimes="0;0.148;0.167;1" dur="18s" repeatCount="indefinite"/>
+                      {/* Logo */}
+                      <circle cx="280" cy="148" r="32" fill="rgba(255,218,0,0.08)" stroke="rgba(255,218,0,0.38)" strokeWidth="1.2"/>
+                      <circle cx="280" cy="148" r="19" fill="#ffda00" filter="url(#pglow-sm)"/>
+                      <text x="280" y="153" textAnchor="middle" fontSize="11" fontWeight="bold" fill="#1a1512" fontFamily="monospace">RT</text>
+                      <text x="280" y="200" textAnchor="middle" fontSize="13" fontWeight="bold" fill="rgba(255,255,255,0.9)" fontFamily="sans-serif">Rina&apos;s Tours &amp;</text>
+                      <text x="280" y="218" textAnchor="middle" fontSize="13" fontWeight="bold" fill="rgba(255,255,255,0.9)" fontFamily="sans-serif">Travels</text>
+                      <text x="280" y="236" textAnchor="middle" fontSize="8.5" fill="rgba(255,218,0,0.45)" fontFamily="monospace">Arunachal Pradesh · HGI</text>
+                      <rect x="203" y="258" width="154" height="30" rx="7" fill="#ffda00"/>
+                      <text x="280" y="277" textAnchor="middle" fontSize="10" fontWeight="bold" fill="#1a1512" fontFamily="monospace">SIGN IN</text>
+                      <rect x="203" y="297" width="154" height="30" rx="7" fill="none" stroke="rgba(255,218,0,0.45)" strokeWidth="1"/>
+                      <text x="280" y="316" textAnchor="middle" fontSize="10" fill="rgba(255,218,0,0.55)" fontFamily="monospace">CREATE ACCOUNT</text>
+                    </g>
+
+                    {/* Step 2 — Choose Service (3–6s) */}
+                    <g>
+                      <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.167;0.185;0.315;0.333;1" dur="18s" repeatCount="indefinite"/>
+                      <animateTransform attributeName="transform" type="translate" values="0,10;0,10;0,0;0,0;0,-10;0,-10" keyTimes="0;0.167;0.185;0.315;0.333;1" dur="18s" repeatCount="indefinite"/>
+                      <text x="192" y="88" fontSize="7.5" fill="rgba(255,218,0,0.35)" fontFamily="monospace">STEP 1 · CHOOSE SERVICE</text>
+                      <text x="280" y="113" textAnchor="middle" fontSize="13" fontWeight="bold" fill="rgba(255,255,255,0.88)" fontFamily="sans-serif">What do you need?</text>
+                      {/* Airport card – active */}
+                      <rect x="183" y="126" width="194" height="52" rx="8" fill="rgba(255,218,0,0.1)" stroke="rgba(255,218,0,0.55)" strokeWidth="1.2"/>
+                      <circle cx="206" cy="152" r="13" fill="rgba(255,218,0,0.12)"/>
+                      <text x="206" y="157" textAnchor="middle" fontSize="14" fill="rgba(255,218,0,0.88)">✈</text>
+                      <text x="226" y="147" fontSize="10.5" fontWeight="bold" fill="rgba(255,218,0,0.92)" fontFamily="sans-serif">Airport Taxi</text>
+                      <text x="226" y="162" fontSize="8" fill="rgba(255,218,0,0.45)" fontFamily="monospace">Hollongi · HGI</text>
+                      <text x="366" y="155" fontSize="14" fill="rgba(255,218,0,0.5)" fontFamily="sans-serif">›</text>
+                      {/* Hourly card */}
+                      <rect x="183" y="186" width="194" height="52" rx="8" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.1)" strokeWidth="0.8"/>
+                      <circle cx="206" cy="212" r="13" fill="rgba(255,255,255,0.04)"/>
+                      <text x="206" y="217" textAnchor="middle" fontSize="14" fill="rgba(255,255,255,0.45)">⏱</text>
+                      <text x="226" y="207" fontSize="10.5" fontWeight="bold" fill="rgba(255,255,255,0.5)" fontFamily="sans-serif">Hourly Hire</text>
+                      <text x="226" y="222" fontSize="8" fill="rgba(255,255,255,0.25)" fontFamily="monospace">Per hour · Itanagar</text>
+                      <text x="366" y="215" fontSize="14" fill="rgba(255,255,255,0.2)" fontFamily="sans-serif">›</text>
+                      {/* Tour card */}
+                      <rect x="183" y="246" width="194" height="52" rx="8" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.1)" strokeWidth="0.8"/>
+                      <circle cx="206" cy="272" r="13" fill="rgba(255,255,255,0.04)"/>
+                      <text x="206" y="277" textAnchor="middle" fontSize="14" fill="rgba(255,255,255,0.45)">🗺</text>
+                      <text x="226" y="267" fontSize="10.5" fontWeight="bold" fill="rgba(255,255,255,0.5)" fontFamily="sans-serif">Tour Package</text>
+                      <text x="226" y="282" fontSize="8" fill="rgba(255,255,255,0.25)" fontFamily="monospace">Fixed price tours</text>
+                      <text x="366" y="275" fontSize="14" fill="rgba(255,255,255,0.2)" fontFamily="sans-serif">›</text>
+                    </g>
+
+                    {/* Step 3 — Fill Booking Details (6–9s) */}
+                    <g>
+                      <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.333;0.351;0.481;0.500;1" dur="18s" repeatCount="indefinite"/>
+                      <animateTransform attributeName="transform" type="translate" values="0,10;0,10;0,0;0,0;0,-10;0,-10" keyTimes="0;0.333;0.351;0.481;0.500;1" dur="18s" repeatCount="indefinite"/>
+                      <text x="192" y="88" fontSize="7.5" fill="rgba(255,218,0,0.35)" fontFamily="monospace">STEP 2 · ROUTE &amp; DETAILS</text>
+                      {[0,1,2,3,4].map(i => (
+                        <circle key={i} cx={246+i*19} cy={100} r={i===1?4.5:2.5} fill={i===1?'#ffda00':'rgba(255,218,0,0.2)'}/>
+                      ))}
+                      <text x="280" y="124" textAnchor="middle" fontSize="13" fontWeight="bold" fill="rgba(255,255,255,0.88)" fontFamily="sans-serif">Route &amp; Details</text>
+                      <text x="192" y="148" fontSize="8" fill="rgba(255,218,0,0.42)" fontFamily="monospace">DESTINATION</text>
+                      <rect x="183" y="153" width="194" height="30" rx="5" fill="rgba(255,218,0,0.07)" stroke="rgba(255,218,0,0.3)" strokeWidth="0.8"/>
+                      <circle cx="198" cy="168" r="4" fill="rgba(255,218,0,0.55)"/>
+                      <text x="210" y="172" fontSize="10" fill="rgba(255,218,0,0.82)" fontFamily="sans-serif">Itanagar City</text>
+                      <text x="192" y="202" fontSize="8" fill="rgba(255,255,255,0.28)" fontFamily="monospace">DATE &amp; TIME</text>
+                      <rect x="183" y="207" width="194" height="30" rx="5" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.12)" strokeWidth="0.8"/>
+                      <text x="198" y="226" fontSize="10" fill="rgba(255,255,255,0.55)" fontFamily="sans-serif">16 May 2026 · 14:30</text>
+                      <text x="192" y="256" fontSize="8" fill="rgba(255,255,255,0.28)" fontFamily="monospace">PASSENGERS</text>
+                      <rect x="183" y="261" width="88" height="30" rx="5" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.12)" strokeWidth="0.8"/>
+                      <text x="221" y="280" textAnchor="middle" fontSize="12" fill="rgba(255,255,255,0.6)" fontFamily="sans-serif">2</text>
+                      <rect x="183" y="310" width="194" height="32" rx="7" fill="#ffda00"/>
+                      <text x="280" y="330" textAnchor="middle" fontSize="10" fontWeight="bold" fill="#1a1512" fontFamily="monospace">NEXT  →</text>
+                    </g>
+
+                    {/* Step 4 — Select Car (9–12s) */}
+                    <g>
+                      <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.500;0.518;0.648;0.667;1" dur="18s" repeatCount="indefinite"/>
+                      <animateTransform attributeName="transform" type="translate" values="0,10;0,10;0,0;0,0;0,-10;0,-10" keyTimes="0;0.500;0.518;0.648;0.667;1" dur="18s" repeatCount="indefinite"/>
+                      <text x="192" y="88" fontSize="7.5" fill="rgba(255,218,0,0.35)" fontFamily="monospace">STEP 3 · SELECT CAR</text>
+                      {[0,1,2,3,4].map(i => (
+                        <circle key={i} cx={246+i*19} cy={100} r={i===2?4.5:2.5} fill={i===2?'#ffda00':'rgba(255,218,0,0.2)'}/>
+                      ))}
+                      <text x="280" y="124" textAnchor="middle" fontSize="13" fontWeight="bold" fill="rgba(255,255,255,0.88)" fontFamily="sans-serif">Available Cars</text>
+                      {/* SUV — selected */}
+                      <rect x="183" y="133" width="194" height="68" rx="8" fill="rgba(255,218,0,0.1)" stroke="#ffda00" strokeWidth="1.2"/>
+                      <rect x="188" y="138" width="32" height="20" rx="4" fill="rgba(255,218,0,0.12)"/>
+                      <text x="204" y="151" textAnchor="middle" fontSize="9" fill="rgba(255,218,0,0.7)" fontFamily="monospace">SUV</text>
+                      <text x="228" y="152" fontSize="10.5" fontWeight="bold" fill="rgba(255,255,255,0.88)" fontFamily="sans-serif">SUV / MUV</text>
+                      <text x="228" y="167" fontSize="8" fill="rgba(255,218,0,0.48)" fontFamily="monospace">6 seats · ₹18/km</text>
+                      <text x="368" y="160" textAnchor="end" fontSize="13" fontWeight="bold" fill="#ffda00" fontFamily="monospace">₹2,800</text>
+                      <text x="368" y="172" textAnchor="end" fontSize="7" fill="rgba(255,218,0,0.38)" fontFamily="monospace">est. total</text>
+                      <rect x="188" y="175" width="52" height="14" rx="4" fill="rgba(255,218,0,0.15)"/>
+                      <text x="214" y="185" textAnchor="middle" fontSize="7" fill="rgba(255,218,0,0.8)" fontFamily="monospace">✓ SELECTED</text>
+                      {/* Sedan */}
+                      <rect x="183" y="210" width="194" height="60" rx="8" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.1)" strokeWidth="0.8"/>
+                      <rect x="188" y="215" width="32" height="20" rx="4" fill="rgba(255,255,255,0.06)"/>
+                      <text x="204" y="228" textAnchor="middle" fontSize="9" fill="rgba(255,255,255,0.35)" fontFamily="monospace">CAR</text>
+                      <text x="228" y="229" fontSize="10.5" fontWeight="bold" fill="rgba(255,255,255,0.5)" fontFamily="sans-serif">Sedan</text>
+                      <text x="228" y="244" fontSize="8" fill="rgba(255,255,255,0.25)" fontFamily="monospace">4 seats · ₹12/km</text>
+                      <text x="368" y="240" textAnchor="end" fontSize="13" fontWeight="bold" fill="rgba(255,255,255,0.35)" fontFamily="monospace">₹1,400</text>
+                      <rect x="183" y="285" width="194" height="32" rx="7" fill="#ffda00"/>
+                      <text x="280" y="305" textAnchor="middle" fontSize="10" fontWeight="bold" fill="#1a1512" fontFamily="monospace">CONTINUE  →</text>
+                    </g>
+
+                    {/* Step 5 — Payment (12–15s) */}
+                    <g>
+                      <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.667;0.685;0.815;0.833;1" dur="18s" repeatCount="indefinite"/>
+                      <animateTransform attributeName="transform" type="translate" values="0,10;0,10;0,0;0,0;0,-10;0,-10" keyTimes="0;0.667;0.685;0.815;0.833;1" dur="18s" repeatCount="indefinite"/>
+                      <text x="192" y="88" fontSize="7.5" fill="rgba(255,218,0,0.35)" fontFamily="monospace">STEP 5 · PAYMENT</text>
+                      {[0,1,2,3,4].map(i => (
+                        <circle key={i} cx={246+i*19} cy={100} r={i===4?4.5:2.5} fill={i===4?'#ffda00':'rgba(255,218,0,0.2)'}/>
+                      ))}
+                      {/* Summary */}
+                      <rect x="183" y="112" width="194" height="96" rx="8" fill="rgba(255,255,255,0.04)" stroke="rgba(255,218,0,0.12)" strokeWidth="0.8"/>
+                      <text x="193" y="131" fontSize="9" fontWeight="bold" fill="rgba(255,255,255,0.72)" fontFamily="sans-serif">Airport Taxi · Itanagar</text>
+                      <text x="193" y="147" fontSize="7.5" fill="rgba(255,255,255,0.32)" fontFamily="monospace">16 May 2026 · 14:30 · 2 pax</text>
+                      <text x="193" y="161" fontSize="7.5" fill="rgba(255,255,255,0.32)" fontFamily="monospace">SUV / MUV</text>
+                      <line x1="193" y1="170" x2="369" y2="170" stroke="rgba(255,218,0,0.1)" strokeWidth="0.6"/>
+                      <text x="193" y="185" fontSize="9" fill="rgba(255,255,255,0.38)" fontFamily="monospace">TOTAL</text>
+                      <text x="369" y="188" textAnchor="end" fontSize="16" fontWeight="bold" fill="#ffda00" fontFamily="monospace">₹2,800</text>
+                      {/* Pay 30% */}
+                      <rect x="183" y="218" width="194" height="38" rx="7" fill="rgba(255,218,0,0.1)" stroke="rgba(255,218,0,0.45)" strokeWidth="1"/>
+                      <text x="280" y="233" textAnchor="middle" fontSize="9.5" fontWeight="bold" fill="rgba(255,218,0,0.88)" fontFamily="monospace">PAY 30% · ₹840</text>
+                      <text x="280" y="248" textAnchor="middle" fontSize="7.5" fill="rgba(255,218,0,0.4)" fontFamily="monospace">₹1,960 cash to driver</text>
+                      {/* Pay full */}
+                      <rect x="183" y="265" width="194" height="38" rx="7" fill="#ffda00"/>
+                      <text x="280" y="280" textAnchor="middle" fontSize="9.5" fontWeight="bold" fill="#1a1512" fontFamily="monospace">PAY FULL · ₹2,800</text>
+                      <text x="280" y="295" textAnchor="middle" fontSize="7.5" fill="rgba(26,21,18,0.6)" fontFamily="monospace">100% online · no cash</text>
+                      <text x="280" y="325" textAnchor="middle" fontSize="7" fill="rgba(255,255,255,0.18)" fontFamily="monospace">Secured by Razorpay</text>
+                    </g>
+
+                    {/* Step 6 — Confirmed (15–18s) — fades out at 17s, dark gap before bloom */}
+                    <g>
+                      <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.833;0.851;0.944;0.972;1" dur="18s" repeatCount="indefinite"/>
+                      <animateTransform attributeName="transform" type="translate" values="0,10;0,10;0,0;0,0;0,-10;0,-10" keyTimes="0;0.833;0.851;0.944;0.972;1" dur="18s" repeatCount="indefinite"/>
+                      {/* Pulse ring */}
+                      <circle cx="280" cy="160" r="48" fill="none" stroke="rgba(255,218,0,0.12)" strokeWidth="1">
+                        <animate attributeName="r" values="38;52;38" dur="2.4s" repeatCount="indefinite"/>
+                        <animate attributeName="opacity" values="0.5;0;0.5" dur="2.4s" repeatCount="indefinite"/>
+                      </circle>
+                      <circle cx="280" cy="160" r="38" fill="rgba(255,218,0,0.08)" stroke="rgba(255,218,0,0.32)" strokeWidth="1.2"/>
+                      <circle cx="280" cy="160" r="26" fill="rgba(255,218,0,0.12)" stroke="rgba(255,218,0,0.5)" strokeWidth="1"/>
+                      <polyline points="264,160 275,172 297,148" stroke="#ffda00" strokeWidth="3.5" fill="none" strokeLinecap="round" strokeLinejoin="round" filter="url(#pglow-sm)"/>
+                      <text x="280" y="220" textAnchor="middle" fontSize="15" fontWeight="bold" fill="rgba(255,255,255,0.92)" fontFamily="sans-serif">Booking Confirmed!</text>
+                      <text x="280" y="240" textAnchor="middle" fontSize="9" fill="rgba(255,218,0,0.58)" fontFamily="monospace">BK-20260516-3842</text>
+                      <text x="280" y="260" textAnchor="middle" fontSize="8.5" fill="rgba(255,255,255,0.35)" fontFamily="sans-serif">Driver will be assigned soon.</text>
+                      <text x="280" y="276" textAnchor="middle" fontSize="8.5" fill="rgba(255,255,255,0.35)" fontFamily="sans-serif">Confirmation email sent.</text>
+                      <rect x="203" y="294" width="154" height="32" rx="7" fill="#ffda00"/>
+                      <text x="280" y="314" textAnchor="middle" fontSize="9.5" fontWeight="bold" fill="#1a1512" fontFamily="monospace">VIEW BOOKING</text>
+                      <rect x="203" y="335" width="154" height="28" rx="7" fill="none" stroke="rgba(255,218,0,0.35)" strokeWidth="0.8"/>
+                      <text x="280" y="353" textAnchor="middle" fontSize="9" fill="rgba(255,218,0,0.5)" fontFamily="monospace">LEAVE A REVIEW  ★</text>
+                    </g>
+
+
+                  </g>
+                </svg>
               </div>
             </div>
           </div>
@@ -1009,7 +1242,7 @@ export default function Home() {
           <div className="max-w-2xl mx-auto">
             <p className="cta-item text-primary-800 font-semibold text-xs tracking-[0.22em] uppercase mb-2 max-[760px]:mb-1.5">Ready to travel?</p>
             <h2 className="cta-item text-[2.1rem] max-[760px]:text-[1.85rem] md:text-5xl font-black text-primary-950 mb-2 max-[760px]:mb-1.5 leading-tight">
-              Your ride awaits at Hollongi
+              Your ride awaits at Donyi Polo Airport - Hollongi
             </h2>
             <p className="cta-item text-primary-800 text-sm max-[760px]:text-[13px] md:text-base mb-4 max-[760px]:mb-3 max-w-lg mx-auto leading-relaxed">
               Skip the queue. Pre-book your taxi or tour — verified drivers, transparent pricing.

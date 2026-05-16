@@ -97,6 +97,17 @@ html, body {
   33%       { transform: translate(70px, -70px) scale(1.1); }
   66%       { transform: translate(-60px, 70px) scale(0.9); }
 }
+/* Hero route network — line draw animation */
+@keyframes routeDraw {
+  from { stroke-dashoffset: 600; }
+  to   { stroke-dashoffset: 0;   }
+}
+.hero-route-line {
+  stroke-dasharray: 600;
+  stroke-dashoffset: 600;
+  animation: routeDraw 1.8s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
 /* Waterfall stream drop - Enhanced */
 @keyframes streamFall {
   0%   { transform: translateY(-100%) scaleY(1); opacity: 0; filter: blur(0px); }
