@@ -668,7 +668,7 @@ export default function Home() {
               </div>
 
               {/* Headline */}
-              <div className="overflow-hidden mb-4">
+              <div className="overflow-hidden mb-4 pb-2">
                 <h1 className="font-black leading-[0.95] tracking-tight">
                   <span className="hero-line block text-4xl md:text-5xl lg:text-6xl text-white">Explore</span>
                   <span className="hero-line block text-5xl md:text-6xl lg:text-7xl text-secondary-500">Arunachal</span>

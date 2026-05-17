@@ -201,6 +201,7 @@ export default function Header() {
                 <Link
                   key={link.href}
                   href={link.href}
+                  style={{ textShadow: '0 1px 3px rgba(0,0,0,0.8), 0 0 6px rgba(0,0,0,0.5)' }}
                   className={`relative px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 group whitespace-nowrap
                     ${active ? 'text-secondary-500' : 'text-gray-300 hover:text-white'}`}
                 >
