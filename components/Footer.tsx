@@ -43,7 +43,7 @@ export default function Footer() {
                 <div className="w-7 h-7 rounded-lg bg-primary-900 flex items-center justify-center shrink-0 mt-0.5">
                   <MapPin size={12} className="text-secondary-500" />
                 </div>
-                <span>Hollongi Airport, Itanagar, Arunachal Pradesh</span>
+                <span>Donyi Polo Airport, Itanagar, Arunachal Pradesh</span>
               </div>
             </div>
           </div>

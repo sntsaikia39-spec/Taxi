@@ -183,7 +183,7 @@ export default function Header() {
           willChange: 'transform, opacity',
         }}
       />
-      <div className="container mx-auto px-4">
+      <div className="container mx-auto px-4 lg:px-14 xl:px-20">
         <div className="relative flex items-center justify-between h-16 md:h-20">
 
           <Link href="/" className="flex items-center group shrink-0">
@@ -226,17 +226,29 @@ export default function Header() {
                     {user.email?.[0].toUpperCase()}
                   </button>
                   {accountMenuOpen && (
-                    <div className="absolute right-0 top-[calc(100%+10px)] w-40 rounded-2xl border border-white/10 bg-primary-900/95 backdrop-blur-xl shadow-[0_18px_44px_rgba(0,0,0,0.45)] p-1.5 z-[70] text-center">
-                      <p className="text-gray-500 text-[11px] mb-0.5 px-2 pt-1 truncate font-bold uppercase tracking-wider">
-                        {user.user_metadata?.full_name || user.email}
-                      </p>
-                      <button
-                        onClick={handleLogout}
-                        className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-xs text-red-400 hover:bg-red-500/10 transition-colors"
-                      >
-                        <LogOut size={13} />
-                        Logout
-                      </button>
+                    <div className="absolute right-0 top-[calc(100%+12px)] w-52 rounded-2xl border border-white/[0.08] bg-primary-950/95 backdrop-blur-xl shadow-[0_24px_60px_rgba(0,0,0,0.7),0_0_0_1px_rgba(255,218,0,0.06)] overflow-hidden z-[70]">
+                      {/* User info */}
+                      <div className="px-4 py-3 border-b border-white/[0.06]">
+                        <div className="w-8 h-8 rounded-full bg-secondary-500 text-primary-950 font-black text-xs flex items-center justify-center mb-2">
+                          {user.email?.[0].toUpperCase()}
+                        </div>
+                        <p className="text-white text-[13px] font-semibold truncate leading-tight">
+                          {user.user_metadata?.full_name || 'Account'}
+                        </p>
+                        <p className="text-gray-500 text-[11px] truncate mt-0.5">
+                          {user.email}
+                        </p>
+                      </div>
+                      {/* Actions */}
+                      <div className="p-1.5">
+                        <button
+                          onClick={handleLogout}
+                          className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[13px] text-red-400 hover:bg-red-500/10 hover:text-red-300 transition-colors font-medium"
+                        >
+                          <LogOut size={14} />
+                          Sign out
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>

@@ -7,7 +7,7 @@ import Header from '@/components/Header'
 import Footer from '@/components/Footer'
 import {
   Users, Star, Clock, ArrowRight, Car, MapPin,
-  Shield, ChevronRight, CheckCircle, Zap,
+  Shield, ChevronRight, CheckCircle, Zap, ChevronDown,
 } from 'lucide-react'
 import { fetchAllTours, fetchAllTourRatingStats, type RatingStats } from '@/lib/db'
 import type { TourPackage } from '@/lib/db'
@@ -203,6 +203,8 @@ export default function Home() {
       const group = groups[gIdx]
       if (!group) return
       const startX = fromRight ? window.innerWidth : -window.innerWidth
+      // Cross-fade background images — fade out all, then fade in this group's pair
+      gsap.to('.tours-bg-img', { opacity: 0, duration: 0.4, overwrite: 'auto' })
       group.forEach((cardIdx, i) => {
         const card = cardsRef.current[cardIdx]
         if (!card) return
@@ -212,6 +214,8 @@ export default function Home() {
           { x: startX, opacity: 0 },
           { x: 0, opacity: 1, duration: 0.48, delay: i * 0.1, ease: 'power3.out', overwrite: true }
         )
+        const bgEl = document.querySelector<HTMLElement>(`.tours-bg-img[data-tour-idx="${cardIdx}"]`)
+        if (bgEl) gsap.to(bgEl, { opacity: 1, duration: 0.7, delay: 0.12, overwrite: 'auto' })
       })
     }
 
@@ -234,6 +238,7 @@ export default function Home() {
         gsap.killTweensOf(card)
         gsap.set(card, { x: window.innerWidth, opacity: 0, pointerEvents: 'none' })
       })
+      gsap.set('.tours-bg-img', { opacity: 0 })
     }
 
     // ── Header helpers ──
@@ -252,7 +257,7 @@ export default function Home() {
       if (!header) return
       gsap.killTweensOf(header)
       gsap.set(header, { opacity: 1 })
-      gsap.to(header, { yPercent: -110, duration: 0.46, ease: 'power3.inOut', delay: 0.05 })
+      gsap.to(header, { yPercent: -110, duration: 0.46, ease: 'power3.inOut' })
     }
     const isInteractiveTarget = (target: EventTarget | null) => {
       const el = target as HTMLElement | null
@@ -316,7 +321,7 @@ export default function Home() {
     }
 
     // ── SVG wipe helper ──
-    const playSvgWipe = (forward: boolean, onMid: () => void, onDone: () => void) => {
+    const playSvgWipe = (forward: boolean, onMid: () => void, onDone: () => void, onWipeReachesTop?: () => void) => {
       const svg = overlaySvgRef.current
       trY[0] = forward ? 100 : 0; trY[1] = forward ? 100 : 0
       renderTr(forward)
@@ -329,6 +334,8 @@ export default function Home() {
       }
       tl.to(trY, { 0: forward ? 0 : 100 }, 0)
       tl.to(trY, { 1: forward ? 0 : 100 }, 0.16)
+      // Fire when wipe bar reaches the header's bottom edge (~8% from top ≈ t=0.65s)
+      if (forward && onWipeReachesTop) tl.call(onWipeReachesTop, [], 0.65)
       tl.call(() => {
         onMid()
         if (svg) gsap.to(svg, { opacity: 0, duration: 0.35, ease: 'power2.out', onComplete: () => {
@@ -351,13 +358,13 @@ export default function Home() {
           () => {
             gsap.set('.tours-heading > *', { opacity: 0, y: 20 })
             moveToSection(toursEl?.offsetTop ?? 0, true) // Instant move to tours section
-            hideHeader()
           },
           () => {
             gsap.to('.tours-heading > *', { opacity: 1, y: 0, stagger: 0.1, duration: 0.5, ease: 'power2.out' })
             resetAllCards()
             gsap.delayedCall(0.15, () => { showGroup(0); gsap.delayedCall(0.4, () => { transitioning = false }) })
-          }
+          },
+          hideHeader  // fires the moment the wipe bar reaches the header bottom
         )
       } else if (from.t === 'tours' && to.t === 'hero') {
         playSvgWipe(false,
@@ -531,8 +538,16 @@ export default function Home() {
     }
 
     let settleTimer: ReturnType<typeof setTimeout>
+    let lastX = -9999
+    let lastY = -9999
 
     const onMove = (e: MouseEvent) => {
+      const dx = e.clientX - lastX
+      const dy = e.clientY - lastY
+      if (dx * dx + dy * dy < 75 * 75) return   // ignore movements shorter than 75px
+      lastX = e.clientX
+      lastY = e.clientY
+
       const rect = hero.getBoundingClientRect()
       const x = (e.clientX - rect.left) / rect.width - 0.5
       const y = (e.clientY - rect.top) / rect.height - 0.5
@@ -606,6 +621,26 @@ export default function Home() {
 
       {/* ════════════════════ HERO ════════════════════ */}
       <section className="hero-section relative bg-primary-950 overflow-hidden flex-1 flex flex-col pt-12 md:pt-20 justify-center">
+        {/* ── Background atmosphere image — behind mountains ── */}
+        <div className="absolute inset-0 pointer-events-none" style={{
+          zIndex: 0,
+          WebkitMaskImage: 'radial-gradient(ellipse 85% 80% at 50% 50%, black 15%, transparent 100%), linear-gradient(to bottom, black 55%, transparent 82%)',
+          maskImage: 'radial-gradient(ellipse 85% 80% at 50% 50%, black 15%, transparent 100%), linear-gradient(to bottom, black 55%, transparent 82%)',
+          WebkitMaskComposite: 'source-in',
+          maskComposite: 'intersect',
+        }}>
+          <Image
+            src="https://images.pexels.com/photos/36781426/pexels-photo-36781426.jpeg"
+            alt=""
+            fill
+            sizes="100vw"
+            style={{
+              objectFit: 'cover',
+              filter: 'blur(1.5px) hue-rotate(-30deg)',
+              opacity: 0.4,
+            }}
+          />
+        </div>
         {/* Light ray right */}
         <div className="absolute top-0 right-0 w-[400px] h-[1px] bg-gradient-to-l from-secondary-500/30 to-transparent" />
         {/* Dot grid */}
@@ -614,14 +649,14 @@ export default function Home() {
           style={{ backgroundImage: 'radial-gradient(circle, rgba(255,218,0,0.7) 1px, transparent 1px)', backgroundSize: '38px 38px' }}
         />
         {/* Mountain silhouette */}
-        <div className="absolute bottom-10 sm:bottom-0 -left-[34%] w-[168%] sm:left-0 sm:w-full pointer-events-none select-none opacity-[0.09]">
-          <svg className="w-full h-auto" viewBox="0 0 1440 160" fill="none" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMax meet">
+        <div className="absolute bottom-10 sm:bottom-0 -left-[34%] w-[168%] sm:left-0 sm:w-full pointer-events-none select-none opacity-[0.09]" style={{ zIndex: 2 }}>
+          <svg className="w-full h-auto scale-y-[1.44] sm:scale-y-100 origin-bottom" viewBox="0 0 1440 160" fill="none" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMax meet">
             <path d="M0 160L110 72L260 120L410 48L580 110L740 18L890 90L1070 38L1260 95L1440 34V160H0Z" fill="#ffda00" />
           </svg>
         </div>
 
         {/* Two-column layout */}
-        <div className="container mx-auto px-4 lg:px-8 relative z-10 flex-1 flex flex-col justify-center -mt-10">
+        <div className="container mx-auto px-4 lg:px-14 xl:px-20 relative z-10 flex-1 flex flex-col justify-center -mt-10">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-0 lg:gap-2 items-center">
 
             {/* ── Left: text + CTAs ── */}
@@ -749,13 +784,8 @@ export default function Home() {
                     <clipPath id="screenclip">
                       <rect x="178" y="62" width="204" height="318" rx="5"/>
                     </clipPath>
-                    {/* Step 1 bloom — circle expands from screen centre on each loop */}
-                    <clipPath id="step1-bloom">
-                      <circle cx="280" cy="221" r="0">
-                        <animate attributeName="r" values="0;222;212;212" keyTimes="0;0.025;0.042;1"
-                          dur="18s" repeatCount="indefinite"
-                          calcMode="spline" keySplines="0.1 0.8 0.2 1;0.4 0 0.6 1;0 0 0 0"/>
-                      </circle>
+                    <clipPath id="logo-clip">
+                      <circle cx="280" cy="221" r="46"/>
                     </clipPath>
                     <pattern id="dotgrid2" x="0" y="0" width="32" height="32" patternUnits="userSpaceOnUse">
                       <circle cx="0" cy="0" r="0.9" fill="rgba(255,218,0,0.06)"/>
@@ -794,20 +824,17 @@ export default function Home() {
                   {/* Cycle: 18s total, 3s per step. Step 1 enters via circular bloom from centre. */}
                   <g clipPath="url(#screenclip)">
 
-                    {/* Step 1 — Sign In (0–3s) — bloom entry, opacity-only exit */}
-                    <g clipPath="url(#step1-bloom)">
-                      <animate attributeName="opacity" values="1;1;0;0" keyTimes="0;0.148;0.167;1" dur="18s" repeatCount="indefinite"/>
-                      {/* Logo */}
-                      <circle cx="280" cy="148" r="32" fill="rgba(255,218,0,0.08)" stroke="rgba(255,218,0,0.38)" strokeWidth="1.2"/>
-                      <circle cx="280" cy="148" r="19" fill="#ffda00" filter="url(#pglow-sm)"/>
-                      <text x="280" y="153" textAnchor="middle" fontSize="11" fontWeight="bold" fill="#1a1512" fontFamily="monospace">RT</text>
-                      <text x="280" y="200" textAnchor="middle" fontSize="13" fontWeight="bold" fill="rgba(255,255,255,0.9)" fontFamily="sans-serif">Rina&apos;s Tours &amp;</text>
-                      <text x="280" y="218" textAnchor="middle" fontSize="13" fontWeight="bold" fill="rgba(255,255,255,0.9)" fontFamily="sans-serif">Travels</text>
-                      <text x="280" y="236" textAnchor="middle" fontSize="8.5" fill="rgba(255,218,0,0.45)" fontFamily="monospace">Arunachal Pradesh · HGI</text>
-                      <rect x="203" y="258" width="154" height="30" rx="7" fill="#ffda00"/>
-                      <text x="280" y="277" textAnchor="middle" fontSize="10" fontWeight="bold" fill="#1a1512" fontFamily="monospace">SIGN IN</text>
-                      <rect x="203" y="297" width="154" height="30" rx="7" fill="none" stroke="rgba(255,218,0,0.45)" strokeWidth="1"/>
-                      <text x="280" y="316" textAnchor="middle" fontSize="10" fill="rgba(255,218,0,0.55)" fontFamily="monospace">CREATE ACCOUNT</text>
+                    {/* Step 1 — Logo fade in (0–3s) */}
+                    <g>
+                      <animate attributeName="opacity" values="0;1;1;0;0" keyTimes="0;0.055;0.148;0.167;1" dur="18s" repeatCount="indefinite" calcMode="spline" keySplines="0.2 0 0.1 1;0 0 0 0;0.4 0 1 1;0 0 0 0"/>
+                      {/* Outer glow ring */}
+                      <circle cx="280" cy="221" r="52" fill="none" stroke="rgba(255,218,0,0.18)" strokeWidth="1.2"/>
+                      {/* Yellow circle bg */}
+                      <circle cx="280" cy="221" r="46" fill="#ffda00" filter="url(#pglow-sm)"/>
+                      {/* Actual logo image */}
+                      <image href="https://hpobmsfwvrewpjqnmhsv.supabase.co/storage/v1/object/sign/internal/image-removebg-preview%20(1).png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV9iMjA1YjRkYi0wMDA4LTQyOWUtYTFmZi02NzBjZTE1OWJhOTkiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJpbnRlcm5hbC9pbWFnZS1yZW1vdmViZy1wcmV2aWV3ICgxKS5wbmciLCJpYXQiOjE3Nzc3NTQ5NzksImV4cCI6MTkzNTQzNDk3OX0.FR2fYD_zRiEMwQcrMja4J1PCZI6o6EFZ-_-8i6T0dy8"
+                        x="234" y="175" width="92" height="92"
+                        clipPath="url(#logo-clip)" preserveAspectRatio="xMidYMid meet"/>
                     </g>
 
                     {/* Step 2 — Choose Service (3–6s) */}
@@ -948,6 +975,7 @@ export default function Home() {
             </div>
           </div>
         </div>
+
       </section>
 
       {/* ════════════════════ STATS ════════════════════ */}
@@ -977,6 +1005,11 @@ export default function Home() {
             ))}
           </div>
         </div>
+        {/* ── Scroll indicator ── */}
+        <div className="flex flex-col items-center gap-1 py-2 pointer-events-none select-none">
+          <span className="text-[10px] font-semibold tracking-[0.2em] uppercase text-white/25">scroll</span>
+          <ChevronDown size={14} className="text-white/25 animate-bounce" />
+        </div>
       </section>
       </div>{/* end h-screen hero+stats wrapper */}
 
@@ -985,41 +1018,51 @@ export default function Home() {
         className="tours-section h-[100dvh] py-8 md:py-28 relative overflow-hidden flex flex-col justify-center"
         style={{ background: 'linear-gradient(160deg, #16120f 0%, #1c1410 35%, #110e0c 70%, #0d0b09 100%)' }}
       >
-        {/* Top side flowing shadow of the 'How it works' section below for depth */}
-        <div className="absolute bottom-0 left-0 right-0 h-48 bg-gradient-to-t from-black/75 to-transparent pointer-events-none" />
-
-        {/* Enhanced Waterfall streams with synchronized splash */}
-        {(() => {
-          const streams = [
-            { left: '8%',   dur: 10, delay: 0,   h: 380, w: 2.5, op: 0.45, blur: 1 },
-            { left: '18%',  dur: 13, delay: 1.5, h: 420, w: 3, op: 0.50, blur: 1.2 },
-            { left: '28%',  dur: 11, delay: 0.8, h: 350, w: 2, op: 0.42, blur: 0.8 },
-            { left: '40%',  dur: 14, delay: 2.2, h: 400, w: 3.5, op: 0.55, blur: 1.5 },
-            { left: '52%',  dur: 12, delay: 1.2, h: 360, w: 2.5, op: 0.48, blur: 1 },
-            { left: '64%',  dur: 15, delay: 2.8, h: 410, w: 2, op: 0.44, blur: 0.9 },
-            { left: '74%',  dur: 11, delay: 0.5, h: 370, w: 3, op: 0.52, blur: 1.2 },
-            { left: '84%',  dur: 13, delay: 1.8, h: 390, w: 2.5, op: 0.46, blur: 1 },
-            { left: '92%',  dur: 12, delay: 0.3, h: 340, w: 2, op: 0.40, blur: 0.8 },
-          ];
-          return (
-            <>
-              {streams.map((s, i) => (
-                <div key={i} className="absolute pointer-events-none select-none" style={{
-                  width: `${s.w}px`,
-                  height: `${s.h}px`,
-                  left: s.left,
-                  top: 0,
-                  background: `linear-gradient(180deg, transparent 0%, rgba(200,180,60,${s.op * 0.2}) 15%, rgba(255,200,70,${s.op * 0.5}) 40%, rgba(255,210,80,${s.op * 0.7}) 65%, rgba(255,220,100,${s.op}) 92%, rgba(255,240,150,${s.op * 0.9}) 97%)`,
-                  animation: `streamFall ${s.dur}s linear infinite`,
-                  animationDelay: `${s.delay}s`,
-                  filter: `blur(${s.blur}px) drop-shadow(0 0 ${s.blur * 2}px rgba(255,218,0,${s.op * 0.4}))`,
-                  boxShadow: `inset 0 0 ${s.w}px rgba(255,240,150,${s.op * 0.6}), 0 0 ${s.blur + 2}px rgba(255,200,0,${s.op * 0.3})`,
-                  clipPath: `polygon(50% 0, 100% 15%, 100% 100%, 0 100%, 0 15%)`,
-                }} />
-              ))}
-            </>
-          );
-        })()}
+        {/* ── Tour section background atmosphere ── */}
+        <div className="absolute inset-0 pointer-events-none" style={{ zIndex: 0 }}>
+          {/* Blurred tour image halves — cross-fades between active pair */}
+          {!loadingTours && featuredTours.map((tour, i) => {
+            const images = tour.image_urls?.length ? tour.image_urls : tour.image_url ? [tour.image_url] : [TOUR_IMAGES[i % TOUR_IMAGES.length]]
+            const isLeft = i % 2 === 0
+            return (
+              <div
+                key={tour.id}
+                className="tours-bg-img absolute inset-0"
+                data-tour-idx={i}
+                style={{ opacity: 0 }}
+              >
+                <div style={{
+                  position: 'absolute',
+                  left: isLeft ? '-5%' : '40%',
+                  width: '65%',
+                  top: '-5%',
+                  height: '110%',
+                  overflow: 'hidden',
+                  WebkitMaskImage: isLeft
+                    ? 'linear-gradient(to right, black 40%, transparent 100%)'
+                    : 'linear-gradient(to left, black 40%, transparent 100%)',
+                  maskImage: isLeft
+                    ? 'linear-gradient(to right, black 40%, transparent 100%)'
+                    : 'linear-gradient(to left, black 40%, transparent 100%)',
+                }}>
+                  <Image
+                    src={images[0]}
+                    alt=""
+                    fill
+                    sizes="65vw"
+                    style={{ objectFit: 'cover', filter: 'blur(14px) saturate(1.3)', transform: 'scale(1.06)' }}
+                  />
+                </div>
+              </div>
+            )
+          })}
+          {/* Darkening overlay — lighter so image detail shows through */}
+          <div className="absolute inset-0" style={{
+            background: 'linear-gradient(160deg, rgba(22,18,15,0.5) 0%, rgba(28,20,16,0.34) 50%, rgba(17,14,12,0.52) 100%)',
+          }} />
+          {/* Bottom depth fade into next section */}
+          <div className="absolute bottom-0 left-0 right-0 h-48 bg-gradient-to-t from-black/80 to-transparent" />
+        </div>
 
         {/* Grain texture */}
         <div className="absolute inset-0 opacity-[0.022] pointer-events-none select-none"
@@ -1139,6 +1182,18 @@ export default function Home() {
                           ) : (
                             <div className="absolute bottom-4 left-4 text-gray-400 text-xs font-semibold z-10">No reviews yet</div>
                           )}
+                          {/* Wind breeze — single diagonal streak, color-aware via backdrop-filter */}
+                          <div className="absolute inset-0 pointer-events-none overflow-hidden" style={{ zIndex: 4 }}>
+                            <div style={{
+                              position: 'absolute', top: '-50%', left: 0, width: '30%', height: '200%',
+                              background: 'linear-gradient(to right, transparent 0%, rgba(255,252,218,0.018) 30%, rgba(255,254,226,0.03) 50%, rgba(255,252,218,0.018) 70%, transparent 100%)',
+                              backdropFilter: 'saturate(2) brightness(1.38)',
+                              WebkitBackdropFilter: 'saturate(2) brightness(1.38)',
+                              transformOrigin: 'top left',
+                              animation: `tour-shimmer-flow ${(7.8 + ((index * 0.618) % 1) * 2).toFixed(1)}s ease-in-out ${(index * 1.5).toFixed(1)}s infinite`,
+                              boxShadow: '0 0 22px 10px rgba(255,252,215,0.035)',
+                            }} />
+                          </div>
                         </div>
                       )
                     })()}

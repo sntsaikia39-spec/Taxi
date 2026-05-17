@@ -125,6 +125,15 @@ html, body {
   100% { transform: scaleX(1) scaleY(0); opacity: 0; }
 }
 
+/* Tour card glittery breeze — sweep (0–60%) then park invisible (60–100%) */
+/* The 40% park phase = the gap between streaks; duration varies per card */
+@keyframes tour-shimmer-flow {
+  0%        { transform: translateX(-150vw) skewX(-18deg); opacity: 0; }
+  4%        { opacity: 1; }
+  60%       { opacity: 0.92; }
+  68%, 100% { transform: translateX(150vw) skewX(-18deg); opacity: 0; }
+}
+
 /* Smooth transitions */
 @layer components {
   .transition-smooth {

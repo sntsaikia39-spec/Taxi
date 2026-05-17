@@ -4,6 +4,13 @@ All notable changes to TaxiHollongi will be documented in this file.
 
 ---
 
+## [2026-05-17]
+
+**Author:** Yami
+
+### Changes
+- update: name, UI enhancement 1
+
 ## [2026-05-14]
 
 **Author:** Yami
