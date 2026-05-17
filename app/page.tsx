@@ -630,16 +630,16 @@ export default function Home() {
           maskComposite: 'intersect',
         }}>
           <Image
-            src="https://images.pexels.com/photos/36781426/pexels-photo-36781426.jpeg"
+            src="https://images.pexels.com/photos/29505269/pexels-photo-29505269.jpeg"
             alt=""
             fill
             sizes="100vw"
             style={{
               objectFit: 'cover',
-              filter: 'blur(1.5px) hue-rotate(-30deg)',
-              opacity: 0.4,
+              filter: 'blur(0px) brightness(0.8) contrast(2) saturate(2) hue-rotate(0deg) grayscale(0) sepia(0) invert(0) opacity(1) drop-shadow(0px 0px 0px transparent)',
+              opacity: 1,
             }}
-          />
+          />Z
         </div>
         {/* Light ray right */}
         <div className="absolute top-0 right-0 w-[400px] h-[1px] bg-gradient-to-l from-secondary-500/30 to-transparent" />
@@ -687,7 +687,7 @@ export default function Home() {
                 </Link>
                 <Link
                   href="/tours"
-                  className="group flex items-center gap-2.5 px-6 py-3 border border-white/20 text-white font-semibold rounded-xl hover:bg-white/[0.07] hover:border-white/35 transition-all duration-200 text-sm md:text-base will-change-transform"
+                  className="group flex items-center gap-2.5 px-6 py-3 border border-white/30 bg-white/[0.1] text-white font-semibold rounded-xl hover:bg-white/[0.13] hover:border-white/45 transition-all duration-200 text-sm md:text-base will-change-transform"
                 >
                   Explore Tours
                   <ChevronRight size={16} className="group-hover:translate-x-1 transition-transform duration-200" />
@@ -1005,10 +1005,10 @@ export default function Home() {
             ))}
           </div>
         </div>
-        {/* ── Scroll indicator ── */}
-        <div className="flex flex-col items-center gap-1 py-2 pointer-events-none select-none">
+        {/* ── Scroll indicator — sits at label level, no extra space ── */}
+        <div className="absolute bottom-[1.1rem] sm:bottom-[1.35rem] md:bottom-[1.6rem] left-1/2 -translate-x-1/2 flex items-center gap-1.5 pointer-events-none select-none">
           <span className="text-[10px] font-semibold tracking-[0.2em] uppercase text-white/25">scroll</span>
-          <ChevronDown size={14} className="text-white/25 animate-bounce" />
+          <ChevronDown size={12} className="text-white/25 animate-bounce" />
         </div>
       </section>
       </div>{/* end h-screen hero+stats wrapper */}
