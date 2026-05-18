@@ -30,11 +30,14 @@ declare global {
   }
 }
 
-const TOUR_IMAGES = [
+const HERO_IMAGES = [
+  'https://images.pexels.com/photos/5040304/pexels-photo-5040304.jpeg', 
+  'https://images.pexels.com/photos/14522408/pexels-photo-14522408.jpeg?auto=compress&cs=tinysrgb&w=1600', // aerial green trees on mountain
+  'https://images.pexels.com/photos/2743281/pexels-photo-2743281.jpeg?auto=compress&cs=tinysrgb&w=1600',  
   'https://images.pexels.com/photos/1172064/pexels-photo-1172064.jpeg?auto=compress&cs=tinysrgb&w=1600',
-  'https://images.pexels.com/photos/258109/pexels-photo-258109.jpeg?cs=srgb&dl=backlit-beach-color-258109.jpg&fm=jpg',
   'https://www.goodfreephotos.com/albums/other-landscapes/mountains-and-pond-landscape-with-majestic-scenery.jpg',
   'https://i0.wp.com/picjumbo.com/wp-content/uploads/beautiful-nature-mountain-scenery-with-flowers-free-photo.jpg?w=2210&quality=70',
+
 ]
 
 const STATS = [
@@ -56,6 +59,7 @@ export default function Home() {
   const [loadingTours, setLoadingTours] = useState(true)
   const [expandedTourId, setExpandedTourId] = useState<string | null>(null)
   const [cardImgIdx, setCardImgIdx] = useState<Record<string, number>>({})
+  const [heroIndex, setHeroIndex] = useState(0)
   const touchStartX = useRef<number>(0)
   const mainRef = useRef<HTMLDivElement>(null)
   const overlayPathsRef = useRef<SVGPathElement[]>([])
@@ -92,12 +96,37 @@ export default function Home() {
   }, [])
 
   useEffect(() => {
+    const id = setInterval(() => setHeroIndex(i => (i + 1) % HERO_IMAGES.length), 5000)
+    return () => clearInterval(id)
+  }, [])
+
+  useEffect(() => {
     Promise.all([fetchAllTours(), fetchAllTourRatingStats()]).then(([tours, stats]) => {
       setFeaturedTours(tours.slice(0, 4))
       setRatingStats(stats)
       setLoadingTours(false)
     })
   }, [])
+
+  // Preload all tour carousel images in the background after data arrives
+  useEffect(() => {
+    if (!featuredTours.length) return
+    const timer = setTimeout(() => {
+      featuredTours.forEach((tour, i) => {
+        const images = tour.image_urls?.length
+          ? tour.image_urls
+          : tour.image_url ? [tour.image_url]
+          : [TOUR_IMAGES[i % TOUR_IMAGES.length]]
+        images.forEach(url => {
+          for (const w of [828, 1080]) {
+            const img = new window.Image()
+            img.src = `/_next/image?url=${encodeURIComponent(url)}&w=${w}&q=75`
+          }
+        })
+      })
+    }, 1500)
+    return () => clearTimeout(timer)
+  }, [featuredTours])
 
   // ── Main scroll + entrance animations ──
   useEffect(() => {
@@ -629,17 +658,22 @@ export default function Home() {
           WebkitMaskComposite: 'source-in',
           maskComposite: 'intersect',
         }}>
-          <Image
-            src="https://images.pexels.com/photos/29505269/pexels-photo-29505269.jpeg"
-            alt=""
-            fill
-            sizes="100vw"
-            style={{
-              objectFit: 'cover',
-              filter: 'blur(0px) brightness(0.8) contrast(2) saturate(2) hue-rotate(0deg) grayscale(0) sepia(0) invert(0) opacity(1) drop-shadow(0px 0px 0px transparent)',
-              opacity: 1,
-            }}
-          />Z
+          {HERO_IMAGES.map((src, i) => (
+            <Image
+              key={src}
+              src={src}
+              alt=""
+              fill
+              sizes="100vw"
+              priority={i === 0}
+              style={{
+                objectFit: 'cover',
+                filter: 'brightness(0.9) contrast(1.3) saturate(1.6) sepia(0.15) hue-rotate(-8deg)',
+                opacity: heroIndex === i ? 1 : 0,
+                transition: 'opacity 1.4s ease-in-out',
+              }}
+            />
+          ))}
         </div>
         {/* Light ray right */}
         <div className="absolute top-0 right-0 w-[400px] h-[1px] bg-gradient-to-l from-secondary-500/30 to-transparent" />
@@ -660,7 +694,7 @@ export default function Home() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-0 lg:gap-2 items-center">
 
             {/* ── Left: text + CTAs ── */}
-            <div className="flex flex-col justify-start">
+            <div className="flex flex-col justify-start" style={{ textShadow: '0 1px 4px rgba(0,0,0,0.85), 0 0 8px rgba(0,0,0,0.5)' }}>
               {/* Badge */}
               <div className="hero-badge inline-flex items-center gap-2 px-4 py-2 rounded-full border border-secondary-500/25 bg-secondary-500/8 text-secondary-400 text-xs font-semibold tracking-widest uppercase mb-4">
                 <span className="w-1.5 h-1.5 rounded-full bg-secondary-500 animate-pulse" />
@@ -680,6 +714,7 @@ export default function Home() {
               <div className="hero-btns flex flex-wrap gap-2.5 mb-5 md:mb-6 opacity-100">
                 <Link
                   href="/book-taxi"
+                  style={{ textShadow: 'none' }}
                   className="group flex items-center gap-2.5 px-6 py-3 bg-secondary-500 text-primary-950 font-black rounded-xl hover:bg-secondary-400 active:scale-[0.97] transition-all duration-200 shadow-2xl shadow-secondary-500/25 text-sm md:text-base will-change-transform"
                 >
                   Book Taxi Now
@@ -687,7 +722,7 @@ export default function Home() {
                 </Link>
                 <Link
                   href="/tours"
-                  className="group flex items-center gap-2.5 px-6 py-3 border border-white/30 bg-white/[0.1] text-white font-semibold rounded-xl hover:bg-white/[0.13] hover:border-white/45 transition-all duration-200 text-sm md:text-base will-change-transform"
+                  className="group flex items-center gap-2.5 px-6 py-3 border border-white/25 bg-black/30 backdrop-blur-sm text-white font-semibold rounded-xl hover:bg-black/45 hover:border-white/40 transition-all duration-200 text-sm md:text-base will-change-transform"
                 >
                   Explore Tours
                   <ChevronRight size={16} className="group-hover:translate-x-1 transition-transform duration-200" />
@@ -695,7 +730,7 @@ export default function Home() {
               </div>
 
               {/* Subtitle */}
-              <p className="hero-sub text-gray-500 text-xs md:text-sm mb-5 leading-relaxed max-w-md">
+              <p className="hero-sub text-white/70 text-xs md:text-sm mb-5 leading-relaxed max-w-md">
                 Pre-book airport taxis and curated tours from Donyi Polo Airport. Transparent pricing, verified drivers — no surprises.
               </p>
 

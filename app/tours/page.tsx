@@ -58,6 +58,26 @@ export default function Tours() {
     loadTours()
   }, [])
 
+  // Preload all tour carousel images in the background after data arrives
+  useEffect(() => {
+    if (!tours.length) return
+    const timer = setTimeout(() => {
+      tours.forEach((tour, i) => {
+        const images = tour.image_urls?.length
+          ? tour.image_urls
+          : tour.image_url ? [tour.image_url]
+          : [TOUR_IMAGES[i % TOUR_IMAGES.length]]
+        images.forEach(url => {
+          for (const w of [828, 1080]) {
+            const img = new window.Image()
+            img.src = `/_next/image?url=${encodeURIComponent(url)}&w=${w}&q=75`
+          }
+        })
+      })
+    }, 1000)
+    return () => clearTimeout(timer)
+  }, [tours])
+
   useEffect(() => {
     const scroller = scrollRef.current
     if (!scroller) return

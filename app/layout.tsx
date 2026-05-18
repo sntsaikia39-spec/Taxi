@@ -4,6 +4,7 @@ import { AuthProvider } from '@/context/AuthContext'
 import { AdminProvider } from '@/context/AdminContext'
 import RouteScrollUnlocker from '@/components/RouteScrollUnlocker'
 import AppSplashLoader from '@/components/AppSplashLoader'
+import PageTransitionController from '@/components/PageTransitionController'
 import './globals.css'
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.rinastoursandtravels.in'
@@ -192,6 +193,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <AdminProvider>
             <AppSplashLoader />
             <RouteScrollUnlocker />
+            <PageTransitionController />
             <Toaster position="top-center" />
             {children}
           </AdminProvider>

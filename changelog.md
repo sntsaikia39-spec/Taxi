@@ -9,6 +9,7 @@ All notable changes to TaxiHollongi will be documented in this file.
 **Author:** Yami
 
 ### Changes
+- fix: text cut off
 - fix: scroll text
 - update: UI enhancement 2
 - update: name, UI enhancement 1

@@ -7,6 +7,7 @@ import { useAuth } from '@/context/AuthContext'
 import { useRouter, usePathname } from 'next/navigation'
 import Logo from '@/components/Logo'
 import gsap from 'gsap'
+import { createPortal } from 'react-dom'
 
 declare global {
   interface Window {
@@ -26,31 +27,55 @@ export default function Header() {
   const mobileMenuRef = useRef<HTMLDivElement>(null)
   const mobileMenuInnerRef = useRef<HTMLElement>(null)
   const accountMenuRef = useRef<HTMLDivElement>(null)
+  const blurOverlayRef = useRef<HTMLDivElement>(null)
+  const [pendingHref, setPendingHref] = useState<string | null>(null)
 
   useEffect(() => {
-    const shouldPlayIntro = typeof window !== 'undefined' && !window.__headerIntroPlayed
-    const ctx = gsap.context(() => {
-      if (shouldPlayIntro) {
-        gsap.from(headerRef.current, {
-          y: -70,
-          opacity: 0,
-          duration: 0.65,
-          ease: 'power3.out',
-        })
+    const header = headerRef.current
+    if (!header) return
+
+    // Clear any lingering GSAP inline styles from prior navigations or bfcache restoration
+    gsap.killTweensOf(header)
+    gsap.set(header, { clearProps: 'all' })
+
+    const shouldPlayIntro = !window.__headerIntroPlayed
+    window.__headerIntroPlayed = true
+
+    if (shouldPlayIntro) {
+      // Use set→to instead of from so clearProps can guarantee final visible state
+      gsap.set(header, { y: -70, opacity: 0 })
+      gsap.to(header, {
+        y: 0,
+        opacity: 1,
+        duration: 0.65,
+        ease: 'power3.out',
+        onComplete: () => gsap.set(header, { clearProps: 'y,opacity' }),
+      })
+
+      const flashRay = header.querySelector('[data-header-flash-ray]') as HTMLElement | null
+      if (flashRay) {
+        gsap.set(flashRay, { xPercent: -115, opacity: 0 })
+        gsap.timeline({ delay: 0.36 })
+          .to(flashRay, { opacity: 1, duration: 0.08, ease: 'power1.out' })
+          .to(flashRay, { xPercent: 135, duration: 0.8, ease: 'power3.out' }, 0)
+          .to(flashRay, { opacity: 0, duration: 0.12, ease: 'power1.in' }, 0.74)
       }
-    }, headerRef)
-
-    const flashRay = headerRef.current?.querySelector('[data-header-flash-ray]') as HTMLElement | null
-    if (flashRay && shouldPlayIntro) {
-      gsap.set(flashRay, { xPercent: -115, opacity: 0 })
-      gsap.timeline({ delay: 0.36 })
-        .to(flashRay, { opacity: 1, duration: 0.08, ease: 'power1.out' })
-        .to(flashRay, { xPercent: 135, duration: 0.8, ease: 'power3.out' }, 0)
-        .to(flashRay, { opacity: 0, duration: 0.12, ease: 'power1.in' }, 0.74)
     }
-    if (typeof window !== 'undefined') window.__headerIntroPlayed = true
 
-    return () => ctx.revert()
+    // Restore header when page is resumed from browser back-forward cache
+    const onPageShow = (e: PageTransitionEvent) => {
+      if (e.persisted) {
+        gsap.killTweensOf(header)
+        gsap.set(header, { clearProps: 'all' })
+      }
+    }
+    window.addEventListener('pageshow', onPageShow)
+
+    return () => {
+      window.removeEventListener('pageshow', onPageShow)
+      gsap.killTweensOf(header)
+      gsap.set(header, { clearProps: 'all' })
+    }
   }, [])
 
   useEffect(() => {
@@ -62,7 +87,10 @@ export default function Header() {
   useEffect(() => {
     setMobileMenuOpen(false)
     setAccountMenuOpen(false)
+    setPendingHref(null)
   }, [pathname])
+
+  const activeHref = pendingHref ?? pathname
 
   useEffect(() => {
     const onPointerDown = (e: MouseEvent) => {
@@ -101,6 +129,13 @@ export default function Header() {
       gsap.set(inner, { opacity: 0, y: -14 })
       gsap.set(items, { opacity: 0, y: -10 })
 
+      const overlay = blurOverlayRef.current
+      if (overlay) {
+        gsap.killTweensOf(overlay)
+        gsap.set(overlay, { display: 'block' })
+        gsap.to(overlay, { opacity: 1, duration: 0.34, ease: 'power2.out' })
+      }
+
       gsap.timeline()
         .to(panel, {
           height: 'auto',
@@ -125,6 +160,11 @@ export default function Header() {
     }
 
     if (!mobileMenuMounted) return
+    const overlay = blurOverlayRef.current
+    if (overlay) {
+      gsap.killTweensOf(overlay)
+      gsap.to(overlay, { opacity: 0, duration: 0.22, ease: 'power2.inOut' })
+    }
     gsap.killTweensOf([panel, inner, ...Array.from(items)])
     gsap.timeline({
       onComplete: () => setMobileMenuMounted(false),
@@ -166,10 +206,10 @@ export default function Header() {
   return (
     <header
       ref={headerRef}
-      className={`fixed top-0 left-0 right-0 w-full z-50 overflow-visible text-white border-b border-white/[0.08] transition-all duration-500 ${
+      className={`fixed top-0 left-0 right-0 w-full z-50 overflow-visible text-white border-b border-white/[0.08] backdrop-blur-xl transition-all duration-500 ${
         scrolled
-          ? 'bg-primary-950/96 backdrop-blur-md shadow-[0_12px_28px_rgba(8,6,5,0.38)]'
-          : 'bg-primary-950/98 shadow-[0_8px_20px_rgba(8,6,5,0.24)]'
+          ? 'bg-primary-950/88 shadow-[0_12px_28px_rgba(8,6,5,0.45)]'
+          : 'bg-primary-950/80 shadow-[0_8px_20px_rgba(8,6,5,0.3)]'
       }`}
     >
       <div className="absolute bottom-0 left-0 w-full pointer-events-none bg-gradient-to-r from-transparent via-white/[0.11] to-transparent" style={{ height: '0.5px' }} />
@@ -196,13 +236,21 @@ export default function Header() {
 
           <nav className="hidden md:flex items-center gap-1 absolute left-1/2 -translate-x-1/2">
             {navLinks.map((link) => {
-              const active = pathname === link.href
+              const active = activeHref === link.href
               return (
                 <Link
                   key={link.href}
                   href={link.href}
-                  style={{ textShadow: '0 1px 3px rgba(0,0,0,0.8), 0 0 6px rgba(0,0,0,0.5)' }}
-                  className={`relative px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 group whitespace-nowrap
+                  data-navhref={link.href}
+                  onClick={() => {
+                    setPendingHref(link.href)
+                    if (link.href !== pathname) {
+                      const el = document.getElementById('page-transition-overlay')
+                      if (el) { gsap.killTweensOf(el); gsap.set(el, { opacity: 1, y: 0 }) }
+                    }
+                  }}
+                  style={{ textShadow: '0 1px 3px rgba(0,0,0,0.8), 0 0 6px rgba(0,0,0,0.5)', position: 'relative', zIndex: 1 }}
+                  className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors duration-200 group whitespace-nowrap
                     ${active ? 'text-secondary-500' : 'text-gray-300 hover:text-white'}`}
                 >
                   {link.label}
@@ -218,7 +266,7 @@ export default function Header() {
           <div className="flex items-center gap-2 shrink-0 relative">
             {!isLoading ? (
               user ? (
-                <div ref={accountMenuRef} className="relative">
+                <div ref={accountMenuRef} className="relative hidden md:block">
                   <button
                     onClick={() => setAccountMenuOpen((v) => !v)}
                     className="w-10 h-10 rounded-full bg-secondary-500 text-primary-950 font-black text-sm flex items-center justify-center shadow-[0_10px_26px_rgba(255,218,0,0.28)] hover:bg-secondary-400 transition-colors"
@@ -298,13 +346,20 @@ export default function Header() {
           <div className="absolute left-0 right-0 h-px bg-gradient-to-r from-transparent via-secondary-500/40 to-transparent" />
           <nav ref={mobileMenuInnerRef} className="container mx-auto px-4 py-4 space-y-1.5">
             {navLinks.map((link) => {
-              const active = pathname === link.href
+              const active = activeHref === link.href
               return (
                 <Link
                   data-mobile-item
                   key={link.href}
                   href={link.href}
-                  onClick={() => setMobileMenuOpen(false)}
+                  onClick={() => {
+                    setMobileMenuOpen(false)
+                    setPendingHref(link.href)
+                    if (link.href !== pathname) {
+                      const el = document.getElementById('page-transition-overlay')
+                      if (el) { gsap.killTweensOf(el); gsap.set(el, { opacity: 1, y: 0 }) }
+                    }
+                  }}
                   className={`group flex items-center justify-between px-4 py-3.5 rounded-2xl text-sm font-medium transition-all duration-200 border
                     ${active
                       ? 'bg-secondary-500/18 text-secondary-500 border-secondary-500/45 shadow-[0_10px_26px_rgba(255,218,0,0.16)]'
@@ -320,7 +375,19 @@ export default function Header() {
             {!isLoading && (
               <div data-mobile-item className="pt-3 mt-3 border-t border-white/10">
                 {user ? (
-                  <p className="px-2 text-xs text-gray-400">Use the profile icon in header to logout</p>
+                  <div data-mobile-item className="space-y-1">
+                    <div className="px-3 py-2">
+                      <p className="text-white text-sm font-semibold truncate">{user.user_metadata?.full_name || 'Account'}</p>
+                      <p className="text-gray-500 text-xs truncate mt-0.5">{user.email}</p>
+                    </div>
+                    <button
+                      onClick={() => { handleLogout(); setMobileMenuOpen(false) }}
+                      className="w-full flex items-center gap-2.5 px-4 py-3 rounded-2xl text-sm text-red-400 border border-red-500/20 bg-red-500/8 hover:bg-red-500/15 transition-colors font-medium"
+                    >
+                      <LogOut size={15} />
+                      Sign out
+                    </button>
+                  </div>
                 ) : (
                   <div className="flex gap-2">
                     <Link
@@ -343,6 +410,24 @@ export default function Header() {
             )}
           </nav>
         </div>
+      )}
+
+      {mobileMenuMounted && createPortal(
+        <div
+          ref={blurOverlayRef}
+          className="md:hidden fixed inset-0"
+          style={{
+            display: 'none',
+            opacity: 0,
+            top: '4rem',
+            zIndex: 45,
+            backdropFilter: 'blur(8px)',
+            WebkitBackdropFilter: 'blur(8px)',
+            backgroundColor: 'rgba(8,6,4,0.22)',
+          }}
+          onClick={() => setMobileMenuOpen(false)}
+        />,
+        document.body
       )}
     </header>
   )
