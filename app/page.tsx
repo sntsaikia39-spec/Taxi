@@ -258,6 +258,9 @@ export default function Home() {
       const groups = getGroups()
       const group = groups[gIdx]
       if (!group) return
+      const cardEnterDuration = 0.48
+      const cardStagger = 0.1
+      const bgFadeDelay = cardEnterDuration + Math.max(0, group.length - 1) * cardStagger + 0.08
       const startX = fromRight ? window.innerWidth : -window.innerWidth
       // Cross-fade background images — fade out all, then fade in this group's pair
       gsap.to('.tours-bg-img', { opacity: 0, duration: 0.4, overwrite: 'auto' })
@@ -268,10 +271,10 @@ export default function Home() {
         gsap.set(card, { pointerEvents: 'auto', zIndex: 1 }) // Ensure cards are clickable and on top
         gsap.fromTo(card,
           { x: startX, opacity: 0 },
-          { x: 0, opacity: 1, duration: 0.48, delay: i * 0.1, ease: 'power3.out', overwrite: true }
+          { x: 0, opacity: 1, duration: cardEnterDuration, delay: i * cardStagger, ease: 'power3.out', overwrite: true }
         )
         const bgEl = document.querySelector<HTMLElement>(`.tours-bg-img[data-tour-idx="${cardIdx}"]`)
-        if (bgEl) gsap.to(bgEl, { opacity: 1, duration: 0.7, delay: 0.12, overwrite: 'auto' })
+        if (bgEl) gsap.to(bgEl, { opacity: 1, duration: 0.7, delay: bgFadeDelay, overwrite: 'auto' })
       })
     }
 
@@ -2180,9 +2183,9 @@ export default function Home() {
 
       {/* ════════════════════ CTA ════════════════════ */}
       {/* Grouping CTA and Footer to ensure they are treated as one viewport-constrained slide */}
-      <div className="last-slide-wrapper h-[100dvh] flex flex-col">
+      <div className="last-slide-wrapper min-h-[100dvh] md:h-[100dvh] flex flex-col">
       <section
-        className="cta-section flex-1 pt-8 pb-4 md:pt-[4.6rem] md:pb-24 relative overflow-hidden flex flex-col justify-center"
+        className="cta-section flex-1 pt-[clamp(1.1rem,3.8svh,2.3rem)] pb-[clamp(1rem,2.8svh,1.9rem)] md:pt-[4.6rem] md:pb-24 relative overflow-visible md:overflow-hidden flex flex-col justify-start md:justify-center"
         style={{ background: 'linear-gradient(160deg, #16120f 0%, #1c1410 35%, #110e0c 70%, #0d0b09 100%)' }}
       >
         {/* ── Background layer — radial dot grid (matches steps section) ── */}
@@ -2208,19 +2211,19 @@ export default function Home() {
         <div className="cta-edge-line absolute top-0 inset-x-0 h-px" style={{ background: 'linear-gradient(90deg, transparent, rgba(255,218,0,0.18) 25%, rgba(255,218,0,0.18) 75%, transparent)' }} />
         <div className="cta-edge-line absolute bottom-0 inset-x-0 h-px" style={{ background: 'linear-gradient(90deg, transparent, rgba(255,218,0,0.1) 25%, rgba(255,218,0,0.1) 75%, transparent)' }} />
 
-        <div className="container mx-auto px-4 text-center relative z-10">
-          <div className="max-w-2xl mx-auto">
-            <p className="cta-item text-secondary-500 font-semibold text-xs tracking-[0.22em] uppercase mb-2 max-[760px]:mb-1.5">Ready to travel?</p>
-            <h2 className="cta-item text-[2.1rem] max-[760px]:text-[1.85rem] md:text-5xl font-black text-white mb-2 max-[760px]:mb-1.5 leading-tight">
+        <div className="container mx-auto px-4 max-[420px]:px-3 text-center relative z-10">
+          <div className="max-w-2xl mx-auto flex flex-col items-center gap-[clamp(0.55rem,1.85svh,1rem)]">
+            <p className="cta-item text-secondary-500 font-semibold text-[11px] tracking-[0.22em] uppercase">Ready to travel?</p>
+            <h2 className="cta-item text-[clamp(1.62rem,7.5vw,2.06rem)] md:text-5xl font-black text-white leading-[1.1] max-w-[18ch]">
               Your ride awaits at Donyi Polo Airport - Hollongi
             </h2>
-            <p className="cta-item text-gray-400 text-sm max-[760px]:text-[13px] md:text-base mb-4 max-[760px]:mb-3 max-w-lg mx-auto leading-relaxed">
+            <p className="cta-item text-gray-400 text-[13px] md:text-base max-w-[34ch] mx-auto leading-[1.55]">
               Skip the queue. Pre-book your taxi or tour — verified drivers, transparent pricing.
             </p>
-            <div className="cta-item flex flex-col sm:flex-row gap-2.5 max-[760px]:gap-2 justify-center">
+            <div className="cta-item w-full max-w-[360px] flex flex-col sm:flex-row gap-[clamp(0.5rem,1.35svh,0.72rem)] justify-center">
               <Link
                 href="/book-taxi"
-                className="cta-btn group relative flex items-center justify-center gap-2.5 px-6 max-[760px]:px-5 py-3 max-[760px]:py-2.5 bg-secondary-500 text-primary-950 font-black rounded-2xl hover:bg-secondary-400 transition-colors shadow-2xl shadow-secondary-500/25 text-sm md:text-base overflow-hidden"
+                className="cta-btn group relative w-full flex items-center justify-center gap-2.5 px-6 py-[0.82rem] bg-secondary-500 text-primary-950 font-black rounded-2xl hover:bg-secondary-400 transition-colors shadow-2xl shadow-secondary-500/25 text-[1.02rem] md:text-base overflow-hidden"
               >
                 <span
                   aria-hidden="true"
@@ -2239,7 +2242,7 @@ export default function Home() {
               </Link>
               <Link
                 href="/tours"
-                className="cta-btn group flex items-center justify-center gap-2.5 px-6 max-[760px]:px-5 py-3 max-[760px]:py-2.5 border-2 border-secondary-500/30 text-secondary-500 font-bold rounded-2xl hover:bg-secondary-500/10 hover:border-secondary-500/50 transition-colors text-sm md:text-base"
+                className="cta-btn group w-full flex items-center justify-center gap-2.5 px-6 py-[0.82rem] border-2 border-secondary-500/30 text-secondary-500 font-bold rounded-2xl hover:bg-secondary-500/10 hover:border-secondary-500/50 transition-colors text-[1.02rem] md:text-base"
             >
                 Explore Tours
                 <ChevronRight size={18} className="group-hover:translate-x-1 transition-transform" />
