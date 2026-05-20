@@ -31,13 +31,20 @@ declare global {
 }
 
 const HERO_IMAGES = [
+  'https://images.pexels.com/photos/1172064/pexels-photo-1172064.jpeg?auto=compress&cs=tinysrgb&w=1600',
   'https://images.pexels.com/photos/5040304/pexels-photo-5040304.jpeg', 
   'https://images.pexels.com/photos/14522408/pexels-photo-14522408.jpeg?auto=compress&cs=tinysrgb&w=1600', // aerial green trees on mountain
   'https://images.pexels.com/photos/2743281/pexels-photo-2743281.jpeg?auto=compress&cs=tinysrgb&w=1600',  
-  'https://images.pexels.com/photos/1172064/pexels-photo-1172064.jpeg?auto=compress&cs=tinysrgb&w=1600',
   'https://www.goodfreephotos.com/albums/other-landscapes/mountains-and-pond-landscape-with-majestic-scenery.jpg',
   'https://i0.wp.com/picjumbo.com/wp-content/uploads/beautiful-nature-mountain-scenery-with-flowers-free-photo.jpg?w=2210&quality=70',
 
+]
+
+const TOUR_IMAGES = [
+  'https://images.pexels.com/photos/1172064/pexels-photo-1172064.jpeg?auto=compress&cs=tinysrgb&w=1600',
+  'https://images.pexels.com/photos/258109/pexels-photo-258109.jpeg?auto=compress&cs=tinysrgb&w=1600',
+  'https://www.goodfreephotos.com/albums/other-landscapes/mountains-and-pond-landscape-with-majestic-scenery.jpg',
+  'https://images.pexels.com/photos/2743281/pexels-photo-2743281.jpeg?auto=compress&cs=tinysrgb&w=1600',
 ]
 
 const STATS = [
@@ -49,8 +56,8 @@ const STATS = [
 
 const HOW_IT_WORKS = [
   { Icon: Car, step: '01', title: 'Book Online', desc: 'Choose your taxi or tour package and confirm in minutes — no calls, no hassle.' },
-  { Icon: Shield, step: '02', title: 'We Confirm', desc: 'Instant confirmation with driver details and transparent pricing. Zero hidden fees.' },
-  { Icon: MapPin, step: '03', title: 'We Pick You Up', desc: "Driver arrives on time at Hollongi Airport. Sit back and enjoy Arunachal Pradesh." },
+  { Icon: Shield, step: '02', title: 'We Confirm', desc: 'Instant confirmation — transparent pricing. Zero hidden fees.' },
+  { Icon: MapPin, step: '03', title: 'We Pick You Up', desc: "Driver arrives on time at Donyi Polo Airport. Sit back and enjoy Arunachal Pradesh." },
 ]
 
 export default function Home() {
@@ -64,6 +71,9 @@ export default function Home() {
   const mainRef = useRef<HTMLDivElement>(null)
   const overlayPathsRef = useRef<SVGPathElement[]>([])
   const overlaySvgRef = useRef<SVGSVGElement>(null)
+  const bookTlRef     = useRef<gsap.core.Timeline | null>(null)
+  const confirmTlRef  = useRef<gsap.core.Timeline | null>(null)
+  const pickupTlRef   = useRef<gsap.core.Timeline | null>(null)
   const cardsRef = useRef<HTMLElement[]>([])
 
   // Keep homepage deterministic on refresh/back-forward cache:
@@ -96,7 +106,7 @@ export default function Home() {
   }, [])
 
   useEffect(() => {
-    const id = setInterval(() => setHeroIndex(i => (i + 1) % HERO_IMAGES.length), 5000)
+    const id = setInterval(() => setHeroIndex(i => (i + 1) % HERO_IMAGES.length), 12000)
     return () => clearInterval(id)
   }, [])
 
@@ -108,24 +118,36 @@ export default function Home() {
     })
   }, [])
 
-  // Preload all tour carousel images in the background after data arrives
+  // Preload all tour carousel images as soon as data arrives so the
+  // hero → featured-tours transition has images warm in the HTTP cache.
   useEffect(() => {
     if (!featuredTours.length) return
-    const timer = setTimeout(() => {
-      featuredTours.forEach((tour, i) => {
-        const images = tour.image_urls?.length
-          ? tour.image_urls
-          : tour.image_url ? [tour.image_url]
-          : [TOUR_IMAGES[i % TOUR_IMAGES.length]]
-        images.forEach(url => {
-          for (const w of [828, 1080]) {
-            const img = new window.Image()
-            img.src = `/_next/image?url=${encodeURIComponent(url)}&w=${w}&q=75`
+    const links: HTMLLinkElement[] = []
+    featuredTours.forEach((tour, i) => {
+      const images = tour.image_urls?.length
+        ? tour.image_urls
+        : tour.image_url ? [tour.image_url]
+        : [TOUR_IMAGES[i % TOUR_IMAGES.length]]
+      images.forEach((url, imgIdx) => {
+        // First image of each tour is highest priority (it's what shows first)
+        // Use <link rel="preload"> for browser-priority hint + image() for cache warm
+        for (const w of [828, 1080, 1920]) {
+          const optimized = `/_next/image?url=${encodeURIComponent(url)}&w=${w}&q=75`
+          const img = new window.Image()
+          img.src = optimized
+          if (imgIdx === 0 && i < 2 && w === 1080) {
+            const link = document.createElement('link')
+            link.rel = 'preload'
+            link.as = 'image'
+            link.href = optimized
+            link.fetchPriority = 'high'
+            document.head.appendChild(link)
+            links.push(link)
           }
-        })
+        }
       })
-    }, 1500)
-    return () => clearTimeout(timer)
+    })
+    return () => { links.forEach(l => l.remove()) }
   }, [featuredTours])
 
   // ── Main scroll + entrance animations ──
@@ -170,8 +192,14 @@ export default function Home() {
 
         // Pre-hide per-section elements — animated in by doStep on arrival
         gsap.set('.tours-heading > *', { opacity: 0, y: 20 })
-        gsap.set('.step-card', { opacity: 0, y: 50 })
+        gsap.set('.step-card', { opacity: 0, y: 70, rotateX: -18, scale: 0.94 })
+        gsap.set('.step-connector', { opacity: 0, scale: 0.5 })
+        gsap.set('.step-ring-arc', { strokeDashoffset: 153.9 })
         gsap.set('.cta-item', { opacity: 0, y: 32 })
+        gsap.set('.cta-diag-line', { scaleY: 0, transformOrigin: '50% 50%' })
+        gsap.set('.cta-edge-line', { scaleX: 0, transformOrigin: '50% 50%' })
+        gsap.set('.cta-glow-orb', { scale: 0.55, opacity: 0 })
+        gsap.set('.cta-dot-grid', { opacity: 0 })
 
       }, mainRef)
     }
@@ -205,7 +233,6 @@ export default function Home() {
     let stepIdx = 0
     let transitioning = false
     let headerAutoHideTimer: ReturnType<typeof setTimeout> | null = null
-    let headerHovered = false
 
     const isMobile = () => window.innerWidth < 768
 
@@ -291,9 +318,14 @@ export default function Home() {
     const isInteractiveTarget = (target: EventTarget | null) => {
       const el = target as HTMLElement | null
       if (!el) return false
-      return Boolean(
-        el.closest('a, button, input, textarea, select, label, summary, [role="button"], [data-no-header-peek]')
-      )
+      if (el.closest('a, button, input, textarea, select, label, summary, [role="button"], [data-no-header-peek]')) return true
+      // Also treat divs/spans with cursor:pointer as interactive (e.g. tour cards, step cards)
+      let cur: HTMLElement | null = el
+      while (cur && cur !== document.body) {
+        if (window.getComputedStyle(cur).cursor === 'pointer') return true
+        cur = cur.parentElement
+      }
+      return false
     }
     const showHeaderTemporarily = () => {
       if (!header) return
@@ -307,7 +339,7 @@ export default function Home() {
       gsap.set(header, { opacity: 1 })
       gsap.to(header, { yPercent: 0, duration: 0.55, ease: 'power2.out' })
       headerAutoHideTimer = setTimeout(() => {
-        if (!headerHovered) hideHeader()
+        if (!header.matches(':hover')) hideHeader()
         headerAutoHideTimer = null
       }, 4800)
     }
@@ -315,19 +347,17 @@ export default function Home() {
       if (stepIdx === 0 || transitioning) return
       if (headerAutoHideTimer) clearTimeout(headerAutoHideTimer)
       headerAutoHideTimer = setTimeout(() => {
-        if (!headerHovered) hideHeader()
+        if (!header.matches(':hover')) hideHeader()
         headerAutoHideTimer = null
       }, 450)
     }
     const handleHeaderMouseEnter = () => {
-      headerHovered = true
       if (headerAutoHideTimer) {
         clearTimeout(headerAutoHideTimer)
         headerAutoHideTimer = null
       }
     }
     const handleHeaderMouseLeave = () => {
-      headerHovered = false
       scheduleHeaderHide()
     }
     // ── SVG overlay ──
@@ -407,9 +437,13 @@ export default function Home() {
         showGroup(toGi, fwd) // showGroup handles its own stagger
         gsap.delayedCall(0.5, () => { transitioning = false })
       } else if (from.t === 'tours' && to.t === 'steps') {
-        gsap.set('.step-card', { y: 50, opacity: 0 })
+        gsap.set('.step-card', { y: 70, opacity: 0, rotateX: -18, scale: 0.94 })
+        gsap.set('.step-connector', { opacity: 0, scale: 0.5 })
+        gsap.set('.step-ring-arc', { strokeDashoffset: 153.9 })
         moveToSection(stepsEl?.offsetTop ?? 0, false, () => {
-          gsap.to('.step-card', { y: 0, opacity: 1, stagger: 0.15, duration: 0.6, ease: 'power3.out' })
+          gsap.to('.step-card', { y: 0, opacity: 1, rotateX: 0, scale: 1, transformPerspective: 800, stagger: 0.14, duration: 0.75, ease: 'back.out(1.4)' })
+          gsap.to('.step-connector', { opacity: 1, scale: 1, stagger: 0.14, duration: 0.5, ease: 'back.out(1.7)', delay: 0.3 })
+          gsap.to('.step-ring-arc', { strokeDashoffset: 0, stagger: 0.18, duration: 1.3, ease: 'power3.out', delay: 0.45 })
           gsap.delayedCall(0.4, () => { transitioning = false })
         })
       } else if (from.t === 'steps' && to.t === 'tours') {
@@ -428,15 +462,43 @@ export default function Home() {
           })
         })
       } else if (from.t === 'steps' && to.t === 'cta') {
+        // Reset all CTA reveal targets so the entrance choreography replays on every arrival
         gsap.set('.cta-item', { y: 40, opacity: 0 })
+        gsap.set('.cta-diag-line', { scaleY: 0, transformOrigin: '50% 50%' })
+        gsap.set('.cta-edge-line', { scaleX: 0, transformOrigin: '50% 50%' })
+        gsap.set('.cta-glow-orb', { scale: 0.55, opacity: 0 })
+        gsap.set('.cta-dot-grid', { opacity: 0 })
+        const shine = document.querySelector<HTMLElement>('[data-cta-shine]')
+        if (shine) { gsap.killTweensOf(shine); gsap.set(shine, { xPercent: -130 }) }
         moveToSection(lastSlide?.offsetTop ?? 0, false, () => {
-          gsap.to('.cta-item', { y: 0, opacity: 1, stagger: 0.1, duration: 0.6, ease: 'power2.out' })
-          gsap.delayedCall(0.4, () => { transitioning = false })
+          const tl = gsap.timeline()
+          tl.to('.cta-edge-line',  { scaleX: 1, duration: 0.85, ease: 'power3.out' }, 0)
+            .to('.cta-diag-line',  { scaleY: 1, stagger: 0.08, duration: 0.85, ease: 'power3.out' }, 0.08)
+            .to('.cta-dot-grid',   { opacity: 0.05, duration: 0.7, ease: 'power2.out' }, 0.1)
+            .to('.cta-glow-orb',   {
+              scale: 1, opacity: 1, duration: 1, ease: 'power3.out',
+              onComplete: () => {
+                // Ambient breathing — kill any leftover tweens then start a fresh infinite yoyo
+                gsap.killTweensOf('.cta-glow-orb')
+                gsap.to('.cta-glow-orb', { scale: 1.08, duration: 3.6, ease: 'sine.inOut', yoyo: true, repeat: -1 })
+              },
+            }, 0.2)
+            .to('.cta-item',       { y: 0, opacity: 1, stagger: 0.1, duration: 0.6, ease: 'power2.out' }, 0.35)
+          if (shine) tl.to(shine, { xPercent: 130, duration: 1.05, ease: 'power2.inOut' }, 0.9)
+          gsap.delayedCall(1.0, () => { transitioning = false })
         })
       } else if (from.t === 'cta' && to.t === 'steps') {
-        gsap.set('.step-card', { y: -30, opacity: 0 })
+        // Stop CTA ambient loops so they don't keep running off-screen
+        gsap.killTweensOf('.cta-glow-orb')
+        const shine = document.querySelector<HTMLElement>('[data-cta-shine]')
+        if (shine) gsap.killTweensOf(shine)
+        gsap.set('.step-card', { y: -50, opacity: 0, rotateX: 14, scale: 0.94 })
+        gsap.set('.step-connector', { opacity: 0, scale: 0.5 })
+        gsap.set('.step-ring-arc', { strokeDashoffset: 153.9 })
         moveToSection(stepsEl?.offsetTop ?? 0, false, () => {
-          gsap.to('.step-card', { y: 0, opacity: 1, stagger: 0.1, duration: 0.5, ease: 'power3.out' })
+          gsap.to('.step-card', { y: 0, opacity: 1, rotateX: 0, scale: 1, transformPerspective: 800, stagger: 0.1, duration: 0.6, ease: 'back.out(1.3)' })
+          gsap.to('.step-connector', { opacity: 1, scale: 1, stagger: 0.1, duration: 0.4, ease: 'back.out(1.7)', delay: 0.25 })
+          gsap.to('.step-ring-arc', { strokeDashoffset: 0, stagger: 0.15, duration: 1.1, ease: 'power3.out', delay: 0.3 })
           gsap.delayedCall(0.35, () => { transitioning = false })
         })
       } else {
@@ -512,6 +574,8 @@ export default function Home() {
     if (header) {
       header.addEventListener('mouseenter', handleHeaderMouseEnter)
       header.addEventListener('mouseleave', handleHeaderMouseLeave)
+      // Forward wheel events from the fixed header (outside mainEl) into the same handler
+      header.addEventListener('wheel', handleWheel, { passive: false })
     }
 
     return () => {
@@ -527,6 +591,7 @@ export default function Home() {
       if (header) {
         header.removeEventListener('mouseenter', handleHeaderMouseEnter)
         header.removeEventListener('mouseleave', handleHeaderMouseLeave)
+        header.removeEventListener('wheel', handleWheel)
       }
       if (headerAutoHideTimer) clearTimeout(headerAutoHideTimer)
       if (header) gsap.set(header, { opacity: 1, yPercent: 0 })
@@ -639,6 +704,644 @@ export default function Home() {
     return () => mouseCleanup.forEach(fn => fn())
   }, [loadingTours, featuredTours])
 
+  useEffect(() => {
+    const stepCards = Array.from(document.querySelectorAll<HTMLElement>('.step-card'))
+    const cleanup: (() => void)[] = []
+    stepCards.forEach(card => {
+      const numEl = card.querySelector<HTMLElement>('.step-big-num')
+
+      // 3D tilt + number brightness on hover
+      const onMove = (e: MouseEvent) => {
+        const rect = card.getBoundingClientRect()
+        const x = (e.clientX - rect.left) / rect.width - 0.5
+        const y = (e.clientY - rect.top) / rect.height - 0.5
+        gsap.to(card, { rotateY: x * 10, rotateX: -y * 8, transformPerspective: 700, duration: 0.35, ease: 'power2.out' })
+      }
+      const onEnter = () => {
+        if (numEl) gsap.to(numEl, { opacity: 0.85, filter: 'drop-shadow(0 0 18px rgba(255,218,0,0.75))', duration: 0.35, ease: 'power2.out' })
+      }
+      const onLeave = () => {
+        gsap.to(card, { rotateY: 0, rotateX: 0, duration: 0.7, ease: 'power2.out' })
+        if (numEl) gsap.to(numEl, { opacity: 0.22, filter: 'drop-shadow(0 0 0px rgba(255,218,0,0))', duration: 0.5, ease: 'power2.out' })
+      }
+
+      // Click: press-down + card ripple + background shockwave
+      const onPointerDown = (e: PointerEvent) => {
+        gsap.killTweensOf(card, 'scale')
+        gsap.to(card, { scale: 0.94, duration: 0.1, ease: 'power2.in', transformPerspective: 700 })
+
+        // Bright flash on the number
+        if (numEl) {
+          gsap.killTweensOf(numEl)
+          gsap.to(numEl, { opacity: 1, filter: 'drop-shadow(0 0 30px rgba(255,218,0,1))', duration: 0.07, ease: 'power3.in',
+            onComplete: () => gsap.to(numEl, { opacity: 0.85, filter: 'drop-shadow(0 0 18px rgba(255,218,0,0.75))', duration: 0.45, ease: 'power2.out' }) })
+        }
+
+        // Card ripple
+        const rect = card.getBoundingClientRect()
+        const rx = e.clientX - rect.left
+        const ry = e.clientY - rect.top
+        const ripple = document.createElement('div')
+        ripple.style.cssText = `position:absolute;left:${rx}px;top:${ry}px;width:0;height:0;border-radius:50%;pointer-events:none;z-index:30;transform:translate(-50%,-50%);background:radial-gradient(circle,rgba(255,218,0,0.38) 0%,transparent 70%)`
+        card.style.overflow = 'hidden'
+        card.appendChild(ripple)
+        gsap.to(ripple, { width: 440, height: 440, opacity: 0, duration: 0.65, ease: 'power2.out', onComplete: () => ripple.remove() })
+
+        // Section-wide shockwave ring
+        const section = document.querySelector<HTMLElement>('.steps-section')
+        if (section) {
+          const sr = section.getBoundingClientRect()
+          const sx = e.clientX - sr.left
+          const sy = e.clientY - sr.top
+
+          // Expanding ring
+          const ring = document.createElement('div')
+          ring.style.cssText = `position:absolute;left:${sx}px;top:${sy}px;width:0;height:0;border-radius:50%;border:1.5px solid rgba(255,218,0,0.4);transform:translate(-50%,-50%);pointer-events:none;z-index:4`
+          section.appendChild(ring)
+          gsap.to(ring, { width: 1400, height: 1400, opacity: 0, duration: 1.4, ease: 'power2.out', onComplete: () => ring.remove() })
+
+          // Secondary softer glow bloom
+          const bloom = document.createElement('div')
+          bloom.style.cssText = `position:absolute;left:${sx}px;top:${sy}px;width:0;height:0;border-radius:50%;background:radial-gradient(circle,rgba(255,218,0,0.1) 0%,transparent 60%);transform:translate(-50%,-50%);pointer-events:none;z-index:4`
+          section.appendChild(bloom)
+          gsap.to(bloom, { width: 700, height: 700, opacity: 0, duration: 0.9, ease: 'power3.out', onComplete: () => bloom.remove() })
+        }
+      }
+      const onPointerUp = () => gsap.to(card, { scale: 1, duration: 0.55, ease: 'elastic.out(1.1, 0.45)' })
+
+      card.addEventListener('mousemove', onMove)
+      card.addEventListener('mouseenter', onEnter)
+      card.addEventListener('mouseleave', onLeave)
+      card.addEventListener('pointerdown', onPointerDown)
+      card.addEventListener('pointerup', onPointerUp)
+      card.addEventListener('pointerleave', onPointerUp)
+      cleanup.push(() => {
+        card.removeEventListener('mousemove', onMove)
+        card.removeEventListener('mouseenter', onEnter)
+        card.removeEventListener('mouseleave', onLeave)
+        card.removeEventListener('pointerdown', onPointerDown)
+        card.removeEventListener('pointerup', onPointerUp)
+        card.removeEventListener('pointerleave', onPointerUp)
+      })
+    })
+    return () => cleanup.forEach(fn => fn())
+  }, [])
+
+  // ── CTA button 3D tilt on hover + press feedback ──
+  useEffect(() => {
+    const btns = Array.from(document.querySelectorAll<HTMLElement>('.cta-btn'))
+    const cleanup: Array<() => void> = []
+    btns.forEach((btn) => {
+      const onMove = (e: MouseEvent) => {
+        const rect = btn.getBoundingClientRect()
+        const x = (e.clientX - rect.left) / rect.width - 0.5
+        const y = (e.clientY - rect.top) / rect.height - 0.5
+        gsap.to(btn, { rotateY: x * 9, rotateX: -y * 7, transformPerspective: 700, duration: 0.35, ease: 'power2.out' })
+      }
+      const onLeave = () => gsap.to(btn, { rotateY: 0, rotateX: 0, scale: 1, duration: 0.55, ease: 'power2.out' })
+      const onDown = () => gsap.to(btn, { scale: 0.96, duration: 0.1, ease: 'power2.in' })
+      const onUp   = () => gsap.to(btn, { scale: 1, duration: 0.45, ease: 'elastic.out(1.1, 0.5)' })
+      btn.addEventListener('mousemove', onMove)
+      btn.addEventListener('mouseleave', onLeave)
+      btn.addEventListener('pointerdown', onDown)
+      btn.addEventListener('pointerup', onUp)
+      btn.addEventListener('pointerleave', onUp)
+      cleanup.push(() => {
+        btn.removeEventListener('mousemove', onMove)
+        btn.removeEventListener('mouseleave', onLeave)
+        btn.removeEventListener('pointerdown', onDown)
+        btn.removeEventListener('pointerup', onUp)
+        btn.removeEventListener('pointerleave', onUp)
+      })
+    })
+    return () => cleanup.forEach(fn => fn())
+  }, [])
+
+  const playBookAnim = (e: React.MouseEvent<HTMLDivElement>) => {
+    const card = e.currentTarget
+    const overlay = card.querySelector<HTMLElement>('.bk-anim-overlay')
+    const content = card.querySelector<HTMLElement>('.bk-card-content')
+    if (!overlay || !content) return
+    const svg = overlay.querySelector('svg') as SVGSVGElement | null
+    if (!svg) return
+    bookTlRef.current?.kill()
+
+    const q = gsap.utils.selector(svg)
+
+    // Reset all SVG elements
+    gsap.set(overlay,             { opacity: 0, pointerEvents: 'none' })
+    gsap.set(q('.bk-phone'),      { strokeDashoffset: 435 })
+    gsap.set(q('.bk-notch'),      { opacity: 0 })
+    gsap.set(q('.bk-spk'),        { opacity: 0 })
+    gsap.set(q('.bk-home'),       { opacity: 0 })
+    gsap.set(q('.bk-screen'),     { opacity: 0 })
+    gsap.set(q('.bk-title'),      { opacity: 0 })
+    gsap.set(q('.bk-from-pin'),   { opacity: 0, scale: 0, transformOrigin: '50% 50%' })
+    gsap.set(q('.bk-from'),       { strokeDashoffset: 60 })
+    gsap.set(q('.bk-route'),      { opacity: 0 })
+    gsap.set(q('.bk-to-pin'),     { opacity: 0, scale: 0, transformOrigin: '50% 50%' })
+    gsap.set(q('.bk-to'),         { strokeDashoffset: 60 })
+    gsap.set(q('.bk-date'),       { opacity: 0, scale: 0.7, transformOrigin: '50% 50%' })
+    gsap.set(q('.bk-time'),       { opacity: 0, scale: 0.7, transformOrigin: '50% 50%' })
+    gsap.set(q('.bk-vt'),         { opacity: 0, scale: 0.7, transformOrigin: '50% 50%' })
+    gsap.set(q('.bk-vt-car'),     { opacity: 0 })
+    gsap.set(q('.bk-vt-line'),    { opacity: 0 })
+    gsap.set(q('.bk-price'),      { opacity: 0, y: 8 })
+    gsap.set(q('.bk-btn'),        { opacity: 0, scale: 0.7, transformOrigin: '50% 50%' })
+    gsap.set(q('.bk-btntxt'),     { opacity: 0 })
+    gsap.set(q('.bk-tap'),        { opacity: 0, scale: 1, transformOrigin: '50% 50%' })
+    gsap.set(q('.bk-load'),       { opacity: 0, scale: 1, transformOrigin: '50% 50%' })
+    gsap.set(q('.bk-conn'),       { strokeDashoffset: 64 })
+    gsap.set(q('.bk-minicar'),    { x: 94, y: 78, opacity: 0 })
+    gsap.set(q('.bk-confcard'),   { strokeDashoffset: 440 })
+    gsap.set(q('.bk-confbar'),    { scaleX: 0, transformOrigin: '50% 50%' })
+    gsap.set(q('.bk-booked'),     { opacity: 0, y: 8 })
+    gsap.set(q('.bk-ring'),       { opacity: 0, scale: 0, transformOrigin: '50% 50%' })
+    gsap.set(q('.bk-check'),      { strokeDashoffset: 60 })
+    gsap.set(q('.bk-ref'),        { opacity: 0 })
+    gsap.set(q('.bk-dot'),        { x: 0, y: 0, opacity: 0, scale: 1 })
+
+    const tl = gsap.timeline()
+    bookTlRef.current = tl
+
+    tl
+      // 0. Fade card content
+      .to(content, { opacity: 0, scale: 0.93, duration: 0.28, ease: 'power2.in' })
+      .set(overlay, { pointerEvents: 'auto' })
+      .to(overlay, { opacity: 1, duration: 0.25, ease: 'power2.out' })
+      // 1. Phone hardware
+      .to(q('.bk-phone'),  { strokeDashoffset: 0, duration: 0.5, ease: 'power2.inOut' })
+      .to(q('.bk-screen'), { opacity: 1, duration: 0.2 }, '-=0.18')
+      .to(q('.bk-notch'),  { opacity: 1, duration: 0.15 }, '-=0.15')
+      .to(q('.bk-spk'),    { opacity: 1, duration: 0.1 }, '-=0.1')
+      .to(q('.bk-home'),   { opacity: 0.6, duration: 0.1 }, '-=0.08')
+      // 2. App title
+      .to(q('.bk-title'),  { opacity: 1, duration: 0.2 }, '-=0.05')
+      // 3. From & To with pins (route)
+      .to(q('.bk-from-pin'), { opacity: 1, scale: 1, duration: 0.2, ease: 'back.out(2.2)' })
+      .to(q('.bk-from'),     { strokeDashoffset: 0, duration: 0.28, ease: 'power2.out' }, '-=0.1')
+      .to(q('.bk-route'),    { opacity: 1, duration: 0.18 }, '-=0.12')
+      .to(q('.bk-to-pin'),   { opacity: 1, scale: 1, duration: 0.2, ease: 'back.out(2.2)' }, '-=0.06')
+      .to(q('.bk-to'),       { strokeDashoffset: 0, duration: 0.28, ease: 'power2.out' }, '-=0.1')
+      // 4. Date + Time + Vehicle
+      .to(q('.bk-date'), { opacity: 1, scale: 1, duration: 0.2, ease: 'back.out(1.7)' })
+      .to(q('.bk-time'), { opacity: 1, scale: 1, duration: 0.2, ease: 'back.out(1.7)' }, '-=0.14')
+      .to(q('.bk-vt'),   { opacity: 1, scale: 1, duration: 0.22, ease: 'back.out(1.7)' }, '-=0.08')
+      .to(q('.bk-vt-car'),  { opacity: 1, duration: 0.12 }, '-=0.1')
+      .to(q('.bk-vt-line'), { opacity: 1, duration: 0.12 }, '-=0.08')
+      // 5. Price reveal
+      .to(q('.bk-price'), { opacity: 1, y: 0, duration: 0.28, ease: 'back.out(2)' })
+      // 6. Book button + tap
+      .to(q('.bk-btn'),    { opacity: 1, scale: 1, duration: 0.25, ease: 'back.out(2.3)' })
+      .to(q('.bk-btntxt'), { opacity: 1, duration: 0.15 }, '-=0.12')
+      .to(q('.bk-tap'),    { opacity: 0.9, duration: 0.08 })
+      .to(q('.bk-tap'),    { scale: 0.45, duration: 0.13, ease: 'power2.in' })
+      .to(q('.bk-btn'),    { fill: 'rgba(255,218,0,0.55)', duration: 0.1 }, '-=0.05')
+      .to(q('.bk-tap'),    { scale: 2.4, opacity: 0, duration: 0.32, ease: 'power2.out' })
+      .to(q('.bk-btn'),    { fill: 'rgba(255,218,0,0.15)', duration: 0.28 }, '-=0.25')
+      // 7. Loading dots + connection
+      .to(q('.bk-load'), { opacity: 1, stagger: 0.08, duration: 0.1 }, '-=0.15')
+      .to(q('.bk-load'), { scale: 1.5, opacity: 0.5, stagger: 0.08, duration: 0.22, repeat: 1, yoyo: true, ease: 'sine.inOut' })
+      .to(q('.bk-conn'), { strokeDashoffset: 0, duration: 0.55, ease: 'power2.inOut' }, '-=0.5')
+      // 8. Mini-car drives across the signal line
+      .to(q('.bk-minicar'), { opacity: 1, duration: 0.1 }, '-=0.55')
+      .to(q('.bk-minicar'), { x: 158, duration: 0.55, ease: 'power2.inOut' }, '-=0.5')
+      .to(q('.bk-minicar'), { opacity: 0, duration: 0.15 }, '-=0.05')
+      .to(q('.bk-load'),    { opacity: 0, duration: 0.2 }, '-=0.15')
+      // 9. Confirmation card materializes
+      .to(q('.bk-confcard'), { strokeDashoffset: 0, duration: 0.5, ease: 'power2.inOut' }, '-=0.35')
+      .to(q('.bk-confbar'),  { scaleX: 1, duration: 0.35, ease: 'power2.out' }, '-=0.3')
+      .to(q('.bk-booked'),   { opacity: 1, y: 0, duration: 0.28, ease: 'back.out(2)' }, '-=0.18')
+      // 10. Glow ring blooms + check draws
+      .to(q('.bk-ring'),  { opacity: 1, scale: 1, duration: 0.4, ease: 'back.out(1.8)' }, '-=0.08')
+      .to(q('.bk-check'), { strokeDashoffset: 0, duration: 0.45, ease: 'power3.out' }, '-=0.15')
+      .to(q('.bk-ref'),   { opacity: 1, duration: 0.25 }, '-=0.15')
+      // 11. Particles diffuse
+      .to(q('.bk-dot'), { opacity: 1, stagger: 0.03, duration: 0.06 })
+      .to(q('.bk-dot'), {
+        x: (i: number) => Math.cos((i / 10) * Math.PI * 2) * 34,
+        y: (i: number) => Math.sin((i / 10) * Math.PI * 2) * 34,
+        opacity: 0, scale: 0.3, stagger: 0.03, duration: 0.65, ease: 'power2.out',
+      }, '-=0.05')
+      // 12. Hold + restore content
+      .to(overlay,  { opacity: 0, duration: 0.35, ease: 'power2.in' }, '+=0.35')
+      .set(overlay, { pointerEvents: 'none' })
+      .to(content,  { opacity: 1, scale: 1, duration: 0.4, ease: 'power2.out' })
+      .set(content, { clearProps: 'scale' })
+  }
+
+  // ── Step 02: "We Confirm" — booking receipt unfolds, driver/price revealed, stamp slams down ──
+  const playConfirmAnim = (e: React.MouseEvent<HTMLDivElement>) => {
+    const card = e.currentTarget
+    const overlay = card.querySelector<HTMLElement>('.cf-anim-overlay')
+    const content = card.querySelector<HTMLElement>('.cf-card-content')
+    if (!overlay || !content) return
+    const svg = overlay.querySelector('svg') as SVGSVGElement | null
+    if (!svg) return
+    confirmTlRef.current?.kill()
+    const q = gsap.utils.selector(svg)
+
+    // Reset
+    gsap.set(overlay,             { opacity: 0, pointerEvents: 'none' })
+    gsap.set(q('.cf-card'),       { strokeDashoffset: 600, scaleY: 0.02, transformOrigin: '50% 50%' })
+    gsap.set(q('.cf-headbar'),    { scaleX: 0, transformOrigin: '50% 50%' })
+    gsap.set(q('.cf-label'),      { opacity: 0, y: 6 })
+    gsap.set(q('.cf-div1'),       { strokeDashoffset: 150 })
+    gsap.set(q('.cf-avatar'),     { opacity: 0, scale: 0, transformOrigin: '50% 50%' })
+    gsap.set(q('.cf-head'),       { opacity: 0 })
+    gsap.set(q('.cf-body'),       { opacity: 0 })
+    gsap.set(q('.cf-name'),       { strokeDashoffset: 80 })
+    gsap.set(q('.cf-star'),       { opacity: 0, scale: 0 })
+    gsap.set(q('.cf-div2'),       { strokeDashoffset: 150 })
+    gsap.set(q('.cf-car-info'),   { opacity: 0, scale: 0.6, transformOrigin: '50% 50%' })
+    gsap.set(q('.cf-vehicle'),    { strokeDashoffset: 82 })
+    gsap.set(q('.cf-rupee'),      { opacity: 0, scale: 0.4, transformOrigin: '50% 50%' })
+    gsap.set(q('.cf-amount'),     { strokeDashoffset: 82 })
+    gsap.set(q('.cf-hint'),       { opacity: 0 })
+    gsap.set(q('.cf-stamp'),      { x: 215, y: 50, opacity: 0, scale: 2.6, rotation: -25, transformOrigin: '50% 50%' })
+    gsap.set(q('.cf-stamp-ring'), { strokeDashoffset: 188 })
+    gsap.set(q('.cf-stamp-chk'),  { strokeDashoffset: 40 })
+    gsap.set(q('.cf-stamp-txt'),  { opacity: 0 })
+    gsap.set(q('.cf-dot'),        { x: 0, y: 0, opacity: 0, scale: 1 })
+
+    const tl = gsap.timeline()
+    confirmTlRef.current = tl
+    tl
+      // 0. Fade content + show overlay
+      .to(content,  { opacity: 0, scale: 0.93, duration: 0.28, ease: 'power2.in' })
+      .set(overlay, { pointerEvents: 'auto' })
+      .to(overlay,  { opacity: 1, duration: 0.25, ease: 'power2.out' })
+      // 1. Receipt unfolds (scaleY then outline draws)
+      .to(q('.cf-card'), { scaleY: 1, duration: 0.45, ease: 'power3.out' })
+      .to(q('.cf-card'), { strokeDashoffset: 0, duration: 0.5, ease: 'power2.inOut' }, '-=0.25')
+      .to(q('.cf-headbar'), { scaleX: 1, duration: 0.35, ease: 'power2.out' }, '-=0.4')
+      // 2. "CONFIRMED" label
+      .to(q('.cf-label'), { opacity: 1, y: 0, duration: 0.28, ease: 'back.out(2)' }, '-=0.2')
+      // 3. Top divider wipes
+      .to(q('.cf-div1'), { strokeDashoffset: 0, duration: 0.3, ease: 'power2.out' }, '-=0.1')
+      // 4. Driver avatar + silhouette
+      .to(q('.cf-avatar'), { opacity: 1, scale: 1, duration: 0.3, ease: 'back.out(2)' })
+      .to(q('.cf-head'),   { opacity: 1, duration: 0.18 }, '-=0.15')
+      .to(q('.cf-body'),   { opacity: 1, duration: 0.18 }, '-=0.12')
+      // 5. Driver name line wipes
+      .to(q('.cf-name'), { strokeDashoffset: 0, duration: 0.35, ease: 'power2.out' }, '-=0.18')
+      // 6. 5 stars pop in
+      .to(q('.cf-star'), { opacity: 1, scale: 1, stagger: 0.08, duration: 0.25, ease: 'back.out(2.5)' }, '-=0.15')
+      // 7. Lower divider
+      .to(q('.cf-div2'), { strokeDashoffset: 0, duration: 0.3, ease: 'power2.out' }, '-=0.1')
+      // 8. Vehicle row (car icon + line)
+      .to(q('.cf-car-info'), { opacity: 1, scale: 1, duration: 0.2, ease: 'back.out(2)' })
+      .to(q('.cf-vehicle'),  { strokeDashoffset: 0, duration: 0.35, ease: 'power2.out' }, '-=0.12')
+      // 9. Price row
+      .to(q('.cf-rupee'), { opacity: 1, scale: 1, duration: 0.25, ease: 'back.out(2.2)' }, '-=0.15')
+      .to(q('.cf-amount'), { strokeDashoffset: 0, duration: 0.35, ease: 'power2.out' }, '-=0.15')
+      .to(q('.cf-hint'), { opacity: 1, duration: 0.25 }, '-=0.1')
+      // 10. Stamp rotates in and slams down
+      .to(q('.cf-stamp'), { opacity: 1, scale: 1, rotation: 8, duration: 0.4, ease: 'power3.in' }, '+=0.15')
+      .to(q('.cf-stamp'), { scale: 1.08, duration: 0.08, ease: 'power2.out' })
+      .to(q('.cf-stamp'), { scale: 1, duration: 0.18, ease: 'elastic.out(1, 0.4)' })
+      // 11. Stamp ring traces + check draws + label appears
+      .to(q('.cf-stamp-ring'), { strokeDashoffset: 0, duration: 0.45, ease: 'power2.out' }, '-=0.18')
+      .to(q('.cf-stamp-chk'),  { strokeDashoffset: 0, duration: 0.35, ease: 'power3.out' }, '-=0.25')
+      .to(q('.cf-stamp-txt'),  { opacity: 1, duration: 0.25 }, '-=0.15')
+      // 12. Particle burst from stamp
+      .to(q('.cf-dot'), { opacity: 1, stagger: 0.03, duration: 0.06 }, '-=0.1')
+      .to(q('.cf-dot'), {
+        x: (i: number) => Math.cos((i / 10) * Math.PI * 2) * 38,
+        y: (i: number) => Math.sin((i / 10) * Math.PI * 2) * 38,
+        opacity: 0, scale: 0.3, stagger: 0.03, duration: 0.65, ease: 'power2.out',
+      }, '-=0.05')
+      // 13. Hold + restore
+      .to(overlay,  { opacity: 0, duration: 0.35, ease: 'power2.in' }, '+=0.35')
+      .set(overlay, { pointerEvents: 'none' })
+      .to(content,  { opacity: 1, scale: 1, duration: 0.4, ease: 'power2.out' })
+      .set(content, { clearProps: 'scale' })
+  }
+
+  // ── Step 03: "We Pick You Up" — airport, plane, road, pin with passenger, car arrives on time ──
+  const playPickupAnim = (e: React.MouseEvent<HTMLDivElement>) => {
+    const card = e.currentTarget
+    const overlay = card.querySelector<HTMLElement>('.pu-anim-overlay')
+    const content = card.querySelector<HTMLElement>('.pu-card-content')
+    if (!overlay || !content) return
+    const svg = overlay.querySelector('svg') as SVGSVGElement | null
+    if (!svg) return
+    pickupTlRef.current?.kill()
+    const q = gsap.utils.selector(svg)
+
+    // Reset
+    gsap.set(overlay,            { opacity: 0, pointerEvents: 'none' })
+    gsap.set(q('.pu-airport'),   { opacity: 0, y: -6 })
+    gsap.set(q('.pu-rwy'),       { opacity: 0 })
+    gsap.set(q('.pu-iata'),      { opacity: 0 })
+    gsap.set(q('.pu-plane'),     { x: -30, y: 20, opacity: 0 })
+    gsap.set(q('.pu-trail'),     { opacity: 0 })
+    gsap.set(q('.pu-road'),      { strokeDashoffset: 270 })
+    gsap.set(q('.pu-pin'),       { strokeDashoffset: 225 })
+    gsap.set(q('.pu-inner'),     { opacity: 0, scale: 0, transformOrigin: '50% 50%' })
+    gsap.set(q('.pu-phead'),     { opacity: 0, scale: 0, transformOrigin: '50% 50%' })
+    gsap.set(q('.pu-pbody'),     { opacity: 0 })
+    gsap.set(q('.pu-clock'),     { x: 245, y: 80, opacity: 0, scale: 0, transformOrigin: '50% 50%' })
+    gsap.set(q('.pu-hour'),      { rotation: -90, transformOrigin: '50% 100%' })
+    gsap.set(q('.pu-min'),       { rotation: -90, transformOrigin: '50% 100%' })
+    gsap.set(q('.pu-ontime'),    { opacity: 0, y: -4 })
+    gsap.set(q('.pu-car'),       { x: 175, opacity: 0 })
+    gsap.set(q('.pu-headlight'), { opacity: 0 })
+    gsap.set(q('.pu-beam'),      { opacity: 0 })
+    gsap.set(q('.pu-speed'),     { opacity: 0, x: 0 })
+    gsap.set(q('.pu-puff'),      { opacity: 0, x: 0 })
+    gsap.set(q('.pu-glow'),      { opacity: 0, scale: 0, transformOrigin: '50% 50%' })
+    gsap.set(q('.pu-dot'),       { x: 0, y: 0, opacity: 0, scale: 1 })
+
+    const tl = gsap.timeline()
+    pickupTlRef.current = tl
+    tl
+      // 0. Fade + overlay
+      .to(content,  { opacity: 0, scale: 0.93, duration: 0.28, ease: 'power2.in' })
+      .set(overlay, { pointerEvents: 'auto' })
+      .to(overlay,  { opacity: 1, duration: 0.25, ease: 'power2.out' })
+      // 1. Airport hangar + runway
+      .to(q('.pu-airport'), { opacity: 1, y: 0, duration: 0.35, ease: 'back.out(1.8)' })
+      .to(q('.pu-rwy'),     { opacity: 1, duration: 0.25 }, '-=0.18')
+      .to(q('.pu-iata'),    { opacity: 1, duration: 0.25 }, '-=0.15')
+      // 2. Plane flies across top with trail
+      .to(q('.pu-plane'),   { opacity: 1, duration: 0.12 })
+      .to(q('.pu-trail'),   { opacity: 0.4, duration: 0.12 }, '-=0.1')
+      .to(q('.pu-plane'),   { x: 300, duration: 1.1, ease: 'power1.inOut' }, '-=0.08')
+      .to(q('.pu-trail'),   { opacity: 0, duration: 0.3, ease: 'power2.out' }, '-=0.4')
+      .to(q('.pu-plane'),   { opacity: 0, duration: 0.2 }, '-=0.25')
+      // 3. Road draws in (parallel with later plane stages)
+      .to(q('.pu-road'), { strokeDashoffset: 0, duration: 0.5, ease: 'power2.inOut' }, '-=0.85')
+      // 4. Pin draws + inner glow + passenger
+      .to(q('.pu-pin'),   { strokeDashoffset: 0, duration: 0.55, ease: 'power2.inOut' }, '-=0.5')
+      .to(q('.pu-inner'), { opacity: 1, scale: 1, duration: 0.32, ease: 'back.out(2)' }, '-=0.18')
+      .to(q('.pu-phead'), { opacity: 1, scale: 1, duration: 0.22, ease: 'back.out(2.2)' }, '-=0.12')
+      .to(q('.pu-pbody'), { opacity: 1, duration: 0.2 }, '-=0.12')
+      // 5. Clock blooms + hands rotate to "on time" position
+      .to(q('.pu-clock'), { opacity: 1, scale: 1, duration: 0.4, ease: 'back.out(1.8)' }, '-=0.2')
+      .to(q('.pu-hour'),  { rotation: 30,  duration: 0.55, ease: 'power2.out' }, '-=0.25')
+      .to(q('.pu-min'),   { rotation: 270, duration: 0.55, ease: 'power2.out' }, '-=0.55')
+      .to(q('.pu-ontime'), { opacity: 1, y: 0, duration: 0.3, ease: 'back.out(2)' }, '-=0.15')
+      // 6. Speed lines + car drives in from right
+      .to(q('.pu-speed'),  { opacity: 1, duration: 0.1 }, '+=0.05')
+      .to(q('.pu-speed'),  { x: -55, stagger: 0.04, duration: 0.6, ease: 'power1.out' }, '-=0.05')
+      .to(q('.pu-car'),    { opacity: 1, duration: 0.12 }, '-=0.6')
+      .to(q('.pu-car'),    { x: 0, duration: 0.85, ease: 'power3.out' }, '-=0.55')
+      .to(q('.pu-speed'),  { opacity: 0, duration: 0.25 }, '-=0.3')
+      // 7. Car arrival bounce + headlight + beam
+      .to(q('.pu-car'),    { x: -7, duration: 0.13, ease: 'power2.out' })
+      .to(q('.pu-car'),    { x: 0,  duration: 0.22, ease: 'elastic.out(1, 0.45)' })
+      .to(q('.pu-headlight'), { opacity: 1, duration: 0.15, ease: 'power2.out' }, '-=0.2')
+      .to(q('.pu-beam'),      { opacity: 1, duration: 0.2 }, '-=0.15')
+      // 8. Exhaust puffs
+      .to(q('.pu-puff'), { opacity: 0.7, x: -6, stagger: 0.06, duration: 0.3, ease: 'power2.out' }, '-=0.3')
+      .to(q('.pu-puff'), { opacity: 0,   x: -22, stagger: 0.06, duration: 0.45, ease: 'power2.in' }, '-=0.1')
+      // 9. Arrival glow blooms
+      .to(q('.pu-glow'), { opacity: 1, scale: 1, duration: 0.45, ease: 'back.out(1.8)' }, '-=0.35')
+      // 10. Particles burst
+      .to(q('.pu-dot'), { opacity: 1, stagger: 0.03, duration: 0.06 }, '-=0.15')
+      .to(q('.pu-dot'), {
+        x: (i: number) => Math.cos((i / 10) * Math.PI * 2) * 34,
+        y: (i: number) => Math.sin((i / 10) * Math.PI * 2) * 34,
+        opacity: 0, scale: 0.3, stagger: 0.03, duration: 0.65, ease: 'power2.out',
+      }, '-=0.05')
+      // 11. Hold + restore
+      .to(overlay,  { opacity: 0, duration: 0.35, ease: 'power2.in' }, '+=0.4')
+      .set(overlay, { pointerEvents: 'none' })
+      .to(content,  { opacity: 1, scale: 1, duration: 0.4, ease: 'power2.out' })
+      .set(content, { clearProps: 'scale' })
+  }
+
+  // ── Animation overlay renderers (reusable for mobile & desktop) ────────────
+  const renderBookOverlay = () => (
+    <div className="bk-anim-overlay absolute inset-0 flex items-center justify-center rounded-2xl"
+      style={{ opacity: 0, pointerEvents: 'none', background: 'linear-gradient(160deg, rgba(12,8,5,0.97) 0%, rgba(20,14,8,0.99) 100%)' }}>
+      <svg width="92%" height="84%" viewBox="0 0 260 155"
+        fill="none" preserveAspectRatio="xMidYMid meet" style={{ overflow: 'visible' }}>
+        <path className="bk-phone"
+          d="M14,8 L82,8 Q88,8 88,14 L88,142 Q88,148 82,148 L14,148 Q8,148 8,142 L8,14 Q8,8 14,8 Z"
+          stroke="#ffda00" strokeWidth="2" fill="rgba(255,218,0,0.02)"
+          strokeLinejoin="round" strokeDasharray="435" strokeDashoffset="435" />
+        <rect className="bk-notch" x="33" y="11" width="30" height="4.5" rx="2.2" fill="rgba(255,218,0,0.45)" />
+        <line className="bk-spk" x1="42" y1="13.2" x2="54" y2="13.2" stroke="#0c0805" strokeWidth="1.3" strokeLinecap="round" />
+        <line className="bk-home" x1="38" y1="144" x2="58" y2="144" stroke="#ffda00" strokeWidth="1.8" strokeLinecap="round" />
+        <rect className="bk-screen" x="11" y="20" width="74" height="118" rx="2"
+          fill="rgba(255,218,0,0.04)" stroke="rgba(255,218,0,0.15)" strokeWidth="0.5" />
+        <text className="bk-title" x="48" y="32" textAnchor="middle"
+          fill="#ffda00" fontSize="6" fontWeight="900" fontFamily="sans-serif" letterSpacing="0.5">BOOK A RIDE</text>
+        <circle className="bk-from-pin" cx="17" cy="42" r="2.5" fill="#ffda00" />
+        <line className="bk-from" x1="22" y1="42" x2="82" y2="42"
+          stroke="rgba(255,218,0,0.65)" strokeWidth="1.8" strokeLinecap="round"
+          strokeDasharray="60" strokeDashoffset="60" />
+        <line className="bk-route" x1="17" y1="46" x2="17" y2="53"
+          stroke="rgba(255,218,0,0.45)" strokeWidth="1" strokeDasharray="1 1.5" />
+        <circle className="bk-to-pin" cx="17" cy="56" r="2.5" fill="#ffda00" />
+        <line className="bk-to" x1="22" y1="56" x2="82" y2="56"
+          stroke="rgba(255,218,0,0.5)" strokeWidth="1.8" strokeLinecap="round"
+          strokeDasharray="60" strokeDashoffset="60" />
+        <rect className="bk-date" x="14" y="66" width="32" height="9" rx="2"
+          fill="rgba(255,218,0,0.07)" stroke="rgba(255,218,0,0.35)" strokeWidth="0.6" />
+        <rect className="bk-time" x="50" y="66" width="32" height="9" rx="2"
+          fill="rgba(255,218,0,0.07)" stroke="rgba(255,218,0,0.35)" strokeWidth="0.6" />
+        <rect className="bk-vt" x="14" y="80" width="68" height="11" rx="2.5"
+          fill="rgba(255,218,0,0.08)" stroke="rgba(255,218,0,0.32)" strokeWidth="0.6" />
+        <rect className="bk-vt-car" x="18" y="84" width="9" height="3.5" rx="1" fill="rgba(255,218,0,0.55)" />
+        <line className="bk-vt-line" x1="32" y1="86" x2="76" y2="86" stroke="rgba(255,218,0,0.45)" strokeWidth="0.8" strokeLinecap="round" />
+        <text className="bk-price" x="48" y="101" textAnchor="middle"
+          fill="#ffda00" fontSize="9" fontWeight="900" fontFamily="sans-serif">₹450</text>
+        <rect className="bk-btn" x="14" y="106" width="68" height="14" rx="7"
+          fill="rgba(255,218,0,0.15)" stroke="#ffda00" strokeWidth="1.3" />
+        <text className="bk-btntxt" x="48" y="115.5" textAnchor="middle"
+          fill="#ffda00" fontSize="6.5" fontWeight="900" fontFamily="sans-serif" letterSpacing="0.6">BOOK NOW</text>
+        <circle className="bk-tap" cx="48" cy="113" r="11"
+          stroke="rgba(255,218,0,0.7)" strokeWidth="1.2" fill="none" />
+        <circle className="bk-load" cx="100" cy="62" r="2.4" fill="#ffda00" />
+        <circle className="bk-load" cx="110" cy="62" r="2.4" fill="#ffda00" />
+        <circle className="bk-load" cx="120" cy="62" r="2.4" fill="#ffda00" />
+        <line className="bk-conn" x1="94" y1="78" x2="158" y2="78"
+          stroke="rgba(255,218,0,0.45)" strokeWidth="1.3" strokeLinecap="round"
+          strokeDasharray="64" strokeDashoffset="64" />
+        <g className="bk-minicar">
+          <rect x="-7" y="-3.5" width="14" height="7" rx="1.5"
+            fill="rgba(255,218,0,0.55)" stroke="#ffda00" strokeWidth="0.7" />
+          <rect x="-4.5" y="-5.5" width="9" height="2.5" rx="0.8" fill="rgba(255,218,0,0.7)" />
+          <circle cx="-4" cy="3.5" r="1.6" fill="rgba(12,8,5,0.95)" stroke="#ffda00" strokeWidth="0.6" />
+          <circle cx="4" cy="3.5" r="1.6" fill="rgba(12,8,5,0.95)" stroke="#ffda00" strokeWidth="0.6" />
+        </g>
+        <rect className="bk-confcard" x="162" y="20" width="92" height="125" rx="6"
+          fill="rgba(255,218,0,0.05)" stroke="#ffda00" strokeWidth="1.5"
+          strokeDasharray="440" strokeDashoffset="440" />
+        <rect className="bk-confbar" x="162" y="20" width="92" height="5" rx="2.5" fill="#ffda00" />
+        <text className="bk-booked" x="208" y="42" textAnchor="middle"
+          fill="#ffda00" fontSize="10" fontWeight="900" fontFamily="sans-serif" letterSpacing="0.8">BOOKED!</text>
+        <circle className="bk-ring" cx="208" cy="86" r="32"
+          stroke="rgba(255,218,0,0.15)" strokeWidth="8" />
+        <circle className="bk-ring" cx="208" cy="86" r="27"
+          stroke="rgba(255,218,0,0.55)" strokeWidth="1.5" />
+        <path className="bk-check" d="M193,86 L204,98 L224,69"
+          stroke="#ffda00" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"
+          strokeDasharray="60" strokeDashoffset="60" />
+        <text className="bk-ref" x="208" y="130" textAnchor="middle"
+          fill="rgba(255,218,0,0.7)" fontSize="5.5" fontWeight="800" fontFamily="sans-serif" letterSpacing="0.8">REF #TH482</text>
+        {Array.from({ length: 10 }, (_, pi) => (
+          <circle key={pi} className="bk-dot"
+            cx={208 + Math.cos((pi / 10) * Math.PI * 2) * 7}
+            cy={86  + Math.sin((pi / 10) * Math.PI * 2) * 7}
+            r={pi % 2 === 0 ? 2.5 : 1.8} fill="#ffda00" />
+        ))}
+      </svg>
+    </div>
+  )
+
+  const renderConfirmOverlay = () => (
+    <div className="cf-anim-overlay absolute inset-0 flex items-center justify-center rounded-2xl"
+      style={{ opacity: 0, pointerEvents: 'none', background: 'linear-gradient(160deg, rgba(12,8,5,0.97) 0%, rgba(20,14,8,0.99) 100%)' }}>
+      <svg width="92%" height="84%" viewBox="0 0 280 160"
+        fill="none" preserveAspectRatio="xMidYMid meet" style={{ overflow: 'visible' }}>
+        <rect className="cf-card" x="55" y="20" width="170" height="120" rx="6"
+          fill="rgba(255,218,0,0.04)" stroke="#ffda00" strokeWidth="1.5"
+          strokeDasharray="600" strokeDashoffset="600" />
+        <rect className="cf-headbar" x="55" y="20" width="170" height="5" rx="2.5" fill="#ffda00" />
+        <text className="cf-label" x="140" y="42" textAnchor="middle"
+          fill="#ffda00" fontSize="9" fontWeight="900" fontFamily="sans-serif" letterSpacing="1.5">✓ CONFIRMED</text>
+        <line className="cf-div1" x1="65" y1="52" x2="215" y2="52"
+          stroke="rgba(255,218,0,0.3)" strokeWidth="0.8" strokeLinecap="round"
+          strokeDasharray="150" strokeDashoffset="150" />
+        <circle className="cf-avatar" cx="80" cy="78" r="13"
+          fill="rgba(255,218,0,0.15)" stroke="#ffda00" strokeWidth="1.5" />
+        <circle className="cf-head" cx="80" cy="74" r="4" fill="#ffda00" />
+        <path className="cf-body" d="M71,86 Q80,80 89,86 L89,87 Q80,90 71,87 Z" fill="#ffda00" />
+        <line className="cf-name" x1="100" y1="74" x2="180" y2="74"
+          stroke="rgba(255,218,0,0.7)" strokeWidth="2" strokeLinecap="round"
+          strokeDasharray="80" strokeDashoffset="80" />
+        {[0,1,2,3,4].map(si => {
+          const cx = 104 + si * 8
+          const cy = 85
+          const pts = Array.from({length:10},(_,k)=>{
+            const a = (k * Math.PI) / 5 - Math.PI/2
+            const r = k % 2 === 0 ? 3 : 1.3
+            return `${(cx + Math.cos(a)*r).toFixed(2)},${(cy + Math.sin(a)*r).toFixed(2)}`
+          }).join(' ')
+          return <polygon key={si} className="cf-star" points={pts} fill="#ffda00" />
+        })}
+        <line className="cf-div2" x1="65" y1="103" x2="215" y2="103"
+          stroke="rgba(255,218,0,0.3)" strokeWidth="0.8" strokeLinecap="round"
+          strokeDasharray="150" strokeDashoffset="150" />
+        <rect className="cf-car-info" x="68" y="113" width="14" height="9" rx="1.8"
+          fill="rgba(255,218,0,0.5)" stroke="#ffda00" strokeWidth="0.7" />
+        <line className="cf-vehicle" x1="88" y1="118" x2="170" y2="118"
+          stroke="rgba(255,218,0,0.55)" strokeWidth="1.6" strokeLinecap="round"
+          strokeDasharray="82" strokeDashoffset="82" />
+        <text className="cf-rupee" x="68" y="135" fill="#ffda00" fontSize="9" fontWeight="900" fontFamily="sans-serif">₹</text>
+        <line className="cf-amount" x1="78" y1="133" x2="148" y2="133"
+          stroke="rgba(255,218,0,0.6)" strokeWidth="1.6" strokeLinecap="round"
+          strokeDasharray="82" strokeDashoffset="82" />
+        <text className="cf-hint" x="215" y="135" textAnchor="end"
+          fill="rgba(255,218,0,0.55)" fontSize="5" fontWeight="800" fontFamily="sans-serif" letterSpacing="0.8">NO HIDDEN FEES</text>
+        <g className="cf-stamp">
+          <circle cx="0" cy="0" r="34" fill="rgba(255,218,0,0.06)" />
+          <circle cx="0" cy="0" r="30" fill="rgba(12,8,5,0.92)" stroke="#ffda00" strokeWidth="1.8" />
+          <circle className="cf-stamp-ring" cx="0" cy="0" r="24"
+            stroke="#ffda00" strokeWidth="1" fill="none" strokeLinecap="round"
+            strokeDasharray="188" strokeDashoffset="188" />
+          <path className="cf-stamp-chk" d="M-11,1 L-3,10 L12,-10"
+            stroke="#ffda00" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"
+            strokeDasharray="40" strokeDashoffset="40" />
+          <text className="cf-stamp-txt" x="0" y="20" textAnchor="middle"
+            fill="#ffda00" fontSize="5" fontWeight="900" fontFamily="sans-serif" letterSpacing="1.2">VERIFIED</text>
+        </g>
+        {Array.from({ length: 10 }, (_, pi) => (
+          <circle key={pi} className="cf-dot"
+            cx={215 + Math.cos((pi / 10) * Math.PI * 2) * 7}
+            cy={50  + Math.sin((pi / 10) * Math.PI * 2) * 7}
+            r={pi % 2 === 0 ? 2.5 : 1.8} fill="#ffda00" />
+        ))}
+      </svg>
+    </div>
+  )
+
+  const renderPickupOverlay = () => (
+    <div className="pu-anim-overlay absolute inset-0 flex items-center justify-center rounded-2xl"
+      style={{ opacity: 0, pointerEvents: 'none', background: 'linear-gradient(160deg, rgba(12,8,5,0.97) 0%, rgba(20,14,8,0.99) 100%)' }}>
+      <svg width="94%" height="86%" viewBox="0 0 280 160"
+        fill="none" preserveAspectRatio="xMidYMid meet" style={{ overflow: 'visible' }}>
+        <path className="pu-airport" d="M225,30 L245,12 L265,30 L265,38 L225,38 Z"
+          stroke="#ffda00" strokeWidth="1.4" fill="rgba(255,218,0,0.07)" strokeLinejoin="round" />
+        <line className="pu-rwy" x1="222" y1="42" x2="268" y2="42"
+          stroke="rgba(255,218,0,0.55)" strokeWidth="1.2" strokeDasharray="3 2.5" />
+        <text className="pu-iata" x="245" y="50" textAnchor="middle"
+          fill="rgba(255,218,0,0.7)" fontSize="6" fontWeight="900" fontFamily="sans-serif" letterSpacing="1.2">HGI</text>
+        <g className="pu-plane">
+          <line className="pu-trail" x1="-30" y1="0" x2="-3" y2="0"
+            stroke="#ffda00" strokeWidth="1" strokeLinecap="round" strokeDasharray="2 3" />
+          <path d="M-12,0 L8,-2 L14,0 L8,2 Z M-3,-4 L0,0 L-3,4 Z" fill="#ffda00" />
+          <path d="M2,-1 L6,-5 L8,-4 L4,0 Z" fill="#ffda00" />
+          <path d="M2,1 L6,5 L8,4 L4,0 Z" fill="#ffda00" />
+        </g>
+        <line className="pu-road" x1="15" y1="135" x2="280" y2="135"
+          stroke="rgba(255,218,0,0.3)" strokeWidth="2" strokeLinecap="round"
+          strokeDasharray="270" strokeDashoffset="270" />
+        <line x1="15" y1="135" x2="280" y2="135"
+          stroke="rgba(255,218,0,0.08)" strokeWidth="4" strokeDasharray="14 18" />
+        <path className="pu-pin"
+          d="M60,40 C78,40 90,52 90,70 C90,92 60,125 60,125 C60,125 30,92 30,70 C30,52 42,40 60,40 Z"
+          stroke="#ffda00" strokeWidth="2" strokeLinejoin="round"
+          strokeDasharray="225" strokeDashoffset="225" />
+        <circle className="pu-inner" cx="60" cy="66" r="11"
+          fill="rgba(12,8,5,0.95)" stroke="#ffda00" strokeWidth="1.3" />
+        <circle className="pu-phead" cx="60" cy="62" r="3.2" fill="#ffda00" />
+        <path className="pu-pbody" d="M53,72 Q60,67 67,72 L67,73 Q60,75 53,73 Z" fill="#ffda00" />
+        <g className="pu-clock">
+          <circle cx="0" cy="0" r="22" fill="rgba(255,218,0,0.06)" />
+          <circle cx="0" cy="0" r="18" stroke="#ffda00" strokeWidth="1.5" fill="rgba(12,8,5,0.85)" />
+          {[0,1,2,3].map(h => {
+            const a = (h/4) * Math.PI*2 - Math.PI/2
+            return <circle key={h}
+              cx={Math.cos(a)*14}
+              cy={Math.sin(a)*14}
+              r="1" fill="#ffda00" />
+          })}
+          <line className="pu-hour" x1="0" y1="0" x2="0" y2="-8"
+            stroke="#ffda00" strokeWidth="2" strokeLinecap="round" />
+          <line className="pu-min" x1="0" y1="0" x2="0" y2="-12"
+            stroke="#ffda00" strokeWidth="1.5" strokeLinecap="round" />
+          <circle cx="0" cy="0" r="1.5" fill="#ffda00" />
+        </g>
+        <text className="pu-ontime" x="245" y="113" textAnchor="middle"
+          fill="#ffda00" fontSize="6" fontWeight="900" fontFamily="sans-serif" letterSpacing="1.5">ON TIME</text>
+        <g className="pu-car">
+          <path className="pu-beam" d="M118,122 L96,113 L96,131 Z" fill="rgba(255,218,0,0.18)" />
+          <path d="M120,132 L120,121 Q122,113 132,113 L153,113 L160,103 L185,103 L194,113 L200,113 Q208,113 208,121 L208,132 Z"
+            fill="rgba(255,218,0,0.1)" stroke="#ffda00" strokeWidth="1.6" strokeLinejoin="round" />
+          <path d="M160,103 L185,103 L194,121 L153,121 Z"
+            fill="rgba(255,218,0,0.18)" stroke="#ffda00" strokeWidth="1" strokeLinejoin="round" />
+          <line x1="172" y1="103" x2="173.5" y2="121" stroke="#ffda00" strokeWidth="0.8" />
+          <line x1="158" y1="124" x2="167" y2="124" stroke="#ffda00" strokeWidth="0.8" strokeLinecap="round" />
+          <circle cx="138" cy="134" r="7" fill="rgba(12,8,5,0.95)" stroke="#ffda00" strokeWidth="1.5" />
+          <circle cx="138" cy="134" r="3" fill="#ffda00" opacity="0.55" />
+          <circle cx="189" cy="134" r="7" fill="rgba(12,8,5,0.95)" stroke="#ffda00" strokeWidth="1.5" />
+          <circle cx="189" cy="134" r="3" fill="#ffda00" opacity="0.55" />
+          <circle className="pu-headlight" cx="121" cy="122" r="2.5" fill="#ffda00" />
+          <rect x="205" y="119" width="3" height="3" rx="0.6" fill="rgba(255,80,80,0.7)" />
+        </g>
+        <line className="pu-speed" x1="215" y1="118" x2="232" y2="118" stroke="rgba(255,218,0,0.35)" strokeWidth="1.6" strokeLinecap="round" />
+        <line className="pu-speed" x1="218" y1="124" x2="238" y2="124" stroke="rgba(255,218,0,0.25)" strokeWidth="1.6" strokeLinecap="round" />
+        <line className="pu-speed" x1="216" y1="130" x2="234" y2="130" stroke="rgba(255,218,0,0.3)" strokeWidth="1.6" strokeLinecap="round" />
+        <circle className="pu-puff" cx="210" cy="125" r="3.2" fill="rgba(255,218,0,0.2)" />
+        <circle className="pu-puff" cx="216" cy="121" r="2.4" fill="rgba(255,218,0,0.14)" />
+        <circle className="pu-puff" cx="221" cy="117" r="1.8" fill="rgba(255,218,0,0.08)" />
+        <circle className="pu-glow" cx="130" cy="120" r="26"
+          stroke="rgba(255,218,0,0.28)" strokeWidth="9" />
+        {Array.from({ length: 10 }, (_, pi) => (
+          <circle key={pi} className="pu-dot"
+            cx={130 + Math.cos((pi / 10) * Math.PI * 2) * 6}
+            cy={120 + Math.sin((pi / 10) * Math.PI * 2) * 6}
+            r={pi % 2 === 0 ? 2.5 : 1.8} fill="#ffda00" />
+        ))}
+      </svg>
+    </div>
+  )
+
   return (
     <>
     {/* Header outside mainRef — truly viewport-fixed at z-50, above the SVG wipe overlay (z-49) */}
@@ -668,8 +1371,8 @@ export default function Home() {
               priority={i === 0}
               style={{
                 objectFit: 'cover',
-                filter: 'brightness(0.9) contrast(1.3) saturate(1.6) sepia(0.15) hue-rotate(-8deg)',
-                opacity: heroIndex === i ? 1 : 0,
+                filter: 'brightness(1) contrast(1.3) saturate(1.6) sepia(0.15) hue-rotate(-8deg)',
+                opacity: heroIndex === i ? 0.8 : 0,
                 transition: 'opacity 1.4s ease-in-out',
               }}
             />
@@ -883,7 +1586,7 @@ export default function Home() {
                       <circle cx="206" cy="152" r="13" fill="rgba(255,218,0,0.12)"/>
                       <text x="206" y="157" textAnchor="middle" fontSize="14" fill="rgba(255,218,0,0.88)">✈</text>
                       <text x="226" y="147" fontSize="10.5" fontWeight="bold" fill="rgba(255,218,0,0.92)" fontFamily="sans-serif">Airport Taxi</text>
-                      <text x="226" y="162" fontSize="8" fill="rgba(255,218,0,0.45)" fontFamily="monospace">Hollongi · HGI</text>
+                      <text x="226" y="162" fontSize="8" fill="rgba(255,218,0,0.45)" fontFamily="monospace">Donyi Polo Airport · HGI</text>
                       <text x="366" y="155" fontSize="14" fill="rgba(255,218,0,0.5)" fontFamily="sans-serif">›</text>
                       {/* Hourly card */}
                       <rect x="183" y="186" width="194" height="52" rx="8" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.1)" strokeWidth="0.8"/>
@@ -1085,6 +1788,8 @@ export default function Home() {
                     alt=""
                     fill
                     sizes="65vw"
+                    priority={i < 2}
+                    loading={i < 2 ? 'eager' : undefined}
                     style={{ objectFit: 'cover', filter: 'blur(14px) saturate(1.3)', transform: 'scale(1.06)' }}
                   />
                 </div>
@@ -1174,6 +1879,9 @@ export default function Home() {
                             src={images[idx]}
                             alt={tour.name}
                             fill
+                            sizes="(max-width: 768px) 100vw, 50vw"
+                            priority={index < 2 && idx === 0}
+                            loading={index < 2 ? 'eager' : undefined}
                             className="object-cover transition-opacity duration-300"
                           />
                           <div className="absolute inset-0 bg-gradient-to-t from-primary-950/70 via-primary-950/5 to-transparent" />
@@ -1224,7 +1932,7 @@ export default function Home() {
                               background: 'linear-gradient(to right, transparent 0%, rgba(255,252,218,0.018) 30%, rgba(255,254,226,0.03) 50%, rgba(255,252,218,0.018) 70%, transparent 100%)',
                               backdropFilter: 'saturate(2) brightness(1.38)',
                               WebkitBackdropFilter: 'saturate(2) brightness(1.38)',
-                              transformOrigin: 'top left',
+                            transformOrigin: 'top left',
                               animation: `tour-shimmer-flow ${(7.8 + ((index * 0.618) % 1) * 2).toFixed(1)}s ease-in-out ${(index * 1.5).toFixed(1)}s infinite`,
                               boxShadow: '0 0 22px 10px rgba(255,252,215,0.035)',
                             }} />
@@ -1277,78 +1985,262 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ════════════════════ HOW IT WORKS — dark ════════════════════ */}
-      <section className="steps-section h-[100dvh] py-6 sm:py-16 md:py-28 bg-primary-950 relative overflow-hidden flex flex-col justify-center">
-        {/* Dot grid */}
-        <div
-          className="absolute inset-0 opacity-[0.03]"
-          style={{ backgroundImage: 'radial-gradient(circle, rgba(255,218,0,0.8) 1px, transparent 1px)', backgroundSize: '36px 36px' }}
-        />
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[1px] bg-gradient-to-r from-transparent via-secondary-500/30 to-transparent" />
+      {/* ════════════════════ HOW IT WORKS ════════════════════ */}
+      <section className="steps-section h-[100dvh] bg-primary-950 relative overflow-hidden flex flex-col">
 
-        <div className="container mx-auto px-4 relative z-10">
-          <div className="text-center mb-8 max-[760px]:mb-5 sm:mb-12 md:mb-16">
-            <p className="text-secondary-500 font-semibold text-xs tracking-[0.22em] uppercase mb-2 max-[760px]:mb-1.5">Simple Process</p>
-            <h2 className="text-[2rem] max-[760px]:text-[1.8rem] leading-tight sm:text-4xl md:text-5xl font-black text-white mb-2 sm:mb-4">How It Works</h2>
-            <p className="text-gray-500 text-sm max-[760px]:text-[13px] max-w-md mx-auto">Three steps from landing to exploring.</p>
+        {/* ── Background layer ── */}
+        <div className="absolute inset-0 opacity-[0.04]"
+          style={{ backgroundImage: 'radial-gradient(circle, rgba(255,218,0,0.9) 1px, transparent 1px)', backgroundSize: '30px 30px' }} />
+        {/* Diagonal accent lines */}
+        <div className="absolute inset-0 pointer-events-none overflow-hidden opacity-[0.06]">
+          <div className="absolute top-0 left-1/4 w-px h-full" style={{ background: 'linear-gradient(to bottom, transparent, rgba(255,218,0,0.6) 40%, rgba(255,218,0,0.6) 60%, transparent)' }} />
+          <div className="absolute top-0 left-2/4 w-px h-full" style={{ background: 'linear-gradient(to bottom, transparent, rgba(255,218,0,0.4) 30%, rgba(255,218,0,0.4) 70%, transparent)' }} />
+          <div className="absolute top-0 left-3/4 w-px h-full" style={{ background: 'linear-gradient(to bottom, transparent, rgba(255,218,0,0.6) 40%, rgba(255,218,0,0.6) 60%, transparent)' }} />
+        </div>
+        {/* Glow orbs per card column */}
+        <div className="absolute inset-0 pointer-events-none hidden md:block">
+          <div className="absolute top-1/2 left-[16.5%] -translate-x-1/2 -translate-y-1/2 w-80 h-80"
+            style={{ background: 'radial-gradient(circle, rgba(255,218,0,0.07) 0%, transparent 70%)', filter: 'blur(48px)' }} />
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-72 h-72"
+            style={{ background: 'radial-gradient(circle, rgba(255,218,0,0.04) 0%, transparent 70%)', filter: 'blur(48px)' }} />
+          <div className="absolute top-1/2 left-[83.5%] -translate-x-1/2 -translate-y-1/2 w-80 h-80"
+            style={{ background: 'radial-gradient(circle, rgba(255,218,0,0.07) 0%, transparent 70%)', filter: 'blur(48px)' }} />
+        </div>
+        {/* Top + bottom border lines */}
+        <div className="absolute top-0 inset-x-0 h-px" style={{ background: 'linear-gradient(90deg, transparent, rgba(255,218,0,0.18) 25%, rgba(255,218,0,0.18) 75%, transparent)' }} />
+        <div className="absolute bottom-0 inset-x-0 h-px" style={{ background: 'linear-gradient(90deg, transparent, rgba(255,218,0,0.1) 25%, rgba(255,218,0,0.1) 75%, transparent)' }} />
+
+        {/* ── Content ── */}
+        <div className="relative z-10 flex flex-col flex-1 min-h-0 container mx-auto px-4 sm:px-6 py-6 sm:py-10 md:py-10">
+
+          {/* Header */}
+          <div className="text-center mb-4 sm:mb-7 md:mb-8 shrink-0">
+            <p className="text-secondary-500 font-semibold text-[10px] sm:text-xs tracking-[0.24em] uppercase mb-1 sm:mb-2">Simple Process</p>
+            <h2 className="text-[1.7rem] sm:text-4xl md:text-5xl font-black text-white leading-tight mb-1">How It Works</h2>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 max-[760px]:gap-2.5 sm:gap-5 md:gap-6 max-w-5xl mx-auto">
-            {HOW_IT_WORKS.map(({ Icon, step, title, desc }, i) => (
-              <div key={i} className="step-card group relative">
-                {/* Connector */}
-                {i < HOW_IT_WORKS.length - 1 && (
-                  <div className="hidden md:block absolute top-12 left-full w-full h-px bg-gradient-to-r from-secondary-500/30 to-transparent z-10 translate-x-3" />
-                )}
-                <div className="h-full p-4 max-[760px]:p-3.5 sm:p-6 md:p-8 rounded-2xl bg-primary-900/40 border border-primary-800 hover:border-secondary-500/30 hover:bg-primary-900/70 transition-all duration-300">
-                  <div className="flex items-start justify-between mb-3 max-[760px]:mb-2.5 sm:mb-5 md:mb-6">
-                    <div className="w-11 h-11 max-[760px]:w-10 max-[760px]:h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 rounded-2xl bg-secondary-500/10 border border-secondary-500/20 flex items-center justify-center group-hover:bg-secondary-500 group-hover:border-secondary-500 transition-all duration-300 shrink-0">
-                      <Icon size={18} className="text-secondary-500 group-hover:text-primary-950 transition-colors duration-300" />
-                    </div>
-                    <span className="text-4xl max-[760px]:text-3xl sm:text-5xl font-black text-primary-800 group-hover:text-secondary-500/20 transition-colors duration-300 leading-none">
-                      {step}
-                    </span>
+          {/* ── MOBILE: tall stacked cards with animation overlays ── */}
+          <div className="md:hidden flex flex-col flex-1 min-h-0 gap-3 relative">
+            {/* Continuous timeline spine running through all cards */}
+            <div className="absolute left-[1.65rem] top-3 bottom-3 w-px pointer-events-none"
+              style={{ background: 'linear-gradient(to bottom, transparent, rgba(255,218,0,0.32) 8%, rgba(255,218,0,0.32) 92%, transparent)' }} />
+
+            {HOW_IT_WORKS.map(({ Icon, step, title, desc }, i) => {
+              const playFn = i === 0 ? playBookAnim : i === 1 ? playConfirmAnim : playPickupAnim
+              return (
+                <div key={`m-step-${i}`} className="step-card relative flex items-stretch gap-2.5 flex-1 min-h-0 cursor-pointer" onClick={playFn}>
+                  {/* Spine node */}
+                  <div className="shrink-0 flex flex-col items-center justify-center" style={{ width: '2.2rem' }}>
+                    <div className="w-3 h-3 rounded-full border-2 relative z-10"
+                      style={{ borderColor: 'rgba(255,218,0,0.7)', background: '#0d0b09', boxShadow: '0 0 12px rgba(255,218,0,0.5), 0 0 4px rgba(255,218,0,0.55)' }} />
                   </div>
-                  <h3 className="text-[1.65rem] max-[760px]:text-[1.45rem] sm:text-xl md:text-2xl font-black text-white mb-1.5 sm:mb-3">{title}</h3>
-                  <p className="text-sm max-[760px]:text-[13px] sm:text-sm text-gray-500 leading-relaxed line-clamp-2 max-[760px]:line-clamp-2">{desc}</p>
+
+                  {/* Card body */}
+                  <div className="flex-1 min-w-0 relative rounded-2xl overflow-hidden border border-white/[0.14]"
+                    style={{ background: 'linear-gradient(140deg, rgba(255,218,0,0.10) 0%, rgba(28,20,13,0.92) 38%, rgba(12,8,5,0.97) 100%)' }}>
+                    {/* Left accent bar */}
+                    <div className="absolute left-0 top-0 bottom-0 w-[2px] rounded-r-full"
+                      style={{ background: 'linear-gradient(to bottom, transparent 0%, rgba(255,218,0,0.85) 35%, rgba(255,218,0,0.85) 65%, transparent 100%)' }} />
+                    {/* Top shimmer line */}
+                    <div className="absolute top-0 inset-x-0 h-px opacity-50"
+                      style={{ background: 'linear-gradient(90deg, transparent, rgba(255,218,0,0.55), transparent)' }} />
+
+                    <div className={'relative h-full flex items-center gap-3 px-4 py-3' + (i === 0 ? ' bk-card-content' : i === 1 ? ' cf-card-content' : ' pu-card-content')}>
+                      {/* Big outlined step number — absolute background watermark, never in flow */}
+                      <div className="absolute top-0 right-0 pointer-events-none select-none pr-3 pt-2" aria-hidden="true">
+                        <span style={{
+                          fontSize: 'clamp(4rem, 16vw, 5.5rem)',
+                          color: 'transparent',
+                          WebkitTextStroke: '1px #ffda00',
+                          letterSpacing: '-0.05em',
+                          lineHeight: 1,
+                          opacity: 0.18,
+                          fontWeight: 900,
+                        }}>
+                          {step}
+                        </span>
+                      </div>
+
+                      {/* Icon ring + label + title + desc — full width, above watermark */}
+                      <div className="relative flex-1 min-w-0 flex flex-col justify-center gap-1.5">
+                        <div className="flex items-center gap-2">
+                          <div className="shrink-0 w-8 h-8 rounded-full flex items-center justify-center bg-secondary-500/[0.1] border border-secondary-500/30">
+                            <Icon size={14} className="text-secondary-500" />
+                          </div>
+                          <p className="text-[9px] font-black text-secondary-500/60 tracking-[0.28em] uppercase">Step {step}</p>
+                        </div>
+                        <h3 className="font-black text-white text-[0.98rem] leading-tight">{title}</h3>
+                        <p className="text-[11px] text-gray-400 leading-snug line-clamp-2">{desc}</p>
+                      </div>
+
+                      {/* Bottom-right: tap hint */}
+                      <div className="absolute bottom-2 right-3 flex flex-col items-center text-secondary-500/45 pointer-events-none">
+                        <ChevronRight size={16} />
+                        <span className="text-[7px] tracking-[0.18em] font-black uppercase" style={{ marginTop: '-2px' }}>tap</span>
+                      </div>
+                    </div>
+
+                    {/* Animation overlays — scoped to this card */}
+                    {i === 0 && renderBookOverlay()}
+                    {i === 1 && renderConfirmOverlay()}
+                    {i === 2 && renderPickupOverlay()}
+                  </div>
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
+
+          {/* ── DESKTOP: tall immersive cards ── */}
+          <div className="hidden md:flex gap-5 lg:gap-6 flex-1 min-h-0 items-stretch max-w-5xl mx-auto w-full">
+            {HOW_IT_WORKS.flatMap(({ Icon, step, title, desc }, i) => {
+              const card = (
+                <div key={`step-${i}`} className="step-card group relative flex-1 min-w-0 flex flex-col cursor-pointer" style={{ transformStyle: 'preserve-3d' }} onClick={i === 0 ? playBookAnim : i === 1 ? playConfirmAnim : playPickupAnim}>
+                  <div className="relative flex-1 flex flex-col rounded-2xl overflow-hidden border border-white/[0.13] group-hover:border-secondary-500/55 transition-all duration-500"
+                    style={{ background: 'linear-gradient(160deg, rgba(255,218,0,0.09) 0%, rgba(28,20,13,0.88) 30%, rgba(12,8,5,0.97) 100%)' }}>
+
+                    {/* Left accent bar — reveals on hover */}
+                    <div className="absolute left-0 top-0 bottom-0 w-[3px] rounded-r-full scale-y-0 group-hover:scale-y-100 transition-transform duration-500 origin-center"
+                      style={{ background: 'linear-gradient(to bottom, transparent 0%, rgba(255,218,0,0.9) 35%, rgba(255,218,0,0.9) 65%, transparent 100%)' }} />
+                    {/* Top shimmer on hover */}
+                    <div className="absolute top-0 inset-x-0 h-px opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+                      style={{ background: 'linear-gradient(90deg, transparent, rgba(255,218,0,0.7), transparent)' }} />
+                    {/* Inner top glow on hover */}
+                    <div className="absolute top-0 inset-x-0 h-32 opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none"
+                      style={{ background: 'linear-gradient(to bottom, rgba(255,218,0,0.06), transparent)' }} />
+
+                    <div className={'relative flex flex-col flex-1 p-6 lg:p-8' + (i === 0 ? ' bk-card-content' : i === 1 ? ' cf-card-content' : ' pu-card-content')}>
+                      {/* Big outlined step number */}
+                      <div className="step-big-num select-none pointer-events-none font-black leading-[0.85] mb-4 lg:mb-6"
+                        style={{
+                          fontSize: 'clamp(5.5rem, 9vw, 8.5rem)',
+                          color: 'transparent',
+                          WebkitTextStroke: '1.5px #ffda00',
+                          letterSpacing: '-0.04em',
+                          opacity: 0.22,
+                          filter: 'drop-shadow(0 0 0px rgba(255,218,0,0))',
+                        }}>
+                        {step}
+                      </div>
+
+                      {/* Icon with orbital SVG ring */}
+                      <div className="relative mb-5 lg:mb-6" style={{ width: 54, height: 54 }}>
+                        <svg className="absolute inset-0" width="54" height="54" viewBox="0 0 54 54" fill="none">
+                          <circle cx="27" cy="27" r="24.5" stroke="rgba(255,218,0,0.18)" strokeWidth="1" />
+                          <circle
+                            className="step-ring-arc"
+                            cx="27" cy="27" r="24.5"
+                            stroke="rgba(255,218,0,0.6)"
+                            strokeWidth="1.5"
+                            strokeLinecap="round"
+                            strokeDasharray="153.9"
+                            strokeDashoffset="153.9"
+                            style={{ transform: 'rotate(-90deg)', transformOrigin: '27px 27px' }}
+                          />
+                        </svg>
+                        <div className="absolute inset-[7px] rounded-full flex items-center justify-center bg-secondary-500/[0.08] border border-secondary-500/[0.2] group-hover:bg-secondary-500 group-hover:border-secondary-500 transition-all duration-500">
+                          <Icon size={18} className="text-secondary-500 group-hover:text-primary-950 transition-colors duration-500" />
+                        </div>
+                      </div>
+
+                      {/* Label */}
+                      <p className="text-[10px] font-black text-secondary-500/65 tracking-[0.28em] uppercase mb-2">Step {step}</p>
+                      {/* Title */}
+                      <h3 className="text-xl lg:text-2xl font-black text-white leading-tight mb-3">{title}</h3>
+                      {/* Description */}
+                      <p className="text-sm text-gray-300 leading-relaxed flex-1">{desc}</p>
+
+                      {/* Bottom sweep line */}
+                      <div className="mt-5 h-px w-0 group-hover:w-full transition-all duration-700 ease-out"
+                        style={{ background: 'linear-gradient(90deg, rgba(255,218,0,0.55) 0%, transparent 100%)' }} />
+                    </div>
+
+                    {i === 0 && renderBookOverlay()}
+                    {i === 1 && renderConfirmOverlay()}
+                    {i === 2 && renderPickupOverlay()}
+                  </div>
+                </div>
+              )
+              if (i < HOW_IT_WORKS.length - 1) {
+                return [card, (
+                  <div key={`conn-${i}`} className="step-connector flex items-center justify-center shrink-0 w-9 opacity-0 self-center pb-24">
+                    <div className="flex flex-col items-center gap-1.5">
+                      <div className="w-px h-8" style={{ background: 'linear-gradient(to bottom, transparent, rgba(255,218,0,0.25))' }} />
+                      <ChevronRight size={14} className="text-secondary-500/35" />
+                      <div className="w-px h-8" style={{ background: 'linear-gradient(to top, transparent, rgba(255,218,0,0.25))' }} />
+                    </div>
+                  </div>
+                )]
+              }
+              return [card]
+            })}
+          </div>
+
         </div>
       </section>
 
       {/* ════════════════════ CTA ════════════════════ */}
       {/* Grouping CTA and Footer to ensure they are treated as one viewport-constrained slide */}
       <div className="last-slide-wrapper h-[100dvh] flex flex-col">
-      <section className="cta-section flex-1 pt-8 pb-4 md:pt-[4.6rem] md:pb-24 bg-secondary-500 relative overflow-hidden flex flex-col justify-center">
-        <div
-          className="absolute inset-0 opacity-[0.06] pointer-events-none"
-          style={{ backgroundImage: 'radial-gradient(circle, #1a1512 1.5px, transparent 1.5px)', backgroundSize: '26px 26px' }}
-        />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[280px] bg-white opacity-[0.07] rounded-full blur-[80px] pointer-events-none" />
+      <section
+        className="cta-section flex-1 pt-8 pb-4 md:pt-[4.6rem] md:pb-24 relative overflow-hidden flex flex-col justify-center"
+        style={{ background: 'linear-gradient(160deg, #16120f 0%, #1c1410 35%, #110e0c 70%, #0d0b09 100%)' }}
+      >
+        {/* ── Background layer — radial dot grid (matches steps section) ── */}
+        <div className="cta-dot-grid absolute inset-0 opacity-[0.05] pointer-events-none"
+          style={{ backgroundImage: 'radial-gradient(circle, rgba(255,218,0,0.9) 1px, transparent 1px)', backgroundSize: '30px 30px' }} />
 
-        <div className="container mx-auto px-4 text-center relative">
+        {/* Diagonal accent lines (matches steps section) */}
+        <div className="absolute inset-0 pointer-events-none overflow-hidden">
+          <div className="cta-diag-line absolute top-0 left-1/4 w-px h-full" style={{ opacity: 0.06, background: 'linear-gradient(to bottom, transparent, rgba(255,218,0,0.6) 40%, rgba(255,218,0,0.6) 60%, transparent)' }} />
+          <div className="cta-diag-line absolute top-0 left-2/4 w-px h-full" style={{ opacity: 0.06, background: 'linear-gradient(to bottom, transparent, rgba(255,218,0,0.4) 30%, rgba(255,218,0,0.4) 70%, transparent)' }} />
+          <div className="cta-diag-line absolute top-0 left-3/4 w-px h-full" style={{ opacity: 0.06, background: 'linear-gradient(to bottom, transparent, rgba(255,218,0,0.6) 40%, rgba(255,218,0,0.6) 60%, transparent)' }} />
+        </div>
+
+        {/* Center glow orb */}
+        <div className="cta-glow-orb absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[720px] h-[320px] pointer-events-none"
+          style={{ background: 'radial-gradient(ellipse, rgba(255,218,0,0.12) 0%, transparent 70%)', filter: 'blur(60px)' }} />
+
+        {/* Grain texture (matches tours section) */}
+        <div className="absolute inset-0 opacity-[0.022] pointer-events-none select-none"
+          style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=\'0 0 256 256\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'n\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.85\' numOctaves=\'4\' stitchTiles=\'stitch\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23n)\'/%3E%3C/svg%3E")', backgroundSize: '180px' }} />
+
+        {/* Top + bottom border lines (matches steps section) */}
+        <div className="cta-edge-line absolute top-0 inset-x-0 h-px" style={{ background: 'linear-gradient(90deg, transparent, rgba(255,218,0,0.18) 25%, rgba(255,218,0,0.18) 75%, transparent)' }} />
+        <div className="cta-edge-line absolute bottom-0 inset-x-0 h-px" style={{ background: 'linear-gradient(90deg, transparent, rgba(255,218,0,0.1) 25%, rgba(255,218,0,0.1) 75%, transparent)' }} />
+
+        <div className="container mx-auto px-4 text-center relative z-10">
           <div className="max-w-2xl mx-auto">
-            <p className="cta-item text-primary-800 font-semibold text-xs tracking-[0.22em] uppercase mb-2 max-[760px]:mb-1.5">Ready to travel?</p>
-            <h2 className="cta-item text-[2.1rem] max-[760px]:text-[1.85rem] md:text-5xl font-black text-primary-950 mb-2 max-[760px]:mb-1.5 leading-tight">
+            <p className="cta-item text-secondary-500 font-semibold text-xs tracking-[0.22em] uppercase mb-2 max-[760px]:mb-1.5">Ready to travel?</p>
+            <h2 className="cta-item text-[2.1rem] max-[760px]:text-[1.85rem] md:text-5xl font-black text-white mb-2 max-[760px]:mb-1.5 leading-tight">
               Your ride awaits at Donyi Polo Airport - Hollongi
             </h2>
-            <p className="cta-item text-primary-800 text-sm max-[760px]:text-[13px] md:text-base mb-4 max-[760px]:mb-3 max-w-lg mx-auto leading-relaxed">
+            <p className="cta-item text-gray-400 text-sm max-[760px]:text-[13px] md:text-base mb-4 max-[760px]:mb-3 max-w-lg mx-auto leading-relaxed">
               Skip the queue. Pre-book your taxi or tour — verified drivers, transparent pricing.
             </p>
             <div className="cta-item flex flex-col sm:flex-row gap-2.5 max-[760px]:gap-2 justify-center">
               <Link
                 href="/book-taxi"
-                className="group flex items-center justify-center gap-2.5 px-6 max-[760px]:px-5 py-3 max-[760px]:py-2.5 bg-primary-950 text-white font-black rounded-2xl hover:bg-primary-900 active:scale-[0.97] transition-all shadow-2xl shadow-primary-950/25 text-sm md:text-base"
+                className="cta-btn group relative flex items-center justify-center gap-2.5 px-6 max-[760px]:px-5 py-3 max-[760px]:py-2.5 bg-secondary-500 text-primary-950 font-black rounded-2xl hover:bg-secondary-400 transition-colors shadow-2xl shadow-secondary-500/25 text-sm md:text-base overflow-hidden"
               >
-                Book Taxi Now
-                <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
+                <span
+                  aria-hidden="true"
+                  data-cta-shine
+                  className="pointer-events-none absolute inset-y-0 -inset-x-4"
+                  style={{
+                    background: 'linear-gradient(115deg, transparent 35%, rgba(255,255,255,0.55) 50%, transparent 65%)',
+                    transform: 'translateX(-130%)',
+                    mixBlendMode: 'overlay',
+                  }}
+                />
+                <span className="relative flex items-center gap-2.5">
+                  Book Taxi Now
+                  <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
+                </span>
               </Link>
               <Link
                 href="/tours"
-                className="group flex items-center justify-center gap-2.5 px-6 max-[760px]:px-5 py-3 max-[760px]:py-2.5 border-2 border-primary-950/20 text-primary-950 font-bold rounded-2xl hover:bg-primary-950/[0.07] transition-all text-sm md:text-base"
-              >
+                className="cta-btn group flex items-center justify-center gap-2.5 px-6 max-[760px]:px-5 py-3 max-[760px]:py-2.5 border-2 border-secondary-500/30 text-secondary-500 font-bold rounded-2xl hover:bg-secondary-500/10 hover:border-secondary-500/50 transition-colors text-sm md:text-base"
+            >
                 Explore Tours
                 <ChevronRight size={18} className="group-hover:translate-x-1 transition-transform" />
               </Link>

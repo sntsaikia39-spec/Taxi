@@ -125,6 +125,40 @@ html, body {
   100% { transform: scaleX(1) scaleY(0); opacity: 0; }
 }
 
+/* ─── CTA "Ready to travel" section — ambient background animations ─────── */
+
+/* Dot grid slow pan — translate loops seamlessly because grid repeats at 30px */
+@keyframes ctaDotPan {
+  0%   { transform: translate(0, 0); }
+  100% { transform: translate(30px, 30px); }
+}
+
+/* Micro-particles rising upward */
+@keyframes ctaParticleFloat {
+  0%   { transform: translateY(0) scale(1);    opacity: 0; }
+  8%   { opacity: 0.9; }
+  85%  { opacity: 0.45; }
+  100% { transform: translateY(-75vh) scale(0.3); opacity: 0; }
+}
+
+/* Shimmer spot traveling down a vertical line */
+@keyframes ctaLineShimmer {
+  0%   { transform: translateY(-100%); opacity: 0; }
+  8%   { opacity: 1; }
+  72%  { opacity: 0.75; }
+  82%  { transform: translateY(520%);  opacity: 0; }
+  83%  { transform: translateY(-100%); opacity: 0; } /* invisible snap-reset */
+  100% { transform: translateY(-100%); opacity: 0; }
+}
+
+.cta-particle {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  animation: ctaParticleFloat linear infinite;
+  will-change: transform, opacity;
+}
+
 /* Tour card glittery breeze — sweep (0–60%) then park invisible (60–100%) */
 /* The 40% park phase = the gap between streaks; duration varies per card */
 @keyframes tour-shimmer-flow {
