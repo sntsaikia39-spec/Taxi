@@ -11,8 +11,9 @@ import { useAuth } from '@/context/AuthContext'
 import { fetchTourById } from '@/lib/db'
 import type { TourPackage } from '@/lib/db'
 import { Users, CheckCircle, ArrowLeft, Clock, Car, ArrowRight } from 'lucide-react'
+import PhoneInput from '@/components/PhoneInput'
 
-const STEPS = ['Contact', 'Passengers', 'Date', 'Confirm'] as const
+const STEPS = ['Passengers', 'Date', 'Contact', 'Confirm'] as const
 type Step = 0 | 1 | 2 | 3
 
 function toNum(val: unknown): number {
@@ -83,13 +84,24 @@ export default function BookTour() {
     return () => scroller.removeEventListener('wheel', onWheel)
   }, [])
 
+  // ── Restore form state after login redirect ──────────────────────────────
   useEffect(() => {
-    if (!isLoading && !user) {
-      toast.error('Please sign in to book a tour')
-      router.push(`/login?redirect=/tours/${tourId}/book`)
+    if (isLoading) return
+    const saved = sessionStorage.getItem('tourBookingResume')
+    if (!saved) return
+    try {
+      const s = JSON.parse(saved)
+      if (s.tourId !== tourId) { sessionStorage.removeItem('tourBookingResume'); return }
+      sessionStorage.removeItem('tourBookingResume')
+      if (s.passengers) setPassengers(s.passengers)
+      if (s.date) setDate(s.date)
+      setStep(2 as Step)
+    } catch {
+      sessionStorage.removeItem('tourBookingResume')
     }
-  }, [user, isLoading, router, tourId])
+  }, [isLoading, tourId])
 
+  // ── Auto-populate contact fields from user account ───────────────────────
   useEffect(() => {
     if (user?.email) setEmail(user.email)
     if ((user as any)?.user_metadata?.full_name) setName((user as any).user_metadata.full_name)
@@ -138,30 +150,33 @@ export default function BookTour() {
   }
 
   const canAdvanceStep = (): boolean => {
-    if (step === 0) {
+    if (step === 0) return passengers >= 1 && (tour ? passengers <= (tour.max_passengers ?? 999) : true)
+    if (step === 1) return date.length > 0
+    if (step === 2) {
       if (!validateFullName(name).valid) return false
       if (!validatePhoneNumber(phone).valid) return false
       if (!validateEmail(email).valid) return false
       return true
     }
-    if (step === 1) return passengers >= 1 && (tour ? passengers <= (tour.max_passengers ?? 999) : true)
-    if (step === 2) return date.length > 0
     return true
   }
 
   const nextStep = () => {
-    if (!canAdvanceStep()) {
-      if (step === 0) {
-        const nv = validateFullName(name)
-        if (!nv.valid) { toast.error(nv.error || 'Invalid name'); return }
-        const pv = validatePhoneNumber(phone)
-        if (!pv.valid) { toast.error(pv.error || 'Invalid phone'); return }
-        const ev = validateEmail(email)
-        if (!ev.valid) { toast.error(ev.error || 'Invalid email'); return }
-      }
-      if (step === 2) toast.error('Please select a tour date.')
+    if (step === 1 && !date) { toast.error('Please select a tour date.'); return }
+    if (step === 1 && !user) {
+      sessionStorage.setItem('tourBookingResume', JSON.stringify({ tourId, passengers, date }))
+      router.push(`/login?redirect=/tours/${tourId}/book`)
       return
     }
+    if (step === 2) {
+      const nv = validateFullName(name)
+      if (!nv.valid) { toast.error(nv.error || 'Invalid name'); return }
+      const pv = validatePhoneNumber(phone)
+      if (!pv.valid) { toast.error(pv.error || 'Invalid phone'); return }
+      const ev = validateEmail(email)
+      if (!ev.valid) { toast.error(ev.error || 'Invalid email'); return }
+    }
+    if (!canAdvanceStep()) return
     setStep((s) => (s + 1) as Step)
   }
 
@@ -306,29 +321,8 @@ export default function BookTour() {
             {/* Form Panel */}
             <div className="md:col-span-2 bg-primary-900/60 border border-primary-800 rounded-2xl backdrop-blur-sm p-5 md:p-7">
 
-              {/* Step 0: Contact */}
+              {/* Step 0: Passengers */}
               {step === 0 && (
-                <div className="space-y-4">
-                  <h2 className="font-black text-white text-lg mb-5">Contact Details</h2>
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-400 mb-1.5 uppercase tracking-wide">Full Name *</label>
-                    <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Enter your full name" className={inputCls} />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-400 mb-1.5 uppercase tracking-wide">Phone Number *</label>
-                    <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="10-digit mobile number" className={inputCls} />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-400 mb-1.5 uppercase tracking-wide">Email Address *</label>
-                    <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="your@email.com"
-                      className={`${inputCls} opacity-60 cursor-not-allowed`} disabled />
-                    <p className="text-gray-600 text-[11px] mt-1">Linked to your account</p>
-                  </div>
-                </div>
-              )}
-
-              {/* Step 1: Passengers */}
-              {step === 1 && (
                 <div className="space-y-5">
                   <h2 className="font-black text-white text-lg mb-5">Number of Passengers</h2>
                   <div>
@@ -362,8 +356,8 @@ export default function BookTour() {
                 </div>
               )}
 
-              {/* Step 2: Date */}
-              {step === 2 && (
+              {/* Step 1: Date */}
+              {step === 1 && (
                 <div className="space-y-5">
                   <h2 className="font-black text-white text-lg mb-5">Select Tour Date</h2>
                   {tour.arrival_time && (
@@ -396,6 +390,27 @@ export default function BookTour() {
                         <p className="text-yellow-300 text-xs leading-relaxed">{capacityWarning}</p>
                       </div>
                     )}
+                  </div>
+                </div>
+              )}
+
+              {/* Step 2: Contact */}
+              {step === 2 && (
+                <div className="space-y-4">
+                  <h2 className="font-black text-white text-lg mb-5">Contact Details</h2>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-400 mb-1.5 uppercase tracking-wide">Full Name *</label>
+                    <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Enter your full name" className={inputCls} />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-400 mb-1.5 uppercase tracking-wide">Phone Number *</label>
+                    <PhoneInput value={phone} onChange={setPhone} />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-400 mb-1.5 uppercase tracking-wide">Email Address *</label>
+                    <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="your@email.com"
+                      className={`${inputCls} opacity-60 cursor-not-allowed`} disabled />
+                    <p className="text-gray-600 text-[11px] mt-1">Linked to your account</p>
                   </div>
                 </div>
               )}

@@ -84,16 +84,46 @@ export function validateFullName(name: string): { valid: boolean; error?: string
 }
 
 /**
- * Validates phone number (10-digit format for India)
+ * Validates phone number using libphonenumber-js.
+ * Accepts international format (+91 9876543210) emitted by PhoneInput,
+ * or legacy plain 10-digit Indian numbers (treated as +91).
  */
 export function validatePhoneNumber(phone: string): { valid: boolean; error?: string } {
   if (!phone || typeof phone !== 'string') {
     return { valid: false, error: 'Phone number is required' }
   }
 
-  const cleaned = phone.replace(/\D/g, '')
-  if (cleaned.length !== 10) {
-    return { valid: false, error: 'Phone number must be 10 digits' }
+  const trimmed = phone.trim()
+  if (!trimmed) {
+    return { valid: false, error: 'Phone number is required' }
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { isValidPhoneNumber } = require('libphonenumber-js') as typeof import('libphonenumber-js')
+
+  const isObviouslyFake = (digits: string) => digits.length >= 4 && /^(\d)\1+$/.test(digits)
+
+  // Plain digits (no country prefix) → assume India
+  if (!trimmed.startsWith('+')) {
+    const digits = trimmed.replace(/\D/g, '')
+    if (/^[6-9]\d{9}$/.test(digits) && !isObviouslyFake(digits)) return { valid: true }
+    return { valid: false, error: 'Invalid phone number' }
+  }
+
+  // Indian number with country code
+  if (trimmed.startsWith('+91')) {
+    const digits = trimmed.slice(3).replace(/\D/g, '')
+    if (/^[6-9]\d{9}$/.test(digits) && !isObviouslyFake(digits)) return { valid: true }
+    return { valid: false, error: 'Invalid phone number' }
+  }
+
+  // International: use libphonenumber-js + fake-pattern check
+  const nationalDigits = trimmed.replace(/^\+\d{1,4}/, '').replace(/\D/g, '')
+  if (isObviouslyFake(nationalDigits)) {
+    return { valid: false, error: 'Invalid phone number' }
+  }
+  if (!isValidPhoneNumber(trimmed)) {
+    return { valid: false, error: 'Invalid phone number' }
   }
 
   return { valid: true }

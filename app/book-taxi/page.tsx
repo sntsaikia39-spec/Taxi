@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
 import { MapPin, Users, Car, Clock, Search, X } from 'lucide-react'
+import PhoneInput from '@/components/PhoneInput'
 import toast from 'react-hot-toast'
 import { generateBookingId } from '@/lib/utils'
 import { validateFullName, validatePhoneNumber, validateEmail } from '@/lib/validation'
@@ -41,18 +42,18 @@ type CarModel = {
 type BookingMode = 'airport' | 'hourly'
 
 // Airport flow steps (optimized: combined related fields)
-type AirportStep = 'contact' | 'route' | 'schedule' | 'car' | 'confirm'
+type AirportStep = 'route' | 'schedule' | 'car' | 'contact' | 'confirm'
 // Hourly flow steps (optimized: combined related fields)
-type HourlyStep = 'contact' | 'details' | 'schedule' | 'car' | 'confirm'
+type HourlyStep = 'details' | 'schedule' | 'car' | 'contact' | 'confirm'
 
-const AIRPORT_STEPS: AirportStep[] = ['contact', 'route', 'schedule', 'car', 'confirm']
+const AIRPORT_STEPS: AirportStep[] = ['route', 'schedule', 'car', 'contact', 'confirm']
 const AIRPORT_LABELS: Record<AirportStep, string> = {
-  contact: 'Contact', route: 'Route', schedule: 'Date & Time', car: 'Car', confirm: 'Confirm',
+  route: 'Route', schedule: 'Date & Time', car: 'Car', contact: 'Contact', confirm: 'Confirm',
 }
 
-const HOURLY_STEPS: HourlyStep[] = ['contact', 'details', 'schedule', 'car', 'confirm']
+const HOURLY_STEPS: HourlyStep[] = ['details', 'schedule', 'car', 'contact', 'confirm']
 const HOURLY_LABELS: Record<HourlyStep, string> = {
-  contact: 'Contact', details: 'Passengers & Date', schedule: 'Time & Duration', car: 'Car', confirm: 'Confirm',
+  details: 'Passengers & Date', schedule: 'Time & Duration', car: 'Car', contact: 'Contact', confirm: 'Confirm',
 }
 
 function formatDuration(totalHours: number): string {
@@ -100,14 +101,10 @@ const ContactStepComponent = memo(({
       </div>
       <div>
         <label className="block text-sm font-semibold text-gray-300 mb-1">Phone Number *</label>
-        <input
+        <PhoneInput
           ref={phoneInputRef}
-          type="tel"
           value={phone}
-          onChange={(e) => onPhoneChange(e.target.value)}
-          placeholder="10-digit mobile number"
-          className="input-field !bg-primary-950/70 !border-primary-700 !text-white placeholder:!text-gray-500 focus:!border-secondary-500"
-          required
+          onChange={onPhoneChange}
         />
       </div>
       <div>
@@ -135,8 +132,8 @@ export default function BookTaxi() {
   const { user, isLoading } = useAuth()
 
   const [mode, setMode] = useState<BookingMode>('airport')
-  const [airportStep, setAirportStep] = useState<AirportStep>('contact')
-  const [hourlyStep, setHourlyStep] = useState<HourlyStep>('contact')
+  const [airportStep, setAirportStep] = useState<AirportStep>('route')
+  const [hourlyStep, setHourlyStep] = useState<HourlyStep>('details')
 
   const [destinations, setDestinations] = useState<Destination[]>([])
   const [loadingDest, setLoadingDest] = useState(true)
@@ -171,14 +168,34 @@ export default function BookTaxi() {
   const phoneInputRef = useRef<HTMLInputElement>(null)
   const emailInputRef = useRef<HTMLInputElement>(null)
 
-  // ── Auth guard ───────────────────────────────────────────────────────────
+  // ── Restore form state after login redirect ──────────────────────────────
   useEffect(() => {
-    if (!isLoading && !user) {
-      toast.error('Please sign in to book a taxi')
-      router.push('/login?redirect=/book-taxi&source=booking')
+    if (isLoading) return
+    const saved = sessionStorage.getItem('bookingResume')
+    if (!saved) return
+    try {
+      const s = JSON.parse(saved)
+      sessionStorage.removeItem('bookingResume')
+      if (s.mode) setMode(s.mode)
+      if (s.name) setName(s.name)
+      if (s.phone) setPhone(s.phone)
+      if (s.passengers) setPassengers(s.passengers)
+      if (s.date) setDate(s.date)
+      if (s.startTime) setStartTime(s.startTime)
+      if (s.destinationId) setDestinationId(s.destinationId)
+      if (s.selectedDest) setSelectedDest(s.selectedDest)
+      if (s.durationDays !== undefined) setDurationDays(s.durationDays)
+      if (s.durationHrs !== undefined) setDurationHrs(s.durationHrs)
+      if (s.selectedCarModel) setSelectedCarModel(s.selectedCarModel)
+      if (s.availableCarModels) setAvailableCarModels(s.availableCarModels)
+      if (s.mode === 'airport') setAirportStep('contact')
+      if (s.mode === 'hourly') setHourlyStep('contact')
+    } catch {
+      sessionStorage.removeItem('bookingResume')
     }
-  }, [user, isLoading, router])
+  }, [isLoading])
 
+  // ── Auto-populate contact fields from user account ───────────────────────
   useEffect(() => {
     if (user?.email) setEmail(user.email || '')
   }, [user])
@@ -199,10 +216,10 @@ export default function BookTaxi() {
 
   // ── Focus management for contact step ────────────────────────────────────
   useEffect(() => {
-    if ((mode === 'airport' && airportStep === 'contact') || (mode === 'hourly' && hourlyStep === 'contact')) {
+    if (airportStep === 'contact' || hourlyStep === 'contact') {
       nameInputRef.current?.focus()
     }
-  }, [mode, airportStep, hourlyStep])
+  }, [airportStep, hourlyStep])
 
   // ── Data loading ─────────────────────────────────────────────────────────
   useEffect(() => {
@@ -282,8 +299,8 @@ export default function BookTaxi() {
   const switchMode = (m: BookingMode) => {
     if (m === mode) return
     setMode(m)
-    setAirportStep('contact')
-    setHourlyStep('contact')
+    setAirportStep('route')
+    setHourlyStep('details')
     setSelectedCarModel(null)
     setDestinationId('')
     setSelectedDest(null)
@@ -349,28 +366,6 @@ export default function BookTaxi() {
     e.preventDefault()
     const idx = AIRPORT_STEPS.indexOf(airportStep)
 
-    if (airportStep === 'contact') {
-      // Validate name
-      const nameValidation = validateFullName(name)
-      if (!nameValidation.valid) {
-        toast.error(nameValidation.error || 'Invalid name')
-        return
-      }
-      
-      // Validate phone
-      const phoneValidation = validatePhoneNumber(phone)
-      if (!phoneValidation.valid) {
-        toast.error(phoneValidation.error || 'Invalid phone number')
-        return
-      }
-      
-      // Validate email
-      const emailValidation = validateEmail(email)
-      if (!emailValidation.valid) {
-        toast.error(emailValidation.error || 'Invalid email')
-        return
-      }
-    }
     if (airportStep === 'route') {
       if (!destinationId || !passengers) { toast.error('Please select destination and passengers'); return }
     }
@@ -380,6 +375,22 @@ export default function BookTaxi() {
     }
     if (airportStep === 'car') {
       if (!selectedCarModel) { toast.error('Please select a car model'); return }
+      if (!user) {
+        sessionStorage.setItem('bookingResume', JSON.stringify({
+          mode: 'airport', name, phone, passengers, date, startTime,
+          destinationId, selectedDest, selectedCarModel, availableCarModels,
+        }))
+        router.push('/login?redirect=/book-taxi&source=booking')
+        return
+      }
+    }
+    if (airportStep === 'contact') {
+      const nameValidation = validateFullName(name)
+      if (!nameValidation.valid) { toast.error(nameValidation.error || 'Invalid name'); return }
+      const phoneValidation = validatePhoneNumber(phone)
+      if (!phoneValidation.valid) { toast.error(phoneValidation.error || 'Invalid phone number'); return }
+      const emailValidation = validateEmail(email)
+      if (!emailValidation.valid) { toast.error(emailValidation.error || 'Invalid email'); return }
     }
 
     setAirportStep(AIRPORT_STEPS[idx + 1])
@@ -395,28 +406,6 @@ export default function BookTaxi() {
     e.preventDefault()
     const idx = HOURLY_STEPS.indexOf(hourlyStep)
 
-    if (hourlyStep === 'contact') {
-      // Validate name
-      const nameValidation = validateFullName(name)
-      if (!nameValidation.valid) {
-        toast.error(nameValidation.error || 'Invalid name')
-        return
-      }
-      
-      // Validate phone
-      const phoneValidation = validatePhoneNumber(phone)
-      if (!phoneValidation.valid) {
-        toast.error(phoneValidation.error || 'Invalid phone number')
-        return
-      }
-      
-      // Validate email
-      const emailValidation = validateEmail(email)
-      if (!emailValidation.valid) {
-        toast.error(emailValidation.error || 'Invalid email')
-        return
-      }
-    }
     if (hourlyStep === 'details') {
       if (!passengers || !date) { toast.error('Please select passengers and date'); return }
     }
@@ -426,6 +415,22 @@ export default function BookTaxi() {
     }
     if (hourlyStep === 'car') {
       if (!selectedCarModel) { toast.error('Please select a car model'); return }
+      if (!user) {
+        sessionStorage.setItem('bookingResume', JSON.stringify({
+          mode: 'hourly', name, phone, passengers, date, startTime,
+          durationDays, durationHrs, selectedCarModel, availableCarModels,
+        }))
+        router.push('/login?redirect=/book-taxi&source=booking')
+        return
+      }
+    }
+    if (hourlyStep === 'contact') {
+      const nameValidation = validateFullName(name)
+      if (!nameValidation.valid) { toast.error(nameValidation.error || 'Invalid name'); return }
+      const phoneValidation = validatePhoneNumber(phone)
+      if (!phoneValidation.valid) { toast.error(phoneValidation.error || 'Invalid phone number'); return }
+      const emailValidation = validateEmail(email)
+      if (!emailValidation.valid) { toast.error(emailValidation.error || 'Invalid email'); return }
     }
 
     setHourlyStep(HOURLY_STEPS[idx + 1])
@@ -782,15 +787,13 @@ export default function BookTaxi() {
     )
   }
 
-  if (!user) return null
-
   const advance = Math.round(totalCost * 0.3 * 100) / 100
   const remaining = Math.round(totalCost * 0.7 * 100) / 100
 
   // ── Airport flow render ───────────────────────────────────────────────────
   const renderAirport = () => {
     const idx = AIRPORT_STEPS.indexOf(airportStep)
-    const isFirst = idx === 0
+    const isFirst = airportStep === 'route'
     const isLast = airportStep === 'confirm'
 
     return (
@@ -799,21 +802,6 @@ export default function BookTaxi() {
         className="flex-1 flex flex-col overflow-hidden"
       >
         <div className="flex-1 min-h-0 overflow-y-auto pr-1 scrollbar-thin-modern">
-          {airportStep === 'contact' && (
-            <ContactStepComponent
-              name={name}
-              phone={phone}
-              email={email}
-              nameInputRef={nameInputRef}
-              phoneInputRef={phoneInputRef}
-              emailInputRef={emailInputRef}
-              onNameChange={setName}
-              onPhoneChange={setPhone}
-              onEmailChange={setEmail}
-              isEmailLocked={true}
-            />
-          )}
-
         {/* Route: Destination + Passengers */}
         {airportStep === 'route' && (
           <div className="rounded-2xl border border-secondary-500/20 bg-primary-900/65 backdrop-blur-sm shadow-[0_20px_60px_rgba(0,0,0,0.35)] p-4 md:p-8 space-y-8 text-gray-100">
@@ -947,6 +935,21 @@ export default function BookTaxi() {
 
         {airportStep === 'car' && <CarStep />}
 
+          {airportStep === 'contact' && (
+            <ContactStepComponent
+              name={name}
+              phone={phone}
+              email={email}
+              nameInputRef={nameInputRef}
+              phoneInputRef={phoneInputRef}
+              emailInputRef={emailInputRef}
+              onNameChange={setName}
+              onPhoneChange={setPhone}
+              onEmailChange={setEmail}
+              isEmailLocked={true}
+            />
+          )}
+
           {airportStep === 'confirm' && (
             <div className="rounded-2xl border border-secondary-500/20 bg-primary-900/65 backdrop-blur-sm shadow-[0_20px_60px_rgba(0,0,0,0.35)] p-4 md:p-8 space-y-6 text-gray-100">
               <PriceBox
@@ -977,7 +980,7 @@ export default function BookTaxi() {
   // ── Hourly flow render ────────────────────────────────────────────────────
   const renderHourly = () => {
     const idx = HOURLY_STEPS.indexOf(hourlyStep)
-    const isFirst = idx === 0
+    const isFirst = hourlyStep === 'details'
     const isLast = hourlyStep === 'confirm'
 
     return (
@@ -986,21 +989,6 @@ export default function BookTaxi() {
         className="flex-1 flex flex-col overflow-hidden"
       >
         <div className="flex-1 min-h-0 overflow-y-auto pr-1 scrollbar-thin-modern">
-          {hourlyStep === 'contact' && (
-            <ContactStepComponent
-              name={name}
-              phone={phone}
-              email={email}
-              nameInputRef={nameInputRef}
-              phoneInputRef={phoneInputRef}
-              emailInputRef={emailInputRef}
-              onNameChange={setName}
-              onPhoneChange={setPhone}
-              onEmailChange={setEmail}
-              isEmailLocked={true}
-            />
-          )}
-
         {/* Details: Passengers + Date */}
         {hourlyStep === 'details' && (
           <div className="rounded-2xl border border-secondary-500/20 bg-primary-900/65 backdrop-blur-sm shadow-[0_20px_60px_rgba(0,0,0,0.35)] p-4 md:p-8 space-y-8 text-gray-100">
@@ -1114,6 +1102,21 @@ export default function BookTaxi() {
         )}
 
         {hourlyStep === 'car' && <CarStep />}
+
+          {hourlyStep === 'contact' && (
+            <ContactStepComponent
+              name={name}
+              phone={phone}
+              email={email}
+              nameInputRef={nameInputRef}
+              phoneInputRef={phoneInputRef}
+              emailInputRef={emailInputRef}
+              onNameChange={setName}
+              onPhoneChange={setPhone}
+              onEmailChange={setEmail}
+              isEmailLocked={true}
+            />
+          )}
 
           {hourlyStep === 'confirm' && (
             <div className="rounded-2xl border border-secondary-500/20 bg-primary-900/65 backdrop-blur-sm shadow-[0_20px_60px_rgba(0,0,0,0.35)] p-4 md:p-8 space-y-6 text-gray-100">
