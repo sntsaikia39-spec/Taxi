@@ -557,3 +557,10 @@ html, body {
   opacity: 0;
   pointer-events: none;
 }
+
+/* Splash screen shows only on a visitor's first-ever load. The inline
+   script in <head> adds `splash-seen` to <html> on every later visit,
+   hiding the splash before first paint so there is no flash. */
+html.splash-seen .app-splash {
+  display: none !important;
+}

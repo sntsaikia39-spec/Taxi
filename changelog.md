@@ -4,6 +4,15 @@ All notable changes to TaxiHollongi will be documented in this file.
 
 ---
 
+## [2026-05-21]
+
+**Author:** Yami
+
+### Changes
+- update: Login/Signup moved to last step, Strict code level validation for Ph no.
+- update: cta
+- update: How to and Steps section
+
 ## [2026-05-18]
 
 **Author:** Yami

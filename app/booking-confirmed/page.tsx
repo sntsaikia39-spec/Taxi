@@ -11,6 +11,10 @@ import { CheckCircle, Download, Home, ArrowRight, Mail, Phone } from 'lucide-rea
 function BookingConfirmedContent() {
   const searchParams = useSearchParams()
   const scrollRef = useRef<HTMLDivElement | null>(null)
+  const successRef = useRef<HTMLDivElement | null>(null)
+  const gridRef = useRef<HTMLDivElement | null>(null)
+  const whatsNextRef = useRef<HTMLDivElement | null>(null)
+  const actionsRef = useRef<HTMLDivElement | null>(null)
   const [booking, setBooking] = useState<any>(null)
   const [payment, setPayment] = useState<any>(null)
   const [loading, setLoading] = useState(true)
@@ -30,9 +34,47 @@ function BookingConfirmedContent() {
   }, [])
 
   useEffect(() => {
+    if (!booking) return
+    const tl = gsap.timeline({ delay: 0.1 })
+
+    if (successRef.current) {
+      const icon = successRef.current.querySelector('.confirm-icon')
+      const ring = successRef.current.querySelector('.confirm-ring')
+      const texts = successRef.current.querySelectorAll('.confirm-text')
+      if (ring) tl.fromTo(ring, { scale: 0, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.55, ease: 'back.out(2.6)' })
+      if (icon) tl.fromTo(icon, { scale: 0, opacity: 0, rotate: -20 }, { scale: 1, opacity: 1, rotate: 0, duration: 0.45, ease: 'back.out(2)' }, '-=0.32')
+      if (texts.length) tl.fromTo(texts, { y: 16, opacity: 0 }, { y: 0, opacity: 1, duration: 0.4, ease: 'power3.out', stagger: 0.09 }, '-=0.22')
+    }
+
+    if (gridRef.current) {
+      tl.fromTo(
+        Array.from(gridRef.current.children),
+        { y: 28, opacity: 0 },
+        { y: 0, opacity: 1, duration: 0.5, ease: 'power3.out', stagger: 0.12 },
+        '-=0.2'
+      )
+    }
+
+    if (whatsNextRef.current) {
+      tl.fromTo(whatsNextRef.current, { y: 20, opacity: 0 }, { y: 0, opacity: 1, duration: 0.45, ease: 'power3.out' }, '-=0.1')
+    }
+
+    if (actionsRef.current) {
+      tl.fromTo(
+        Array.from(actionsRef.current.children),
+        { y: 16, opacity: 0 },
+        { y: 0, opacity: 1, duration: 0.4, ease: 'power3.out', stagger: 0.08 },
+        '-=0.15'
+      )
+    }
+  }, [booking])
+
+  useEffect(() => {
     const taxiData = sessionStorage.getItem('bookingData')
     const tourData = sessionStorage.getItem('tourBookingData')
     const data = taxiData ? JSON.parse(taxiData) : tourData ? JSON.parse(tourData) : null
+    sessionStorage.removeItem('bookingData')
+    sessionStorage.removeItem('tourBookingData')
     if (data) {
       setBooking(data)
       fetchPaymentData(data.bookingId)
@@ -116,22 +158,43 @@ function BookingConfirmedContent() {
         <div className="relative z-10 container mx-auto px-4 pt-20 pb-10">
 
           {/* Success header */}
-          <div className="text-center mb-8">
-            <div className="flex justify-center mb-4">
-              <div className="w-16 h-16 rounded-full bg-green-500/15 border border-green-500/30 flex items-center justify-center">
-                <CheckCircle size={32} className="text-green-400" />
+          <div ref={successRef} className="text-center mb-8">
+            <div className="flex justify-center mb-5">
+              {/* Outer pulsing ring */}
+              <div className="relative flex items-center justify-center">
+                <div
+                  className="confirm-ring absolute w-24 h-24 rounded-full"
+                  style={{
+                    background: 'radial-gradient(circle, rgba(74,222,128,0.12) 0%, transparent 70%)',
+                    border: '1px solid rgba(74,222,128,0.18)',
+                  }}
+                />
+                <div
+                  className="confirm-ring w-[72px] h-[72px] rounded-full flex items-center justify-center"
+                  style={{
+                    background: 'rgba(74,222,128,0.1)',
+                    border: '1px solid rgba(74,222,128,0.28)',
+                    boxShadow: '0 0 32px rgba(74,222,128,0.15)',
+                  }}
+                >
+                  <CheckCircle
+                    size={34}
+                    className="confirm-icon text-green-400"
+                    style={{ filter: 'drop-shadow(0 0 8px rgba(74,222,128,0.5))' }}
+                  />
+                </div>
               </div>
             </div>
-            <p className="text-secondary-500 font-semibold text-xs tracking-[0.22em] uppercase mb-2">Booking Confirmed</p>
-            <h1 className="font-black text-white text-2xl md:text-3xl mb-2">You&apos;re all set!</h1>
-            <p className="text-gray-400 text-sm">
+            <p className="confirm-text text-secondary-500 font-semibold text-xs tracking-[0.22em] uppercase mb-2">Booking Confirmed</p>
+            <h1 className="confirm-text font-black text-white text-2xl md:text-3xl mb-2">You&apos;re all set!</h1>
+            <p className="confirm-text text-gray-400 text-sm">
               Your {booking.bookingType === 'tour' ? 'tour package' : 'taxi'} booking is confirmed. Confirmation sent to{' '}
               <span className="text-secondary-500">{booking.email}</span>
             </p>
           </div>
 
           {/* Main grid */}
-          <div className="max-w-4xl mx-auto grid md:grid-cols-2 gap-4 md:gap-6 mb-5">
+          <div ref={gridRef} className="max-w-4xl mx-auto grid md:grid-cols-2 gap-4 md:gap-6 mb-5">
 
             {/* Booking Details */}
             <div className="bg-primary-900/60 border border-primary-800 rounded-2xl backdrop-blur-sm p-5">
@@ -223,7 +286,7 @@ function BookingConfirmedContent() {
           </div>
 
           {/* What's Next */}
-          <div className="max-w-4xl mx-auto bg-primary-900/60 border border-primary-800 rounded-2xl backdrop-blur-sm p-5 mb-5">
+          <div ref={whatsNextRef} className="max-w-4xl mx-auto bg-primary-900/60 border border-primary-800 rounded-2xl backdrop-blur-sm p-5 mb-5">
             <p className="text-gray-500 text-[10px] font-semibold uppercase tracking-wider mb-4">What&apos;s Next</p>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               {[
@@ -246,7 +309,7 @@ function BookingConfirmedContent() {
           </div>
 
           {/* Action Buttons */}
-          <div className="max-w-4xl mx-auto flex flex-col sm:flex-row gap-3 mb-5">
+          <div ref={actionsRef} className="max-w-4xl mx-auto flex flex-col sm:flex-row gap-3 mb-5">
             <Link
               href="/bookings"
               className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-secondary-500 text-primary-950 font-black rounded-xl hover:bg-secondary-400 transition-colors text-sm"

@@ -12,6 +12,7 @@ import { fetchTourById } from '@/lib/db'
 import type { TourPackage } from '@/lib/db'
 import { Users, CheckCircle, ArrowLeft, Clock, Car, ArrowRight } from 'lucide-react'
 import PhoneInput from '@/components/PhoneInput'
+import AuthGate from '@/components/AuthGate'
 
 const STEPS = ['Passengers', 'Date', 'Contact', 'Confirm'] as const
 type Step = 0 | 1 | 2 | 3
@@ -62,6 +63,7 @@ export default function BookTour() {
   const [loadingTour, setLoadingTour] = useState(true)
   const [step, setStep] = useState<Step>(0)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [showAuthGate, setShowAuthGate] = useState(false)
 
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
@@ -89,6 +91,9 @@ export default function BookTour() {
     if (isLoading) return
     const saved = sessionStorage.getItem('tourBookingResume')
     if (!saved) return
+    // Resume applies only after a Google OAuth round-trip. If the user isn't
+    // signed in (OAuth abandoned), discard the snapshot.
+    if (!user) { sessionStorage.removeItem('tourBookingResume'); return }
     try {
       const s = JSON.parse(saved)
       if (s.tourId !== tourId) { sessionStorage.removeItem('tourBookingResume'); return }
@@ -99,7 +104,23 @@ export default function BookTour() {
     } catch {
       sessionStorage.removeItem('tourBookingResume')
     }
-  }, [isLoading, tourId])
+  }, [isLoading, tourId, user])
+
+  // ── Advance past the inline auth gate once the user is signed in ──────────
+  // Email/password auth never navigates, so this fires in-place. Google OAuth
+  // returns via a full reload and is handled by the resume effect above.
+  useEffect(() => {
+    if (!user || !showAuthGate) return
+    setShowAuthGate(false)
+    setStep(2 as Step)
+  }, [user, showAuthGate])
+
+  // Persist booking state before a Google OAuth redirect — OAuth needs a
+  // full-page redirect, and this page resumes from it on return.
+  const persistForOAuth = () => {
+    sessionStorage.setItem('tourBookingResume', JSON.stringify({ tourId, passengers, date }))
+    sessionStorage.setItem('postAuthRedirect', `/tours/${tourId}/book`)
+  }
 
   // ── Auto-populate contact fields from user account ───────────────────────
   useEffect(() => {
@@ -164,8 +185,8 @@ export default function BookTour() {
   const nextStep = () => {
     if (step === 1 && !date) { toast.error('Please select a tour date.'); return }
     if (step === 1 && !user) {
-      sessionStorage.setItem('tourBookingResume', JSON.stringify({ tourId, passengers, date }))
-      router.push(`/login?redirect=/tours/${tourId}/book`)
+      // Auth happens inline via a modal — no navigation, booking state stays put.
+      setShowAuthGate(true)
       return
     }
     if (step === 2) {
@@ -217,6 +238,7 @@ export default function BookTour() {
       }
       const savedBooking = result.booking
       const displayTime = formatDisplayTime(tour.arrival_time)
+      sessionStorage.removeItem('bookingData')
       sessionStorage.setItem(
         'tourBookingData',
         JSON.stringify({
@@ -260,6 +282,13 @@ export default function BookTour() {
   return (
     <div ref={scrollRef} className="scrollbar-thin-modern h-[100dvh] overflow-y-auto overflow-x-hidden bg-primary-950">
       <Header />
+
+      {showAuthGate && (
+        <AuthGate
+          onClose={() => setShowAuthGate(false)}
+          onOAuthStart={persistForOAuth}
+        />
+      )}
 
       <main className="relative overflow-x-hidden">
         {/* Dot grid */}

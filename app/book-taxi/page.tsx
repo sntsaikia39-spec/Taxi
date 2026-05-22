@@ -1,11 +1,11 @@
 'use client'
 
 import { useState, useEffect, useMemo, useRef, memo } from 'react'
-import { useRouter } from 'next/navigation'
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
 import { MapPin, Users, Car, Clock, Search, X } from 'lucide-react'
 import PhoneInput from '@/components/PhoneInput'
+import AuthGate from '@/components/AuthGate'
 import toast from 'react-hot-toast'
 import { generateBookingId } from '@/lib/utils'
 import { validateFullName, validatePhoneNumber, validateEmail } from '@/lib/validation'
@@ -128,7 +128,6 @@ ContactStepComponent.displayName = 'ContactStep'
 
 // ── Main Book Taxi Component ───────────────────────────────────────────────
 export default function BookTaxi() {
-  const router = useRouter()
   const { user, isLoading } = useAuth()
 
   const [mode, setMode] = useState<BookingMode>('airport')
@@ -144,6 +143,7 @@ export default function BookTaxi() {
   const [carClassFilter, setCarClassFilter] = useState('')
   const [carSort, setCarSort] = useState<'price-asc' | 'price-desc' | 'capacity-asc' | 'capacity-desc' | ''>('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [showAuthGate, setShowAuthGate] = useState(false)
 
   // Shared form fields
   const [name, setName] = useState('')
@@ -173,6 +173,10 @@ export default function BookTaxi() {
     if (isLoading) return
     const saved = sessionStorage.getItem('bookingResume')
     if (!saved) return
+    // Resume applies only after a Google OAuth round-trip. If the user isn't
+    // signed in (OAuth abandoned), discard the snapshot instead of jumping
+    // ahead to the contact step.
+    if (!user) { sessionStorage.removeItem('bookingResume'); return }
     try {
       const s = JSON.parse(saved)
       sessionStorage.removeItem('bookingResume')
@@ -193,7 +197,29 @@ export default function BookTaxi() {
     } catch {
       sessionStorage.removeItem('bookingResume')
     }
-  }, [isLoading])
+  }, [isLoading, user])
+
+  // ── Advance past the inline auth gate once the user is signed in ──────────
+  // Email/password auth never navigates, so this fires in-place. Google OAuth
+  // returns via a full reload and is handled by the resume effect above.
+  useEffect(() => {
+    if (!user || !showAuthGate) return
+    setShowAuthGate(false)
+    if (mode === 'airport') setAirportStep('contact')
+    else setHourlyStep('contact')
+  }, [user, showAuthGate, mode])
+
+  // Persist booking state before a Google OAuth redirect — OAuth needs a
+  // full-page redirect, and the booking page resumes from this on return.
+  const persistForOAuth = () => {
+    const payload = mode === 'airport'
+      ? { mode: 'airport', name, phone, passengers, date, startTime,
+          destinationId, selectedDest, selectedCarModel, availableCarModels }
+      : { mode: 'hourly', name, phone, passengers, date, startTime,
+          durationDays, durationHrs, selectedCarModel, availableCarModels }
+    sessionStorage.setItem('bookingResume', JSON.stringify(payload))
+    sessionStorage.setItem('postAuthRedirect', '/book-taxi')
+  }
 
   // ── Auto-populate contact fields from user account ───────────────────────
   useEffect(() => {
@@ -376,11 +402,8 @@ export default function BookTaxi() {
     if (airportStep === 'car') {
       if (!selectedCarModel) { toast.error('Please select a car model'); return }
       if (!user) {
-        sessionStorage.setItem('bookingResume', JSON.stringify({
-          mode: 'airport', name, phone, passengers, date, startTime,
-          destinationId, selectedDest, selectedCarModel, availableCarModels,
-        }))
-        router.push('/login?redirect=/book-taxi&source=booking')
+        // Auth happens inline via a modal — no navigation, booking state stays put.
+        setShowAuthGate(true)
         return
       }
     }
@@ -416,11 +439,8 @@ export default function BookTaxi() {
     if (hourlyStep === 'car') {
       if (!selectedCarModel) { toast.error('Please select a car model'); return }
       if (!user) {
-        sessionStorage.setItem('bookingResume', JSON.stringify({
-          mode: 'hourly', name, phone, passengers, date, startTime,
-          durationDays, durationHrs, selectedCarModel, availableCarModels,
-        }))
-        router.push('/login?redirect=/book-taxi&source=booking')
+        // Auth happens inline via a modal — no navigation, booking state stays put.
+        setShowAuthGate(true)
         return
       }
     }
@@ -538,6 +558,7 @@ export default function BookTaxi() {
               dbBookingId: savedBooking.id,
             }
 
+      sessionStorage.removeItem('tourBookingData')
       sessionStorage.setItem('bookingData', JSON.stringify(sessionPayload))
       toast.success('Booking created! Proceeding to payment...')
       window.location.href = `/payment?bookingId=${bookingId}&amount=${advance}`
@@ -1198,6 +1219,13 @@ export default function BookTaxi() {
           </div>
         </div>
       </main>
+
+      {showAuthGate && (
+        <AuthGate
+          onClose={() => setShowAuthGate(false)}
+          onOAuthStart={persistForOAuth}
+        />
+      )}
     </div>
   )
 }

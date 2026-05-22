@@ -27,6 +27,20 @@ export default function AppSplashLoader() {
   const ringsRef = useRef<HTMLDivElement>(null)
   const trailRef = useRef<HTMLDivElement>(null)
 
+  // First-ever visit shows the splash; every later visit skips it but still
+  // fires `splashFinished` so the homepage reveal animations still run.
+  useEffect(() => {
+    let seen = false
+    try { seen = !!localStorage.getItem('rina:splashSeen') } catch {}
+    if (seen) {
+      setPhase('hidden')
+      ;(window as any).__splashFinished = true
+      window.dispatchEvent(new CustomEvent('splashFinished'))
+    } else {
+      try { localStorage.setItem('rina:splashSeen', '1') } catch {}
+    }
+  }, [])
+
   useEffect(() => {
     const media = window.matchMedia('(max-width: 767px)')
     const updateLayout = (matches: boolean) => {

@@ -8,7 +8,6 @@ import { DotLottieReact } from '@lottiefiles/dotlottie-react'
 import { Clock, Users, Car, Calendar, ArrowRight, Star } from 'lucide-react'
 import toast from 'react-hot-toast'
 import gsap from 'gsap'
-import { useAuth } from '@/context/AuthContext'
 import { fetchAllTours, fetchAllTourRatingStats, type RatingStats } from '@/lib/db'
 import type { TourPackage } from '@/lib/db'
 import Link from 'next/link'
@@ -38,7 +37,6 @@ function toNum(val: unknown): number {
 
 export default function Tours() {
   const router = useRouter()
-  const { user } = useAuth()
   const [tours, setTours] = useState<TourPackage[]>([])
   const [ratingStats, setRatingStats] = useState<Record<string, RatingStats>>({})
   const [expandedId, setExpandedId] = useState<string | null>(null)
@@ -205,11 +203,8 @@ export default function Tours() {
   }
 
   const handleBookTour = (tourId: string) => {
-    if (!user) {
-      toast.error('Please sign in to book a tour')
-      router.push('/login?redirect=/tours&source=booking')
-      return
-    }
+    // Sign-in is requested inside the booking flow, just before the contact
+    // step — no auth needed to start browsing a tour booking.
     router.push(`/tours/${tourId}/book`)
   }
 

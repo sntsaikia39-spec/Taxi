@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, Suspense } from 'react'
+import { useEffect, useState, Suspense, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { useAuth } from '@/context/AuthContext'
@@ -11,7 +11,14 @@ import toast from 'react-hot-toast'
 function LoginContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const redirect = searchParams.get('redirect') || '/bookings'
+  const redirectParam = searchParams.get('redirect')
+  const source = searchParams.get('source')
+  const redirect =
+    redirectParam && redirectParam.startsWith('/')
+      ? redirectParam
+      : source === 'booking'
+        ? '/book-taxi'
+        : '/bookings'
   const { signInWithEmail, signInWithOAuth, resendVerificationEmail, user } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -19,6 +26,38 @@ function LoginContent() {
   const [resending, setResending] = useState(false)
   // Show the "verify your email" nudge when Supabase blocks login due to unverified email
   const [showVerifyNudge, setShowVerifyNudge] = useState(false)
+  const hasRedirected = useRef(false)
+
+  const resolveBookingFallback = () => {
+    const tourResume = sessionStorage.getItem('tourBookingResume')
+    if (tourResume) {
+      try {
+        const parsed = JSON.parse(tourResume)
+        if (parsed?.tourId) return `/tours/${parsed.tourId}/book`
+      } catch {}
+    }
+    if (sessionStorage.getItem('bookingResume')) return '/book-taxi'
+    return null
+  }
+
+  const resolvePostAuthTarget = () => {
+    const stored = sessionStorage.getItem('postAuthRedirect')
+    if (stored && stored.startsWith('/')) {
+      sessionStorage.removeItem('postAuthRedirect')
+      return stored
+    }
+    const bookingFallback = resolveBookingFallback()
+    if (bookingFallback) return bookingFallback
+    return redirect
+  }
+
+  const navigatePostAuth = () => {
+    if (hasRedirected.current) return
+    hasRedirected.current = true
+    // Hard navigation guarantees a single clean mount so the booking
+    // page's resume effect runs once and lands on the contact step.
+    window.location.assign(resolvePostAuthTarget())
+  }
 
   useEffect(() => {
     document.documentElement.style.overflowY = 'auto'
@@ -32,10 +71,21 @@ function LoginContent() {
     }
   }, [])
 
-  if (user) {
-    router.push(redirect)
-    return null
-  }
+  useEffect(() => {
+    // Keep the intended post-auth destination stable across login/signup hops.
+    if (redirectParam && redirectParam.startsWith('/')) {
+      sessionStorage.setItem('postAuthRedirect', redirectParam)
+      return
+    }
+    if (source === 'booking') {
+      sessionStorage.setItem('postAuthRedirect', '/book-taxi')
+    }
+  }, [redirectParam, source])
+
+  useEffect(() => {
+    if (!user || hasRedirected.current) return
+    navigatePostAuth()
+  }, [user, router])
 
   const isEmailNotConfirmed = (msg: string) =>
     msg.toLowerCase().includes('email not confirmed') ||
@@ -65,7 +115,7 @@ function LoginContent() {
         return
       }
       toast.success('Signed in successfully!')
-      router.push(redirect)
+      navigatePostAuth()
     } catch (err: any) {
       toast.error(err.message || 'An error occurred')
     } finally {
@@ -237,4 +287,3 @@ function LoginContent() {
 export default function Login() {
   return <Suspense><LoginContent /></Suspense>
 }
-

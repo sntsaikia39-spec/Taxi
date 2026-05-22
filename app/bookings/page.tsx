@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Header from '@/components/Header'
 import { DotLottieReact } from '@lottiefiles/dotlottie-react'
-import { Eye, Download, Trash2, ArrowRight, Car, ChevronDown, CreditCard, Clock, X } from 'lucide-react'
+import { Eye, Download, Trash2, ArrowRight, Car, ChevronDown, CreditCard, Clock, X, AlertTriangle } from 'lucide-react'
 import toast from 'react-hot-toast'
 import gsap from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
@@ -56,6 +56,7 @@ export default function MyBookings() {
   const [cancellationReason, setCancellationReason] = useState('')
   const [submittingCancellation, setSubmittingCancellation] = useState(false)
   const scrollRef = useRef<HTMLDivElement | null>(null)
+  const cancelModalRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     document.documentElement.style.overflowY = 'auto'
@@ -100,6 +101,16 @@ export default function MyBookings() {
       scroller.removeEventListener('wheel', onWheel)
     }
   }, [])
+
+  useEffect(() => {
+    if (cancelModalBooking && cancelModalRef.current) {
+      gsap.fromTo(
+        cancelModalRef.current,
+        { scale: 0.88, opacity: 0, y: 24 },
+        { scale: 1, opacity: 1, y: 0, duration: 0.42, ease: 'back.out(1.6)' }
+      )
+    }
+  }, [cancelModalBooking])
 
   useEffect(() => {
     const scroller = scrollRef.current
@@ -703,56 +714,107 @@ export default function MyBookings() {
 
       {/* Cancellation request modal */}
       {cancelModalBooking && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-          <div className="w-full max-w-md bg-primary-900 border border-primary-700 rounded-2xl shadow-2xl p-6">
-            <div className="flex items-start justify-between mb-4">
-              <h2 className="text-white font-black text-lg">Request Cancellation</h2>
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/75 backdrop-blur-md">
+          <div
+            ref={cancelModalRef}
+            className="w-full max-w-md rounded-3xl overflow-hidden"
+            style={{
+              background: 'rgba(22,17,14,0.97)',
+              border: '1px solid rgba(255,255,255,0.07)',
+              boxShadow: '0 32px 80px rgba(0,0,0,0.7), 0 0 0 1px rgba(248,113,113,0.08)',
+            }}
+          >
+            {/* Modal header */}
+            <div
+              className="relative flex items-center gap-3.5 px-6 pt-6 pb-5"
+              style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}
+            >
+              <div
+                className="flex-shrink-0 w-10 h-10 rounded-2xl flex items-center justify-center"
+                style={{ background: 'rgba(248,113,113,0.14)', border: '1px solid rgba(248,113,113,0.2)' }}
+              >
+                <AlertTriangle size={18} className="text-red-400" />
+              </div>
+              <div>
+                <h2 className="text-white font-black text-base leading-tight">Request Cancellation</h2>
+                <p className="text-gray-500 text-xs mt-0.5">Review the policy before proceeding</p>
+              </div>
               <button
                 onClick={() => { setCancelModalBooking(null); setCancellationReason('') }}
-                className="text-gray-400 hover:text-white transition-colors"
+                className="ml-auto flex-shrink-0 w-8 h-8 rounded-xl flex items-center justify-center text-gray-500 hover:text-white transition-colors"
+                style={{ background: 'rgba(255,255,255,0.05)' }}
               >
-                <X size={20} />
+                <X size={15} />
               </button>
             </div>
 
-            <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 mb-4 text-sm text-red-300 space-y-1.5">
-              <p className="font-semibold">Before you proceed:</p>
-              <ul className="list-disc list-inside space-y-1 text-red-300/80">
-                <li>Your cancellation request will be reviewed by our team.</li>
-                <li>Refunds are issued only for the online payment amount (advance paid).</li>
-                <li>Cash portions are non-refundable via this flow.</li>
-                <li>Refunds may take 5–7 business days to reflect in your account.</li>
-              </ul>
-            </div>
-
-            <div className="mb-5">
-              <label className="block text-gray-400 text-xs font-semibold uppercase tracking-wide mb-2">
-                Reason for cancellation <span className="text-gray-600 normal-case font-normal">(optional)</span>
-              </label>
-              <textarea
-                value={cancellationReason}
-                onChange={e => setCancellationReason(e.target.value)}
-                placeholder="Tell us why you are cancelling..."
-                rows={3}
-                maxLength={300}
-                className="w-full bg-primary-950 border border-primary-700 rounded-xl px-4 py-3 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-secondary-500 resize-none"
-              />
-            </div>
-
-            <div className="flex gap-3">
-              <button
-                onClick={() => { setCancelModalBooking(null); setCancellationReason('') }}
-                className="flex-1 px-4 py-2.5 border border-primary-600 text-gray-300 rounded-xl text-sm font-semibold hover:bg-primary-800 transition-colors"
+            <div className="px-6 py-5 space-y-4">
+              {/* Policy info */}
+              <div
+                className="rounded-2xl p-4 space-y-2.5"
+                style={{ background: 'rgba(248,113,113,0.07)', border: '1px solid rgba(248,113,113,0.15)' }}
               >
-                Keep Booking
-              </button>
-              <button
-                onClick={handleCancelRequest}
-                disabled={submittingCancellation}
-                className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-xl text-sm font-semibold hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {submittingCancellation ? 'Submitting...' : 'Request Cancellation'}
-              </button>
+                <p className="text-red-400 text-xs font-bold uppercase tracking-wider">Refund Policy</p>
+                <ul className="space-y-1.5">
+                  {[
+                    'Your request will be reviewed by our team within 24 hours.',
+                    'Only the online advance payment is eligible for refund.',
+                    'Cash portions are non-refundable through this flow.',
+                    'Refunds take 5–7 business days to reflect in your account.',
+                  ].map((item) => (
+                    <li key={item} className="flex items-start gap-2 text-[13px] text-gray-400 leading-snug">
+                      <span className="mt-1 w-1 h-1 rounded-full bg-red-400/60 flex-shrink-0" />
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              {/* Reason textarea */}
+              <div>
+                <label className="block text-gray-500 text-[11px] font-semibold uppercase tracking-widest mb-2">
+                  Reason <span className="text-gray-700 normal-case font-normal tracking-normal">(optional)</span>
+                </label>
+                <textarea
+                  value={cancellationReason}
+                  onChange={e => setCancellationReason(e.target.value)}
+                  placeholder="Tell us why you're cancelling..."
+                  rows={3}
+                  maxLength={300}
+                  className="w-full rounded-xl px-4 py-3 text-white text-sm placeholder-gray-600 focus:outline-none resize-none transition-colors"
+                  style={{
+                    background: 'rgba(255,255,255,0.04)',
+                    border: '1px solid rgba(255,255,255,0.08)',
+                  }}
+                  onFocus={e => (e.currentTarget.style.border = '1px solid rgba(248,113,113,0.35)')}
+                  onBlur={e => (e.currentTarget.style.border = '1px solid rgba(255,255,255,0.08)')}
+                />
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-3 pt-1">
+                <button
+                  onClick={() => { setCancelModalBooking(null); setCancellationReason('') }}
+                  className="flex-1 px-4 py-3 rounded-xl text-sm font-semibold text-gray-400 hover:text-white transition-colors"
+                  style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}
+                >
+                  Keep Booking
+                </button>
+                <button
+                  onClick={handleCancelRequest}
+                  disabled={submittingCancellation}
+                  className="flex-1 px-4 py-3 rounded-xl text-sm font-bold text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  style={{
+                    background: submittingCancellation
+                      ? 'rgba(220,38,38,0.5)'
+                      : 'rgba(220,38,38,0.85)',
+                    border: '1px solid rgba(248,113,113,0.3)',
+                    boxShadow: submittingCancellation ? 'none' : '0 4px 20px rgba(220,38,38,0.25)',
+                  }}
+                >
+                  {submittingCancellation ? 'Submitting...' : 'Request Cancellation'}
+                </button>
+              </div>
             </div>
           </div>
         </div>
