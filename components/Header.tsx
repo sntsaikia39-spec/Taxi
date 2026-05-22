@@ -90,6 +90,13 @@ export default function Header() {
     setPendingHref(null)
   }, [pathname])
 
+  // Signal pages to start the retraction timer whenever the mobile menu closes.
+  useEffect(() => {
+    if (!mobileMenuOpen && mobileMenuMounted) {
+      document.dispatchEvent(new CustomEvent('header:menu-closed'))
+    }
+  }, [mobileMenuOpen, mobileMenuMounted])
+
   const activeHref = pendingHref ?? pathname
 
   useEffect(() => {

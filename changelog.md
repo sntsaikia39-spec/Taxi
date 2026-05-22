@@ -9,6 +9,7 @@ All notable changes to TaxiHollongi will be documented in this file.
 **Author:** Yami
 
 ### Changes
+- fix: header waiting bug
 - fix: login signup new location bug fixes, ui updates
 
 ## [2026-05-21]

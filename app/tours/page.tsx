@@ -175,11 +175,14 @@ export default function Tours() {
       autoHideTimer = null
     }, 6500)
 
+    const onMenuClosed = () => showHeaderTemporarily()
+
     scroller.addEventListener('scroll', onScroll, { passive: true })
     scroller.addEventListener('click', onClick, { passive: true })
     scroller.addEventListener('touchend', onTouchEnd, { passive: true })
     header.addEventListener('mouseenter', onHeaderMouseEnter)
     header.addEventListener('mouseleave', onHeaderMouseLeave)
+    document.addEventListener('header:menu-closed', onMenuClosed)
 
     return () => {
       scroller.removeEventListener('scroll', onScroll)
@@ -187,6 +190,7 @@ export default function Tours() {
       scroller.removeEventListener('touchend', onTouchEnd)
       header.removeEventListener('mouseenter', onHeaderMouseEnter)
       header.removeEventListener('mouseleave', onHeaderMouseLeave)
+      document.removeEventListener('header:menu-closed', onMenuClosed)
       autoHideTimer = clearTimer(autoHideTimer)
       hideAfterScrollTimer = clearTimer(hideAfterScrollTimer)
       gsap.set(header, { yPercent: 0, opacity: 1 })

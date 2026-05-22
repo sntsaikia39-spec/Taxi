@@ -575,12 +575,15 @@ export default function Home() {
       touchend: handleTouchEnd,
       click: handleClick,
     }
+    const onMenuClosed = () => showHeaderTemporarily()
+
     if (header) {
       header.addEventListener('mouseenter', handleHeaderMouseEnter)
       header.addEventListener('mouseleave', handleHeaderMouseLeave)
       // Forward wheel events from the fixed header (outside mainEl) into the same handler
       header.addEventListener('wheel', handleWheel, { passive: false })
     }
+    document.addEventListener('header:menu-closed', onMenuClosed)
 
     return () => {
       if (mainEl) {
@@ -597,6 +600,7 @@ export default function Home() {
         header.removeEventListener('mouseleave', handleHeaderMouseLeave)
         header.removeEventListener('wheel', handleWheel)
       }
+      document.removeEventListener('header:menu-closed', onMenuClosed)
       if (headerAutoHideTimer) clearTimeout(headerAutoHideTimer)
       if (header) gsap.set(header, { opacity: 1, yPercent: 0 })
       if (mainEl) gsap.set(mainEl, { y: 0 })
