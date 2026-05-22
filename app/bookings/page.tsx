@@ -169,7 +169,12 @@ export default function MyBookings() {
     }
     const onHeaderMouseLeave = () => {
       headerHovered = false
-      scheduleHideAfterScroll()
+      autoHideTimer = clearTimer(autoHideTimer)
+      hideAfterScrollTimer = clearTimer(hideAfterScrollTimer)
+      autoHideTimer = setTimeout(() => {
+        if (!headerHovered) hideHeader()
+        autoHideTimer = null
+      }, 6500)
     }
 
     gsap.set(header, { yPercent: 0, opacity: 1 })

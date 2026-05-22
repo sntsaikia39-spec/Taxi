@@ -4,6 +4,13 @@ All notable changes to TaxiHollongi will be documented in this file.
 
 ---
 
+## [2026-05-22]
+
+**Author:** Yami
+
+### Changes
+- fix: login signup new location bug fixes, ui updates
+
 ## [2026-05-21]
 
 **Author:** Yami

@@ -160,7 +160,12 @@ export default function Tours() {
     }
     const onHeaderMouseLeave = () => {
       headerHovered = false
-      scheduleHideAfterScroll()
+      autoHideTimer = clearTimer(autoHideTimer)
+      hideAfterScrollTimer = clearTimer(hideAfterScrollTimer)
+      autoHideTimer = setTimeout(() => {
+        if (!headerHovered) hideHeader()
+        autoHideTimer = null
+      }, 6500)
     }
 
     // Start visible, then apply the same delayed auto-hide window on first entry.

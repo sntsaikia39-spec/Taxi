@@ -346,14 +346,7 @@ export default function Home() {
         headerAutoHideTimer = null
       }, 4800)
     }
-    const scheduleHeaderHide = () => {
-      if (stepIdx === 0 || transitioning) return
-      if (headerAutoHideTimer) clearTimeout(headerAutoHideTimer)
-      headerAutoHideTimer = setTimeout(() => {
-        if (!header.matches(':hover')) hideHeader()
-        headerAutoHideTimer = null
-      }, 450)
-    }
+
     const handleHeaderMouseEnter = () => {
       if (headerAutoHideTimer) {
         clearTimeout(headerAutoHideTimer)
@@ -361,7 +354,15 @@ export default function Home() {
       }
     }
     const handleHeaderMouseLeave = () => {
-      scheduleHeaderHide()
+      if (stepIdx === 0 || transitioning) return
+      if (headerAutoHideTimer) {
+        clearTimeout(headerAutoHideTimer)
+        headerAutoHideTimer = null
+      }
+      headerAutoHideTimer = setTimeout(() => {
+        if (!header?.matches(':hover')) hideHeader()
+        headerAutoHideTimer = null
+      }, 4800)
     }
     // ── SVG overlay ──
     const renderTr = (fromBottom: boolean) => {
