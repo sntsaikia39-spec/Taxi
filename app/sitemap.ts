@@ -1,9 +1,8 @@
 import { MetadataRoute } from 'next'
-import { createClient } from '@supabase/supabase-js'
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.rinastoursandtravels.in'
 
-export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+export default function sitemap(): MetadataRoute.Sitemap {
   const staticRoutes: MetadataRoute.Sitemap = [
     {
       url: SITE_URL,
@@ -80,30 +79,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.3,
     },
   ]
-
-  // Dynamically include individual tour package pages
-  try {
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    )
-    const { data: tours } = await supabase
-      .from('tour_packages')
-      .select('id, updated_at')
-      .order('created_at', { ascending: false })
-
-    if (tours && tours.length > 0) {
-      const tourRoutes: MetadataRoute.Sitemap = tours.map((tour) => ({
-        url: `${SITE_URL}/tours/${tour.id}/book`,
-        lastModified: tour.updated_at ? new Date(tour.updated_at) : new Date(),
-        changeFrequency: 'monthly' as const,
-        priority: 0.75,
-      }))
-      return [...staticRoutes, ...tourRoutes]
-    }
-  } catch {
-    // Sitemap still works without dynamic tour entries
-  }
 
   return staticRoutes
 }

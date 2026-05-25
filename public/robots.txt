@@ -12,16 +12,6 @@ Disallow: /payment
 Disallow: /change
 Disallow: /auth/
 Disallow: /api/
-
-# Allow important SEO routes
-Allow: /hollongi-airport-taxi
-Allow: /donyi-polo-airport-taxi
-Allow: /itanagar-airport-taxi
-Allow: /arunachal-tours
-Allow: /itanagar-tours
-Allow: /hourly-taxi-itanagar
-Allow: /tours
-Allow: /book-taxi
-Allow: /faq
+Disallow: /tours/*/book
 
 Sitemap: https://www.rinastoursandtravels.in/sitemap.xml

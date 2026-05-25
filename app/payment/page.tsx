@@ -4,7 +4,6 @@ import { useSearchParams, useRouter as useNextRouter } from 'next/navigation'
 import { useState, useEffect, useRef, Suspense } from 'react'
 import Header from '@/components/Header'
 import toast from 'react-hot-toast'
-import PaymentTestAlert from '@/components/PaymentTestAlert'
 import gsap from 'gsap'
 import { Shield, MapPin, Clock, Users, Car } from 'lucide-react'
 
@@ -300,7 +299,6 @@ function PaymentContent() {
           </div>
         </div>
       </main>
-      <PaymentTestAlert />
     </div>
   )
 }

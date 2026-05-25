@@ -338,10 +338,15 @@ function BookingConfirmedContent() {
                 <Mail size={12} />
                 support@rinastoursandtravels.in
               </a>
-              <a href="tel:+919876543210"
+              <a href="tel:+919101764656"
                 className="flex items-center gap-1.5 px-3 py-1.5 border border-primary-700 text-gray-300 rounded-lg hover:border-secondary-500/40 hover:text-secondary-500 transition-colors">
                 <Phone size={12} />
-                +91 98765 43210
+                +91 91017 64656
+              </a>
+              <a href="tel:+919181301029"
+                className="flex items-center gap-1.5 px-3 py-1.5 border border-primary-700 text-gray-300 rounded-lg hover:border-secondary-500/40 hover:text-secondary-500 transition-colors">
+                <Phone size={12} />
+                +91 91813 01029
               </a>
             </div>
           </div>

@@ -79,10 +79,10 @@ export async function generateInvoicePDF(invoiceData: InvoiceData): Promise<jsPD
 
   doc.setFontSize(8)
   doc.setTextColor(100, 100, 100)
-  doc.text('Hollongi, Guwahati', margin, yPosition + 11)
-  doc.text('Haryana, 122001', margin, yPosition + 15)
-  doc.text('support@taxihollongi.com', margin, yPosition + 19)
-  doc.text('+91-9876543210', margin, yPosition + 23)
+  doc.text('Inside the Arrival Hall, beside the Exit Gate', margin, yPosition + 11)
+  doc.text('Donyi Polo Airport, Hollongi, Itanagar', margin, yPosition + 15)
+  doc.text('support@rinastoursandtravels.in', margin, yPosition + 19)
+  doc.text('+91-9101764656 / +91-9181301029', margin, yPosition + 23)
 
   // RIGHT COLUMN: Customer Info
   const rightCol = pageWidth / 2 + 5
@@ -293,7 +293,7 @@ export async function generateInvoicePDF(invoiceData: InvoiceData): Promise<jsPD
     '• Payment received is non-refundable except for cancellations within policy period.',
     '• This invoice is system-generated and is valid without signatures.',
     '• Remaining balance must be paid at time of service or invoice terms apply.',
-    '• For support, contact: support@taxihollongi.com | Phone: +91-9876543210',
+    '• For support, contact: support@rinastoursandtravels.in | Phone: +91-9101764656 / +91-9181301029',
   ]
 
   let termsY = yPosition

@@ -7,10 +7,10 @@ import Logo from '@/components/Logo'
 export default function Footer() {
 
   return (
-    <footer className="bg-primary-950 text-gray-400 pt-[calc(2rem+5px)] pb-[calc(2rem+5px+env(safe-area-inset-bottom))] border-t border-white/[0.06]">
+    <footer className="bg-primary-950 text-gray-400 pt-3 md:pt-[calc(2rem+5px)] pb-3 md:pb-[calc(2rem+5px+env(safe-area-inset-bottom))] border-t border-white/[0.06]">
       <div className="container mx-auto px-4">
         {/* Main grid — 2-col on mobile (brand full-width, nav+support side-by-side), 4-col on desktop */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-x-4 gap-y-3 sm:gap-y-5 lg:gap-6 pb-3 sm:pb-5 border-b border-white/[0.06]">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-x-4 gap-y-2 sm:gap-y-5 lg:gap-6 pb-2 sm:pb-5 border-b border-white/[0.06]">
 
           {/* Brand — full width on mobile */}
           <div className="footer-col col-span-2 lg:col-span-1">
@@ -20,30 +20,31 @@ export default function Footer() {
             <p className="hidden lg:block text-sm leading-relaxed text-gray-500 mb-3">
               Arunachal Pradesh&apos;s trusted airport taxi and tour booking platform. Safe, reliable, always on time.
             </p>
-            <div className="space-y-1">
+            <div className="space-y-0.5 md:space-y-1">
               <a
                 href="mailto:support@rinastoursandtravels.in"
-                className="flex items-center gap-2.5 text-xs hover:text-secondary-500 transition-colors duration-200 group overflow-hidden"
+                className="flex items-center gap-2 text-xs hover:text-secondary-500 transition-colors duration-200 group overflow-hidden"
               >
-                <div className="w-7 h-7 rounded-lg bg-primary-900 flex items-center justify-center group-hover:bg-secondary-500/10 transition-colors shrink-0">
-                  <Mail size={12} className="text-secondary-500" />
+                <div className="w-6 h-6 md:w-7 md:h-7 rounded-lg bg-primary-900 flex items-center justify-center group-hover:bg-secondary-500/10 transition-colors shrink-0">
+                  <Mail size={11} className="text-secondary-500" />
                 </div>
                 <span className="truncate min-w-0">support@rinastoursandtravels.in</span>
               </a>
-              <a
-                href="tel:+919876543210"
-                className="flex items-center gap-2.5 text-xs hover:text-secondary-500 transition-colors duration-200 group"
-              >
-                <div className="w-7 h-7 rounded-lg bg-primary-900 flex items-center justify-center group-hover:bg-secondary-500/10 transition-colors shrink-0">
-                  <Phone size={12} className="text-secondary-500" />
+              <div className="flex items-center gap-2 text-xs">
+                <div className="w-6 h-6 md:w-7 md:h-7 rounded-lg bg-primary-900 flex items-center justify-center shrink-0">
+                  <Phone size={11} className="text-secondary-500" />
                 </div>
-                +91 98765 43210
-              </a>
-              <div className="flex items-start gap-2.5 text-xs">
-                <div className="w-7 h-7 rounded-lg bg-primary-900 flex items-center justify-center shrink-0 mt-0.5">
-                  <MapPin size={12} className="text-secondary-500" />
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <a href="tel:+919101764656" className="hover:text-secondary-500 transition-colors duration-200 whitespace-nowrap">+91 91017 64656</a>
+                  <span className="text-gray-600">/</span>
+                  <a href="tel:+919181301029" className="hover:text-secondary-500 transition-colors duration-200 whitespace-nowrap">+91 91813 01029</a>
                 </div>
-                <span>Donyi Polo Airport, Itanagar, Arunachal Pradesh</span>
+              </div>
+              <div className="flex items-start gap-2 text-xs">
+                <div className="w-6 h-6 md:w-7 md:h-7 rounded-lg bg-primary-900 flex items-center justify-center shrink-0 mt-0.5">
+                  <MapPin size={11} className="text-secondary-500" />
+                </div>
+                <span>Inside the Arrival Hall, beside the Exit Gate, Donyi Polo Airport, Hollongi, Itanagar</span>
               </div>
             </div>
           </div>
@@ -76,7 +77,7 @@ export default function Footer() {
             <h4 className="text-white font-semibold mb-2 text-xs tracking-widest uppercase">Support</h4>
             <ul className="space-y-2">
               {[
-                { href: '/help', label: 'Help Center' },
+                { href: 'https://wa.me/919181301029', label: 'Help Center', target: '_blank' as const },
                 { href: '/faq', label: 'FAQ' },
                 { href: '/privacy', label: 'Privacy Policy' },
                 { href: '/terms', label: 'Terms & Conditions' },
@@ -84,6 +85,8 @@ export default function Footer() {
                 <li key={link.href}>
                   <Link
                     href={link.href}
+                    target={'target' in link ? link.target : undefined}
+                    rel={'target' in link ? 'noopener noreferrer' : undefined}
                     className="text-xs flex items-center gap-2 hover:text-secondary-500 transition-colors duration-200 group"
                   >
                     <span className="w-1 h-1 rounded-full bg-primary-700 group-hover:bg-secondary-500 transition-colors shrink-0" />
@@ -94,7 +97,7 @@ export default function Footer() {
             </ul>
           </div>
 
-          {/* CTA col — desktop only (mobile already has a full CTA section above) */}
+          {/* CTA col — desktop only */}
           <div className="footer-col hidden lg:block">
             <h4 className="text-white font-semibold mb-2 text-xs tracking-widest uppercase">Ready to Book?</h4>
             <p className="text-xs text-gray-500 mb-3 leading-relaxed">
@@ -117,6 +120,27 @@ export default function Footer() {
               Explore Tours
             </Link>
           </div>
+        </div>
+
+        {/* Services strip */}
+        <div className="py-1.5 flex flex-wrap gap-x-3 gap-y-1 justify-center">
+          {[
+            { href: '/hollongi-airport-taxi', label: 'Hollongi Airport Taxi' },
+            { href: '/donyi-polo-airport-taxi', label: 'Donyi Polo Airport Taxi' },
+            { href: '/itanagar-airport-taxi', label: 'Itanagar Airport Taxi' },
+            { href: '/hourly-taxi-itanagar', label: 'Hourly Taxi Itanagar' },
+            { href: '/arunachal-tours', label: 'Arunachal Tours' },
+            { href: '/itanagar-tours', label: 'Itanagar Tours' },
+          ].map((link) => (
+            <Link
+              key={link.href}
+              href={link.href}
+              className="flex items-center gap-1 text-[9px] text-gray-500 whitespace-nowrap hover:text-secondary-500 transition-colors duration-200"
+            >
+              <span className="w-1 h-1 rounded-full bg-gray-600 shrink-0" />
+              {link.label}
+            </Link>
+          ))}
         </div>
 
         {/* Bottom bar */}

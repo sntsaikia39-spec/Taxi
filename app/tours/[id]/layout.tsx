@@ -28,11 +28,9 @@ export async function generateMetadata({
       return {
         title,
         description,
-        alternates: { canonical: `/tours/${params.id}/book` },
         openGraph: {
           title,
           description,
-          url: `/tours/${params.id}/book`,
           ...(data.image_url && {
             images: [{ url: data.image_url, alt: data.name }],
           }),

@@ -443,7 +443,7 @@ export default function MyBookings() {
         userEmail: booking.user_email || '-',
         userPhone: booking.phone || '-',
         bookingType: booking.booking_type === 'tour' ? 'tour' : 'taxi',
-        pickupLocation: 'Donyi Polo Airport, Hollongi',
+        pickupLocation: 'Inside the Arrival Hall, beside the Exit Gate, Donyi Polo Airport, Hollongi, Itanagar',
         pickupDate: booking.start_datetime,
         pickupTime: formatTime(booking.start_datetime),
         passengers: Number(booking.passenger_count || 1),
