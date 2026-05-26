@@ -1,8 +1,12 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { requireAdminRequest } from '@/lib/admin-auth'
 import { sendCashPaymentInvoice } from '@/lib/resend-notifications'
 import { createPaymentRecord } from '@/lib/payment-db'
 
 export async function POST(request: Request) {
+  const unauthorized = requireAdminRequest(request)
+  if (unauthorized) return unauthorized
+
   try {
     const body = await request.json()
     const {

@@ -43,10 +43,31 @@ CREATE TABLE IF NOT EXISTS bookings (
 
     booking_status booking_status_enum DEFAULT 'pending',
 
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
 
     -- sanity check
+    CONSTRAINT check_booking_datetime CHECK (end_datetime > start_datetime)
 );
+
+CREATE INDEX IF NOT EXISTS idx_bookings_active_model_window
+  ON bookings(car_model, start_datetime, end_datetime)
+  WHERE booking_status IN ('pending', 'confirmed');
+
+CREATE INDEX IF NOT EXISTS idx_bookings_active_status_window
+  ON bookings(booking_status, start_datetime, end_datetime)
+  WHERE booking_status IN ('pending', 'confirmed');
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'check_booking_datetime'
+  ) THEN
+    ALTER TABLE bookings
+      ADD CONSTRAINT check_booking_datetime CHECK (end_datetime > start_datetime);
+  END IF;
+END $$;
 
 -- =========================
 -- PAYMENTS TABLE

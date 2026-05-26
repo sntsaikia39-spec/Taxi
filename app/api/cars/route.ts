@@ -1,10 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { requireAdminRequest } from '@/lib/admin-auth'
 
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams
     const includeInactive = searchParams.get('include_inactive') === 'true'
+    if (includeInactive) {
+      const unauthorized = requireAdminRequest(request)
+      if (unauthorized) return unauthorized
+    }
 
     let query = supabaseAdmin
       .from('cars')
@@ -45,6 +50,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const unauthorized = requireAdminRequest(request)
+  if (unauthorized) return unauthorized
+
   try {
     const body = await request.json()
     const { 

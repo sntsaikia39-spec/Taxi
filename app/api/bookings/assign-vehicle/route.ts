@@ -1,4 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { requireAdminRequest } from '@/lib/admin-auth'
+import { getSpecificCarAssignmentConflicts } from '@/lib/conflicts'
 import { isValidEmail, sendAdminDriverEmailAlert, sendDriverAssignment, sendVehicleAssignment } from '@/lib/resend-notifications'
 
 // Helper function to get current time in IST format
@@ -16,7 +18,16 @@ function getCurrentTimeIST(): string {
   return `${year}-${month}-${day}T${hour}:${minute}:${second}+05:30`
 }
 
+function isAssignmentOverlapError(error: unknown): boolean {
+  const err = error as { code?: unknown; message?: unknown; details?: unknown }
+  const text = `${String(err?.message || '')} ${String(err?.details || '')}`.toLowerCase()
+  return err?.code === '23P01' || text.includes('overlapping active vehicle assignment')
+}
+
 export async function POST(request: Request) {
+  const unauthorized = requireAdminRequest(request)
+  if (unauthorized) return unauthorized
+
   try {
     const body = await request.json()
     const { booking_id, car_id, start_datetime, end_datetime, user_email, user_name } = body
@@ -38,7 +49,7 @@ export async function POST(request: Request) {
     // Verify booking exists
     const { data: booking, error: bookingError } = await supabaseAdmin
       .from('bookings')
-      .select('id, booking_id')
+      .select('id, booking_id, passenger_count')
       .eq('booking_id', booking_id)
       .single()
 
@@ -50,10 +61,31 @@ export async function POST(request: Request) {
       )
     }
 
+    const { data: existingAssignments, error: existingAssignmentError } = await supabaseAdmin
+      .from('vehicle_assignments')
+      .select('id')
+      .eq('booking_id', booking_id)
+      .limit(1)
+
+    if (existingAssignmentError) {
+      console.error('Error checking existing assignment:', existingAssignmentError)
+      return Response.json(
+        { success: false, error: 'Failed to check existing vehicle assignment' },
+        { status: 500 }
+      )
+    }
+
+    if (existingAssignments && existingAssignments.length > 0) {
+      return Response.json(
+        { success: false, error: 'This booking already has a vehicle assignment. Use reassignment instead.' },
+        { status: 409 }
+      )
+    }
+
     // Verify car exists
     const { data: car, error: carError } = await supabaseAdmin
       .from('cars')
-      .select('id, model_name, number_plate, driver_name, driver_phone, driver_email')
+      .select('id, model_name, number_plate, driver_name, driver_phone, driver_email, capacity')
       .eq('id', car_id)
       .single()
 
@@ -69,31 +101,106 @@ export async function POST(request: Request) {
 
     // Get current time in IST
     const currentTimeIST = getCurrentTimeIST()
+    let assignmentConflicts = await getSpecificCarAssignmentConflicts({
+      carId: car_id,
+      start: start_datetime,
+      end: end_datetime,
+      excludeBookingId: booking_id,
+    })
+    const hasCapacityWarning = Number(booking.passenger_count || 0) > Number(car.capacity || 0)
+    let warnings = [
+      ...(assignmentConflicts.length > 0
+        ? [{
+            type: 'assignment_conflict',
+            message: 'This vehicle is already assigned to another active booking in the selected time window. Admin override was allowed and recorded; resolve it later from the conflict scanner.',
+            conflicts: assignmentConflicts,
+          }]
+        : []),
+      ...(hasCapacityWarning
+        ? [{
+            type: 'capacity_warning',
+            message: `This vehicle has ${car.capacity} seats but the booking has ${booking.passenger_count} passenger(s).`,
+        }]
+        : []),
+    ]
+    let shouldRecordOverride = assignmentConflicts.length > 0
 
     // Create vehicle assignment record
-    const { data: assignment, error: assignmentError } = await supabaseAdmin
+    let assignmentPayload: Record<string, unknown> = {
+      booking_id: booking_id,
+      car_id: car_id,
+      start_datetime: start_datetime,
+      end_datetime: end_datetime,
+      assigned_at: currentTimeIST,
+      created_at: currentTimeIST,
+      conflict_override: shouldRecordOverride,
+      conflict_override_reason: shouldRecordOverride ? 'Admin assigned this vehicle despite an overlapping active assignment.' : null,
+      conflict_override_at: shouldRecordOverride ? currentTimeIST : null,
+    }
+
+    let assignmentResult = await supabaseAdmin
       .from('vehicle_assignments')
-      .insert([
-        {
-          booking_id: booking_id,
-          car_id: car_id,
-          start_datetime: start_datetime,
-          end_datetime: end_datetime,
-          assigned_at: currentTimeIST,
-          created_at: currentTimeIST,
-        },
-      ])
+      .insert([assignmentPayload])
       .select()
       .single()
 
-    if (assignmentError) {
-      console.error('Error creating assignment:', assignmentError)
+    if (assignmentResult.error && isAssignmentOverlapError(assignmentResult.error) && !shouldRecordOverride) {
+      assignmentConflicts = await getSpecificCarAssignmentConflicts({
+        carId: car_id,
+        start: start_datetime,
+        end: end_datetime,
+        excludeBookingId: booking_id,
+      })
+      shouldRecordOverride = true
+      warnings = [
+        {
+          type: 'assignment_conflict',
+          message: 'This vehicle became assigned to another active booking while you were saving. Admin override was allowed and recorded; resolve it later from the conflict scanner.',
+          conflicts: assignmentConflicts,
+        },
+        ...(hasCapacityWarning
+          ? [{
+              type: 'capacity_warning',
+              message: `This vehicle has ${car.capacity} seats but the booking has ${booking.passenger_count} passenger(s).`,
+            }]
+          : []),
+      ]
+      assignmentPayload = {
+        ...assignmentPayload,
+        conflict_override: true,
+        conflict_override_reason: 'Admin assigned this vehicle despite a concurrent overlapping active assignment.',
+        conflict_override_at: currentTimeIST,
+      }
+
+      assignmentResult = await supabaseAdmin
+        .from('vehicle_assignments')
+        .insert([assignmentPayload])
+        .select()
+        .single()
+    }
+
+    if (assignmentResult.error && String(assignmentResult.error.message || '').includes('conflict_override')) {
+      const legacyPayload = { ...assignmentPayload }
+      delete legacyPayload.conflict_override
+      delete legacyPayload.conflict_override_reason
+      delete legacyPayload.conflict_override_at
+
+      assignmentResult = await supabaseAdmin
+        .from('vehicle_assignments')
+        .insert([legacyPayload])
+        .select()
+        .single()
+    }
+
+    if (assignmentResult.error) {
+      console.error('Error creating assignment:', assignmentResult.error)
       return Response.json(
         { success: false, error: 'Failed to assign vehicle' },
         { status: 500 }
       )
     }
 
+    const assignment = assignmentResult.data
     console.log('✅ Vehicle assignment created successfully:', assignment)
 
     // Fetch pickup details once — used by both customer and driver emails
@@ -172,6 +279,8 @@ export async function POST(request: Request) {
         success: true,
         message: 'Vehicle assigned successfully',
         assignment: assignment,
+        warnings,
+        conflict_override: shouldRecordOverride,
       },
       { status: 200 }
     )

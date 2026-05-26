@@ -6,6 +6,9 @@ CREATE TABLE IF NOT EXISTS vehicle_assignments (
     end_datetime TIMESTAMP NOT NULL,
     assigned_at TIMESTAMP DEFAULT NOW(),
     created_at TIMESTAMP DEFAULT NOW(),
+    conflict_override BOOLEAN NOT NULL DEFAULT false,
+    conflict_override_reason TEXT,
+    conflict_override_at TIMESTAMP WITH TIME ZONE,
     
     CONSTRAINT fk_assignment_booking
         FOREIGN KEY (booking_id)
@@ -23,6 +26,83 @@ CREATE TABLE IF NOT EXISTS vehicle_assignments (
 CREATE INDEX IF NOT EXISTS idx_assignments_booking_id ON vehicle_assignments(booking_id);
 CREATE INDEX IF NOT EXISTS idx_assignments_car_id ON vehicle_assignments(car_id);
 CREATE INDEX IF NOT EXISTS idx_assignments_datetime ON vehicle_assignments(start_datetime, end_datetime);
+
+-- Existing databases: add override columns if the table already existed.
+ALTER TABLE vehicle_assignments
+  ADD COLUMN IF NOT EXISTS conflict_override BOOLEAN NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS conflict_override_reason TEXT,
+  ADD COLUMN IF NOT EXISTS conflict_override_at TIMESTAMP WITH TIME ZONE;
+
+-- Mark already-overlapping rows as explicit legacy overrides before adding
+-- the non-override trigger guard below.
+UPDATE vehicle_assignments va
+SET
+  conflict_override = true,
+  conflict_override_reason = COALESCE(conflict_override_reason, 'Existing overlapping assignment marked as admin override during schema upgrade.'),
+  conflict_override_at = COALESCE(conflict_override_at, NOW())
+WHERE EXISTS (
+  SELECT 1
+  FROM bookings this_booking
+  JOIN vehicle_assignments other ON other.id <> va.id
+  JOIN bookings other_booking ON other_booking.booking_id = other.booking_id
+  WHERE this_booking.booking_id = va.booking_id
+    AND this_booking.booking_status IN ('pending', 'confirmed')
+    AND other_booking.booking_status IN ('pending', 'confirmed')
+    AND other.car_id = va.car_id
+    AND other.start_datetime < va.end_datetime
+    AND other.end_datetime > va.start_datetime
+);
+
+-- Prevent accidental hard conflicts at the database layer. This is a trigger
+-- instead of an exclusion constraint because only pending/confirmed bookings
+-- should block capacity; cancelled/completed historical assignments should not.
+ALTER TABLE vehicle_assignments
+  DROP CONSTRAINT IF EXISTS vehicle_assignments_no_overlap_without_override;
+
+CREATE OR REPLACE FUNCTION validate_vehicle_assignment_conflict()
+RETURNS trigger AS $$
+DECLARE
+  new_booking_status booking_status_enum;
+BEGIN
+  SELECT booking_status
+  INTO new_booking_status
+  FROM bookings
+  WHERE booking_id = NEW.booking_id;
+
+  IF NEW.conflict_override
+     OR new_booking_status IS NULL
+     OR new_booking_status NOT IN ('pending', 'confirmed') THEN
+    RETURN NEW;
+  END IF;
+
+  -- Serialise same-car checks so two concurrent non-override inserts cannot
+  -- both pass the overlap check before either transaction commits.
+  PERFORM pg_advisory_xact_lock(hashtext(NEW.car_id::text));
+
+  IF EXISTS (
+    SELECT 1
+    FROM vehicle_assignments other
+    JOIN bookings other_booking ON other_booking.booking_id = other.booking_id
+    WHERE other.id <> NEW.id
+      AND other.car_id = NEW.car_id
+      AND other_booking.booking_status IN ('pending', 'confirmed')
+      AND other.start_datetime < NEW.end_datetime
+      AND other.end_datetime > NEW.start_datetime
+  ) THEN
+    RAISE EXCEPTION 'Overlapping active vehicle assignment for car %', NEW.car_id
+      USING ERRCODE = '23P01';
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_validate_vehicle_assignment_conflict ON vehicle_assignments;
+CREATE TRIGGER trg_validate_vehicle_assignment_conflict
+BEFORE INSERT OR UPDATE OF car_id, start_datetime, end_datetime, conflict_override
+ON vehicle_assignments
+FOR EACH ROW
+EXECUTE FUNCTION validate_vehicle_assignment_conflict();
 
 
 

@@ -160,7 +160,7 @@ export default function BookTour() {
       const data = await res.json()
       if (data.success && data.car_model && !data.available) {
         setCapacityWarning(
-          `The ${data.car_model} vehicles are fully booked for your selected date. You may still proceed — a different vehicle may be assigned to you, or contact us to confirm.`
+          data.warning || `The preferred ${data.car_model} vehicle may not be available for your selected timeslot. You can still book the tour, and another suitable vehicle may be assigned.`
         )
       } else {
         setCapacityWarning(null)
@@ -235,6 +235,9 @@ export default function BookTour() {
         toast.error(result.error || 'Failed to create booking. Please try again.')
         setIsSubmitting(false)
         return
+      }
+      if (result.conflict_warning) {
+        toast(result.conflict_warning, { duration: 7000 })
       }
       const savedBooking = result.booking
       const displayTime = formatDisplayTime(tour.arrival_time)

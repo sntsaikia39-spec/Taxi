@@ -1,10 +1,14 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { requireAdminRequest } from '@/lib/admin-auth'
 
 export const dynamic = 'force-dynamic'
 
 const VALID_STATUSES = ['pending', 'confirmed', 'completed', 'cancelled']
 
 export async function PATCH(request: Request) {
+  const unauthorized = requireAdminRequest(request)
+  if (unauthorized) return unauthorized
+
   try {
     const { booking_id, status } = await request.json()
 

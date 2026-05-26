@@ -6,7 +6,7 @@ import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { useAdmin } from '@/context/AdminContext'
 import { ProtectedAdminPage } from '@/components/ProtectedAdminPage'
-import { LogOut } from 'lucide-react'
+import { LogOut, Trash2 } from 'lucide-react'
 import type { Booking } from '@/lib/db'
 
 type AdminApiResponse = {
@@ -201,6 +201,11 @@ function findSimilarModels(input: string, candidates: string[]): string[] {
     const threshold = Math.max(2, Math.floor(Math.min(inputNorm.length, modelNorm.length) * 0.3))
     return levenshtein(inputNorm, modelNorm) <= threshold
   })
+}
+
+function adminHeaders(extra: Record<string, string> = {}) {
+  const token = typeof window !== 'undefined' ? localStorage.getItem('adminToken') : null
+  return token ? { ...extra, Authorization: `Bearer ${token}` } : extra
 }
 
 export default function AdminDashboard() {
@@ -412,7 +417,7 @@ export default function AdminDashboard() {
 
   const loadPendingTimeoutSetting = async () => {
     try {
-      const res = await fetch('/api/admin/settings', { cache: 'no-store' })
+      const res = await fetch('/api/admin/settings', { cache: 'no-store', headers: adminHeaders() })
       const data = await res.json()
       if (data.success && data.settings) {
         for (const s of data.settings) {
@@ -430,7 +435,7 @@ export default function AdminDashboard() {
     try {
       const res = await fetch('/api/admin/settings', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: adminHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ key: 'auto_cleanup_enabled', value: String(newValue) }),
       })
       const data = await res.json()
@@ -456,7 +461,7 @@ export default function AdminDashboard() {
     try {
       const res = await fetch('/api/admin/settings', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: adminHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ key: 'pending_booking_timeout_hours', value: String(pendingTimeoutDays * 24) }),
       })
       const data = await res.json()
@@ -475,7 +480,7 @@ export default function AdminDashboard() {
   const handleCleanupPending = async () => {
     setCleaningUp(true)
     try {
-      const res = await fetch('/api/admin/cleanup-pending', { method: 'POST' })
+      const res = await fetch('/api/admin/cleanup-pending', { method: 'POST', headers: adminHeaders() })
       const data = await res.json()
       if (data.success) {
         if (data.skipped) {
@@ -510,7 +515,7 @@ export default function AdminDashboard() {
   const loadConflictSetting = async () => {
     setLoadingConflictSetting(true)
     try {
-      const res = await fetch('/api/admin/settings?key=conflict_control_enabled', { cache: 'no-store' })
+      const res = await fetch('/api/admin/settings?key=conflict_control_enabled', { cache: 'no-store', headers: adminHeaders() })
       const data = await res.json()
       if (data.success && data.settings?.length > 0) {
         setConflictControlEnabled(data.settings[0].value !== 'false')
@@ -525,7 +530,7 @@ export default function AdminDashboard() {
   const fetchConflicts = async () => {
     setLoadingConflicts(true)
     try {
-      const res = await fetch('/api/admin/conflicts', { cache: 'no-store' })
+      const res = await fetch('/api/admin/conflicts', { cache: 'no-store', headers: adminHeaders() })
       const data = await res.json()
       if (data.success) setConflictData(data)
     } catch {
@@ -540,7 +545,7 @@ export default function AdminDashboard() {
     try {
       const res = await fetch('/api/admin/settings', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: adminHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ key: 'conflict_control_enabled', value: String(newValue) }),
       })
       const data = await res.json()
@@ -568,7 +573,7 @@ export default function AdminDashboard() {
       const response = await fetch('/api/bookings/admin', {
         method: 'GET',
         cache: 'no-store',
-        headers: { 'Cache-Control': 'no-cache' },
+        headers: adminHeaders({ 'Cache-Control': 'no-cache' }),
       })
       const result: AdminApiResponse = await response.json()
 
@@ -593,7 +598,7 @@ export default function AdminDashboard() {
       const response = await fetch('/api/payment/get-all', {
         method: 'GET',
         cache: 'no-store',
-        headers: { 'Cache-Control': 'no-cache' },
+        headers: adminHeaders({ 'Cache-Control': 'no-cache' }),
       })
       const result: PaymentsResponse = await response.json()
 
@@ -616,7 +621,7 @@ export default function AdminDashboard() {
       const response = await fetch('/api/bookings/get-assignments', {
         method: 'GET',
         cache: 'no-store',
-        headers: { 'Cache-Control': 'no-cache' },
+        headers: adminHeaders({ 'Cache-Control': 'no-cache' }),
       })
       const result = await response.json()
 
@@ -637,7 +642,7 @@ export default function AdminDashboard() {
     setLoadingCars(true)
 
     try {
-      const response = await fetch('/api/cars?include_inactive=true', { method: 'GET' })
+      const response = await fetch('/api/cars?include_inactive=true', { method: 'GET', headers: adminHeaders() })
       const result: CarsResponse = await response.json()
 
       if (!response.ok || !result.success) {
@@ -1020,7 +1025,7 @@ export default function AdminDashboard() {
     try {
       const response = await fetch('/api/cars', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: adminHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify(formData),
       })
 
@@ -1066,7 +1071,7 @@ export default function AdminDashboard() {
     try {
       const response = await fetch(`/api/cars/${editingCar.id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: adminHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify(formData),
       })
 
@@ -1099,25 +1104,31 @@ export default function AdminDashboard() {
     }
   }
 
-  const handleDeleteCar = async (carId: string) => {
-    if (!window.confirm('Are you sure you want to delete this car?')) return
+  const handleDeleteCar = async (car: Car) => {
+    const shortId = car.id.slice(0, 8)
+    const warningMessage =
+      `Permanently delete car ${car.model_name} (${car.number_plate})?\n\n` +
+      'This will remove the car row from the database and cannot be undone.\n' +
+      'If related records exist (for example assignments), deletion will be blocked.\n\n' +
+      `Car ID: ${shortId}...`
+
+    if (!window.confirm(warningMessage)) return
+    if (!window.confirm('Final warning: permanently delete this car row now?')) return
 
     try {
-      const response = await fetch(`/api/cars/${carId}`, {
+      const response = await fetch(`/api/cars/${car.id}`, {
         method: 'DELETE',
+        headers: adminHeaders(),
       })
-
       const result = await response.json()
-
       if (!response.ok || !result.success) {
-        throw new Error(result.error || 'Failed to delete car')
+        throw new Error(result.error || 'Failed to permanently delete car')
       }
-
-      toast.success('Car deleted successfully!')
+      toast.success('Car permanently deleted!')
       loadCars()
     } catch (error) {
-      console.error('Error deleting car:', error)
-      toast.error(error instanceof Error ? error.message : 'Failed to delete car')
+      console.error('Error deleting car permanently:', error)
+      toast.error(error instanceof Error ? error.message : 'Failed to permanently delete car')
     }
   }
 
@@ -1126,7 +1137,7 @@ export default function AdminDashboard() {
       const newStatus = !car.is_active
       const response = await fetch(`/api/cars/${car.id}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: adminHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ is_active: newStatus }),
       })
 
@@ -1291,7 +1302,7 @@ export default function AdminDashboard() {
       // Call API to update payment with cash collection details
       const response = await fetch('/api/payment/confirm-cash', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: adminHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           payment_id: selectedPaymentForCash.id,
           booking_id: selectedPaymentForCash.booking_id,
@@ -1400,7 +1411,12 @@ export default function AdminDashboard() {
 
   // Helper function: Confirm selection of low capacity car
   const confirmLowCapacityCarSelection = () => {
-    if (confirmLowCapacityCarAssignment) {
+    if (confirmLowCapacityCarAssignment && selectedBookingForVehicle) {
+      if (!isCarAvailableForBooking(confirmLowCapacityCarAssignment, selectedBookingForVehicle)) {
+        setConfirmBookedCarAssignment(confirmLowCapacityCarAssignment)
+        setConfirmLowCapacityCarAssignment(null)
+        return
+      }
       setSelectedCarForAssignment(confirmLowCapacityCarAssignment)
       setConfirmLowCapacityCarAssignment(null)
     }
@@ -1458,7 +1474,7 @@ export default function AdminDashboard() {
 
       const response = await fetch(endpoint, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: adminHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           booking_id: selectedBookingForVehicle.booking_id || selectedBookingForVehicle.id,
           car_id: selectedCarForAssignment.id,
@@ -1478,6 +1494,11 @@ export default function AdminDashboard() {
 
       const actionText = existingAssignment ? 'reassigned' : 'assigned'
       toast.success(`Vehicle ${selectedCarForAssignment.model_name} ${actionText} successfully! Confirmation email sent.`)
+      if (Array.isArray(result.warnings) && result.warnings.length > 0) {
+        result.warnings.forEach((warning: { message?: string }) => {
+          if (warning.message) toast(warning.message, { duration: 9000 })
+        })
+      }
       closeVehicleAssignmentModal()
       
       // Reload assignments and bookings to show updated data
@@ -1519,7 +1540,7 @@ export default function AdminDashboard() {
     try {
       const response = await fetch('/api/bookings/update-status', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: adminHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ booking_id: bookingId, status: newStatus }),
       })
       const result = await response.json()
@@ -1551,7 +1572,7 @@ export default function AdminDashboard() {
     try {
       const response = await fetch('/api/bookings/admin', {
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
+        headers: adminHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ booking_id: bookingId }),
       })
 
@@ -1602,7 +1623,7 @@ export default function AdminDashboard() {
 
       const res = await fetch('/api/admin/process-cancellation', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: adminHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ booking_id: bookingId, action, refund_amount: refundAmt, refund_notes: notes }),
       })
       const result = await res.json()
@@ -2649,7 +2670,7 @@ export default function AdminDashboard() {
                             </span>
                           </td>
                           <td className="py-3 px-4" onClick={(e) => e.stopPropagation()}>
-                            <div className="flex gap-2 flex-wrap">
+                            <div className="flex items-center gap-2 flex-wrap">
                               <button
                                 onClick={() => startEditCar(car)}
                                 className="text-sm text-secondary-500 hover:text-secondary-600"
@@ -2663,10 +2684,12 @@ export default function AdminDashboard() {
                                 {car.is_active ? 'Deactivate' : 'Activate'}
                               </button>
                               <button
-                                onClick={() => handleDeleteCar(car.id)}
-                                className="text-sm text-red-500 hover:text-red-600"
+                                onClick={() => handleDeleteCar(car)}
+                                title="Permanent Delete"
+                                aria-label="Permanent Delete"
+                                className="inline-flex items-center justify-center w-8 h-8 rounded-md border border-red-300 bg-red-50 text-red-700 hover:bg-red-100 hover:text-red-900 transition-colors"
                               >
-                                Delete
+                                <Trash2 size={14} />
                               </button>
                             </div>
                           </td>
@@ -2814,10 +2837,12 @@ export default function AdminDashboard() {
                             {car.is_active ? 'Deactivate' : 'Activate'}
                           </button>
                           <button
-                            onClick={() => handleDeleteCar(car.id)}
-                            className="flex-1 py-2 text-sm font-medium text-red-600 hover:bg-red-50 rounded active:bg-red-100 transition-colors"
+                            onClick={() => handleDeleteCar(car)}
+                            title="Permanent Delete"
+                            aria-label="Permanent Delete"
+                            className="inline-flex items-center justify-center w-10 h-10 rounded border border-red-300 bg-red-50 text-red-800 hover:bg-red-100 active:bg-red-200 transition-colors shrink-0"
                           >
-                            Delete
+                            <Trash2 size={16} />
                           </button>
                         </div>
                       </>
@@ -3414,7 +3439,7 @@ export default function AdminDashboard() {
                     <p className="text-sm text-gray-600 mb-4 line-clamp-2">{destination.description}</p>
                   )}
                   
-                  <div className="pt-3 border-t border-gray-100 flex gap-2">
+                        <div className="pt-3 border-t border-gray-100 flex items-center gap-2">
                     <button
                       onClick={() => startEditDestination(destination)}
                       className="flex-1 py-2 text-sm font-medium text-secondary-600 hover:bg-secondary-50 rounded active:bg-secondary-100 transition-colors"
@@ -4244,13 +4269,20 @@ export default function AdminDashboard() {
                     {conflictData.assignment_conflicts.length > 0 && (
                       <div>
                         <p className="text-xs font-bold text-red-700 uppercase tracking-wide mb-2">
-                          🚨 Hard Conflicts ({conflictData.assignment_conflicts.length}) — Same car assigned to multiple bookings simultaneously
+                          🚨 Hard Conflicts ({conflictData.assignment_conflicts.length}) — Vehicle assignment overlaps that need admin resolution
                         </p>
                         <div className="space-y-3">
                           {conflictData.assignment_conflicts.map((c: any, i: number) => (
                             <div key={i} className="border border-red-200 bg-red-50 rounded-lg p-3 text-xs space-y-2">
-                              <p className="font-semibold text-red-800">{c.car_model} — {c.car_number_plate}</p>
-                              {[c.booking_a, c.booking_b].filter(Boolean).map((bk: any, bi: number) => (
+                              <p className="font-semibold text-red-800">
+                                {c.issue_type === 'booking_double_assignment'
+                                  ? `One booking has overlapping vehicles: ${c.car_number_plate}`
+                                  : `${c.car_model} — ${c.car_number_plate}`}
+                              </p>
+                              {(c.issue_type === 'booking_double_assignment'
+                                ? [c.booking_a].filter(Boolean)
+                                : [c.booking_a, c.booking_b].filter(Boolean)
+                              ).map((bk: any, bi: number) => (
                                 <div key={bi} className="bg-white border border-red-100 rounded p-2 space-y-0.5">
                                   <p className="font-semibold">{bk.user_name} <span className="text-gray-400 font-normal">({bk.booking_id?.slice(0, 12)})</span></p>
                                   <p className="text-gray-600">{new Date(bk.start_datetime).toLocaleString('en-IN')} → {new Date(bk.end_datetime).toLocaleString('en-IN')}</p>
@@ -4288,7 +4320,7 @@ export default function AdminDashboard() {
                           {conflictData.model_conflicts.map((c: any, i: number) => (
                             <div key={i} className="border border-orange-200 bg-orange-50 rounded-lg p-3 text-xs space-y-2">
                               <p className="font-semibold text-orange-800">
-                                {c.car_model} — {c.conflicting_bookings.length} bookings, {c.physical_count} car{c.physical_count !== 1 ? 's' : ''} available
+                                {c.car_model} — {c.demand_count ?? c.conflicting_bookings.length} booking demand, {c.physical_count} car{c.physical_count !== 1 ? 's' : ''} available
                               </p>
                               {c.conflicting_bookings.map((bk: any, bi: number) => (
                                 <div key={bi} className="bg-white border border-orange-100 rounded p-2 space-y-0.5">
@@ -5529,7 +5561,7 @@ export default function AdminDashboard() {
                       
                       <h3 className="text-lg font-bold text-center mb-2">Car Already Assigned</h3>
                       <p className="text-gray-600 text-center text-sm mb-4">
-                        This car is assigned to a different booking for this timeframe.
+                        This car is assigned to a different active booking for this timeframe. If you continue, the system will record this as an admin override and the conflict scanner will keep surfacing it until you resolve one of the assignments.
                       </p>
 
                       {conflictingBooking && (
@@ -5549,7 +5581,7 @@ export default function AdminDashboard() {
                       )}
 
                       <p className="text-gray-700 text-sm mb-6">
-                        Are you sure you want to assign <span className="font-semibold">{confirmBookedCarAssignment.model_name}</span> ({confirmBookedCarAssignment.number_plate}) to this booking?
+                        Only continue if there is an operational reason, such as a planned vehicle swap outside the system. Resolve it later by reassigning one booking, changing timing, or cancelling one booking.
                       </p>
 
                       <div className="flex gap-3">
@@ -5563,7 +5595,7 @@ export default function AdminDashboard() {
                           onClick={confirmBookedCarSelection}
                           className="flex-1 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 font-semibold transition-colors"
                         >
-                          Yes, Assign Anyway
+                          Override and Assign
                         </button>
                       </div>
                     </div>

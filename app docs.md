@@ -64,13 +64,13 @@ These rules are enforced by the system and must be preserved by any future chang
 
 | ID | Rule |
 |----|------|
-| BR-01 | Every booking is identified by a unique `booking_id` of the form `BK` + timestamp-based suffix (see [`generateBookingId`](#76-utility-functions)). |
+| BR-01 | Every booking is identified by a unique UUID `booking_id` generated client-side (see [`generateBookingId`](#76-utility-functions)). |
 | BR-02 | A booking cannot be created without an authenticated user account. |
 | BR-03 | **Partial payment** = exactly **30%** of the total paid online via Razorpay; the remaining **70%** is collected in cash by the driver. **Full payment** = **100%** online. |
 | BR-04 | The 30% advance is computed as `Math.round(total × 0.30 × 100) / 100`; the cash portion is `total − advance` (avoids floating-point drift). |
 | BR-05 | A booking is only marked `confirmed` after the Razorpay payment **signature is verified server-side** (HMAC-SHA256). |
 | BR-06 | A customer may cancel a booking only if the trip start is **more than 24 hours away** (see [`canCancelBooking`](#76-utility-functions)). Admins may cancel at any time. |
-| BR-07 | When **conflict control is ON**, a vehicle/model cannot be committed for a time window that overlaps an existing assignment. Overlap = `existing.start < new.end AND existing.end > new.start`. |
+| BR-07 | When **conflict control is ON**, airport/hourly customer bookings cannot reserve a model whose active capacity is exhausted. Tour bookings remain bookable but show an immediate vehicle-availability warning. Admins may override specific-car assignment conflicts, but the override is recorded and remains visible in the scanner. Overlap = `existing.start < new.end AND existing.end > new.start`. |
 | BR-08 | Bookings left in `pending` (unpaid) for more than 24 hours are deleted automatically by a daily cron job. |
 | BR-09 | A user may submit **at most one review per item** (`UNIQUE(user_email, reviewable_type, reviewable_id)`). |
 | BR-10 | Ratings are integers from **1 to 5** (DB `CHECK` constraint). |
@@ -199,7 +199,7 @@ Each feature lists representative user stories with acceptance criteria (AC).
 
 #### F-11 — Conflict Control
 - *As an admin, I want the system to prevent double-booking a vehicle — but I want to be able to turn it off.*
-  - AC: `app_settings.conflict_control_enabled` toggle; when ON, overlapping assignments are blocked; when OFF, the admin manages conflicts manually and can view detected conflicts in the Misc tab.
+  - AC: `app_settings.conflict_control_enabled` toggle; when ON, airport/hourly model holds are blocked server-side, tour model conflicts become warnings, and admin assignment overlaps require an explicit override. When OFF, availability checks are advisory and the admin manages conflicts manually from the Misc tab.
 
 #### F-12 — SEO Landing Pages
 - *As the business, I want dedicated pages to rank for local search.*
@@ -271,13 +271,13 @@ flowchart TD
 |----|-------------|
 | FR-BOOK-1 | The system shall support three booking types: `airport`, `tour`, `hourly`. |
 | FR-BOOK-2 | The system shall require an authenticated user before creating a booking. |
-| FR-BOOK-3 | The system shall generate a unique `booking_id` (`BK` + timestamp suffix) for every booking. |
+| FR-BOOK-3 | The system shall generate a unique UUID `booking_id` for every booking. |
 | FR-BOOK-4 | For airport bookings, the system shall capture source/destination (from `destinations`), date, time, and passenger count. |
 | FR-BOOK-5 | For hourly bookings, the system shall capture duration (days + hours), start date/time, and passenger count. |
 | FR-BOOK-6 | For tour bookings, the system shall capture the selected `tour_package_id`, date, and passenger count (≤ `max_passengers`). |
 | FR-BOOK-7 | The system shall display only car **models** that have ≥ 1 available unit for the requested window (`GET /api/cars/available-models`). |
 | FR-BOOK-8 | The system shall display the full fare breakdown before booking confirmation. |
-| FR-BOOK-9 | When conflict control is ON, the system shall block creation of an assignment overlapping an existing one (`start < otherEnd AND end > otherStart`). |
+| FR-BOOK-9 | When conflict control is ON, the system shall block airport/hourly booking creation if the selected model has no free unit for the window; tour bookings shall remain allowed with a warning; admin assignment overlaps shall be allowed only as recorded overrides. |
 | FR-BOOK-10 | The system shall create new bookings with `booking_status = 'pending'`. |
 | FR-BOOK-11 | The system shall allow a customer to request cancellation only if the trip start is > 24 h away; admins may cancel any time. |
 | FR-BOOK-12 | The system shall delete `pending` bookings older than 24 h via the daily `cleanup-pending` cron. |
@@ -568,13 +568,15 @@ Input (varies by type):
   car_model, amount_total
 
 Steps:
-  1. booking_id = generateBookingId()                    // "BK" + timestamp suffix
+  1. booking_id = generateBookingId()                    // UUID v4 string
   2. read conflict_control_enabled from app_settings
-  3. if enabled: check overlap against vehicle_assignments / committed bookings
+  3. if enabled: check active pending/confirmed holds
         overlap ⇔ existing.start < new.end AND existing.end > new.start
-        → if overlap, 409 Conflict
+        → airport/hourly with no free selected model: 409 Conflict
+        → tour with no free preferred model: create booking, return warning
   4. INSERT INTO bookings (... , booking_status = 'pending')
-  5. → { success: true, booking_id }
+  5. airport/hourly race guard: after insert, verify this booking is inside model quota
+  6. → { success: true, booking_id, conflict_warning? }
 ```
 
 The booking UI is a guided multi-step wizard. There are two wizard implementations:
@@ -591,7 +593,7 @@ Each step component is memoised; refs preserve focus across re-renders; the `Con
 - The email field is locked and pre-filled from the authenticated user's session; full name is pre-filled from `user_metadata.full_name` if available.
 - Car model is **preset by the tour package** — the user does not choose a vehicle.
 - Fare is `tour.price × passengers`; the confirm step offers full payment or **30% advance** (`Math.round(totalPrice × 0.3)`).
-- On the date step, `GET /api/tours/[id]/availability?booking_date=` is called; if the tour's car model is fully booked for that date the user sees an advisory warning but can still proceed.
+- On the date step, `GET /api/tours/[id]/availability?booking_date=` is called; if the tour's preferred car model is unavailable for that date/time window the user sees an advisory warning that another suitable vehicle may be assigned, but can still proceed.
 - On confirm, `booking_id` is generated client-side (`generateBookingId()`), the payload is sent to `POST /api/bookings/create` with `booking_type: 'tour'` and `tour_package_id`, the result is stored in `sessionStorage` as `tourBookingData`, and the user is redirected to `/payment?bookingId=...&type=tour&amount=<advancePayment>`.
 
 ### 6.3 Payment Processing
@@ -646,15 +648,20 @@ GET /api/cars/available-models?booking_date=YYYY-MM-DD&start_time=HH:MM&end_time
 reqStart = combine(booking_date, start_time)
 reqEnd   = combine(booking_date, end_time)
 
-allCars       = SELECT * FROM cars WHERE is_active = true
-occupiedCarIds = SELECT car_id FROM vehicle_assignments
-                 WHERE start_datetime < reqEnd AND end_datetime > reqStart   -- overlap
+activeCars      = SELECT * FROM cars WHERE is_active = true
+activeBookings  = SELECT * FROM bookings
+                  WHERE booking_status IN ('pending', 'confirmed')
+assignedHolds   = overlapping vehicle_assignments tied to active bookings
+unassignedHolds = overlapping active bookings without an overlapping assignment
 
-availableCars = allCars where id ∉ occupiedCarIds
-models        = group availableCars by model_name → for each:
-                { model_name, class, capacity, per_km_charge, per_hr_charge,
-                  available_count = count of free units of that model }
-→ { models }
+For each model:
+  assigned_count   = unique assigned active cars of that actual model
+  unassigned_count = active unassigned bookings requesting that model
+  available_count  = active physical cars of model - assigned_count - unassigned_count
+
+Only models with available_count > 0 are returned to airport/hourly customers.
+Tour availability uses the same math, but an unavailable preferred model returns
+a warning instead of blocking booking.
 ```
 
 Users only ever see the **model-level** projection. The number plate, driver, and specific `car_id` are revealed only after an admin assigns a vehicle via `POST /api/bookings/assign-vehicle`.
@@ -662,11 +669,11 @@ Users only ever see the **model-level** projection. The number plate, driver, an
 ### 6.5 Conflict Control System
 
 - Stored as `app_settings.conflict_control_enabled` (text `'true'`/`'false'`, default `'true'`).
-- **ON** — `POST /api/bookings/create` and `assign-vehicle` reject overlapping commitments.
-- **OFF** — no automatic blocking; the admin manages conflicts manually. The Misc tab's **conflict scanner** (`GET /api/admin/conflicts`) reports two classes:
-  - **Assignment conflicts** — the *same specific car* committed to overlapping windows.
-  - **Model conflicts** — more bookings of a model than there are units of that model in an overlapping window (over-subscription), which can arise in tour flows.
-- Toggle via `POST /api/admin/settings { key:'conflict_control_enabled', value:'true'|'false' }`. Turning it OFF shows a warning modal first.
+- **ON** - airport/hourly booking creation rejects exhausted models with `409`; tour booking remains allowed but returns a vehicle warning; admin same-car overlaps are allowed only as recorded overrides.
+- **OFF** - customer availability lists all active cars; admin manages conflicts manually. The Misc tab's **conflict scanner** (`GET /api/admin/conflicts`) reports two classes:
+  - **Assignment conflicts** - the same specific car committed to overlapping windows, or one booking carrying multiple overlapping vehicle assignments.
+  - **Model conflicts** - true simultaneous demand for a model exceeds active physical cars. Assigned bookings consume the assigned car's actual model; unassigned bookings consume their requested `bookings.car_model`.
+- Toggle via authenticated `PATCH /api/admin/settings { key:'conflict_control_enabled', value:'true'|'false' }`. Turning it OFF shows a warning modal first.
 
 ### 6.6 Invoice Generation
 
@@ -768,7 +775,7 @@ SMS / WhatsApp are placeholders only (currently console-logged).
 | `calculateAdvancePayment` | `(total: number) => number` | 30% of total |
 | `calculateRemainingPayment` | `(total: number) => number` | 70% of total |
 | `calculateTotalPrice` | `(basePrice: number, hours?: number, days?: number) => number` | hourly/daily totals |
-| `generateBookingId` | `() => string` | `BK` + timestamp suffix |
+| `generateBookingId` | `() => string` | UUID v4 string |
 | `generateInvoiceNumber` | `() => string` | sequential-style invoice number |
 | `canCancelBooking` | `(bookingDate: string) => boolean` | true if > 24 h before trip |
 | `getBookingStatus` | `(status: string) => { label, color, icon }` | UI badge meta |
@@ -1445,7 +1452,7 @@ flowchart TB
 - **Inputs:** name, phone, email (locked if logged in); destination from `destinations` (carries `distance_km`, `estimated_duration_minutes`, `description`); date; time; passenger count.
 - **Availability:** `GET /api/cars/available-models` with the computed `start`/`end`; only models with a free unit appear, each with `available_count`.
 - **Pricing:** `destination.distance_km × car.per_km_charge`. No separate pricing table — the rate is stored on the `cars` row per car class. The confirm step shows the fare breakdown and payment split.
-- **Constraints:** `passenger_count ≤ car.capacity`; conflict control (if ON) blocks overlapping commitments.
+- **Constraints:** `passenger_count ≤ car.capacity`; conflict control (if ON) blocks exhausted airport/hourly models while allowing tours with a warning.
 - **Output:** a `pending` booking → `/payment` (data passed via `sessionStorage.bookingData`).
 
 ### 11.2 Hourly Taxi Booking
@@ -1498,8 +1505,8 @@ flowchart TB
 ### 11.8 Conflict Control System
 
 - **Toggle:** `app_settings.conflict_control_enabled` (default ON).
-- **ON:** booking creation and vehicle assignment reject overlaps (`existing.start < new.end AND existing.end > new.start`).
-- **OFF:** manual management; the Misc-tab scanner (`GET /api/admin/conflicts`) lists **assignment conflicts** (same car, overlapping windows) and **model conflicts** (model over-subscribed in a window).
+- **ON:** airport/hourly booking creation rejects exhausted selected models; tour booking remains allowed with a vehicle warning; admin vehicle assignment conflicts are allowed only as recorded overrides (`existing.start < new.end AND existing.end > new.start`).
+- **OFF:** customer availability lists all active vehicles; the Misc-tab scanner (`GET /api/admin/conflicts`) still lists **assignment conflicts** (same car overlapping, or one booking with multiple overlapping vehicles) and **model conflicts** (true model over-subscription in a window).
 - **UX:** turning the toggle OFF shows a confirmation warning first.
 
 ### 11.9 SEO & Marketing Pages
@@ -1535,7 +1542,7 @@ CRUD over `cars` (`GET/POST /api/cars`, `GET/PUT/DELETE /api/cars/[id]`): `model
 CRUD over `destinations` (`GET/POST /api/destinations`, `GET/PUT/DELETE /api/destinations/[id]`): `name`, `distance_km`, `estimated_duration_minutes`, `description`, `is_active`. Distances are measured FROM Hollongi Airport. Distance and duration feed airport-fare calculation and ETAs shown to customers.
 
 ### 12.5 Tours Tab (`renderTours`)
-CRUD over `tour_packages` (`GET/POST /api/tours`, `GET/PUT /api/tours/[id]`, `POST /api/tours/[id]/availability`, `POST /api/tours/upload-image`): `name`, `description`, `arrival_time`, `duration_hours`, `price`, `max_passengers`, `car_model`, `itinerary`, `highlights[]`, `image_url`, `image_urls[]` (multi-image), `is_active`. Tour vehicles are linked into the conflict system.
+CRUD over `tour_packages` (`GET/POST /api/tours`, `GET/PUT /api/tours/[id]`, `GET /api/tours/[id]/availability`, `POST /api/tours/upload-image`): `name`, `description`, `arrival_time`, `duration_hours`, `price`, `max_passengers`, `car_model`, `itinerary`, `highlights[]`, `image_url`, `image_urls[]` (multi-image), `is_active`. Tour vehicles are linked into the conflict system.
 
 ### 12.6 Analytics Tab (`renderAnalytics`)
 - **Key metrics:** Total Revenue, Completed Bookings, Avg Booking Value, Fleet Utilization %.
@@ -1588,7 +1595,7 @@ SELECT email, full_name, last_login, is_active FROM public.admins ORDER BY last_
 | `POST /api/admin/create-admin` | Bearer | `{ email, password, fullName }` | `{ success }` |
 | `PUT /api/admin/update-profile` | Bearer | `{ full_name?, email?, currentPassword?, newPassword? }` | `{ success }` |
 | `GET /api/admin/settings` | Bearer | — | `{ conflict_control_enabled, ... }` |
-| `POST /api/admin/settings` | Bearer | `{ key, value }` | `{ success }` |
+| `PATCH /api/admin/settings` | Bearer | `{ key, value }` | `{ success }` |
 | `GET /api/admin/conflicts` | Bearer | — | `{ assignment_conflicts:[], model_conflicts:[], total }` |
 | `POST /api/admin/process-cancellation` | Bearer | `{ booking_id, refund_notes? }` | `{ success }` |
 | `POST /api/admin/cleanup-pending` | Bearer / cron | — | `{ success, deleted }` — invoked daily by Vercel Cron |
@@ -1604,11 +1611,11 @@ SELECT email, full_name, last_login, is_active FROM public.admins ORDER BY last_
 
 | Method & Path | Auth | Body / Query | Returns |
 |---------------|------|--------------|---------|
-| `POST /api/bookings/create` | session | `{ booking_type, user_name, user_email, phone, passenger_count, start_datetime, end_datetime, destination_id?, tour_package_id?, no_of_hours?, car_model, amount_total }` | `{ success, booking_id }` · 409 conflict |
+| `POST /api/bookings/create` | session | `{ booking_type, user_name, user_email, phone, passenger_count, booking_date, start_time, destination_id?, tour_package_id?, no_of_hours?, car_model?, amount_total }` | `{ success, booking, conflict_warning? }` · 409 conflict |
 | `GET /api/bookings/user` | session | `?email=` | `{ bookings:[...] }` |
 | `GET /api/bookings/admin` | Bearer | `?status=&limit=&offset=` | `{ bookings:[...] }` |
-| `POST /api/bookings/assign-vehicle` | Bearer | `{ booking_id, car_id, driver_name, driver_phone, start_datetime, end_datetime }` | `{ success }` |
-| `PUT /api/bookings/update-assignment` | Bearer | `{ assignment_id, ... }` | `{ success }` |
+| `POST /api/bookings/assign-vehicle` | Bearer | `{ booking_id, car_id, start_datetime, end_datetime }` | `{ success, warnings?, conflict_override }` |
+| `POST /api/bookings/update-assignment` | Bearer | `{ assignment_id, car_id, start_datetime?, end_datetime? }` | `{ success, warnings?, conflict_override }` |
 | `GET /api/bookings/get-assignments` | Bearer | `?booking_id=` | `{ assignments:[...] }` |
 | `GET /api/bookings/user-assignments` | session | `?email=` | `{ assignments:[...] }` |
 | `PUT /api/bookings/update-status` | Bearer | `{ booking_id, status }` | `{ success }` |
@@ -1645,7 +1652,7 @@ SELECT email, full_name, last_login, is_active FROM public.admins ORDER BY last_
 | `GET /api/tours/[id]` | — | — | `{ tour }` |
 | `POST /api/tours` | Bearer | tour fields | `{ success, tour }` |
 | `PUT /api/tours/[id]` | Bearer | partial tour | `{ success }` |
-| `POST /api/tours/[id]/availability` | — | `{ date, passengers }` | `{ available, ... }` |
+| `GET /api/tours/[id]/availability` | — | `?booking_date=` | `{ available, available_count, warning }` |
 | `POST /api/tours/upload-image` | Bearer | `multipart/form-data` | `{ success, url }` |
 
 ### 13.7 Destinations
@@ -1730,7 +1737,7 @@ TaxiHollongi/                        # repo root — RT&T platform
 │   │   │   ├── verify-session/      # GET   — validate JWT
 │   │   │   ├── create-admin/        # POST  — add a new admin account
 │   │   │   ├── update-profile/      # PUT   — update admin name/password
-│   │   │   ├── settings/            # GET/PUT — app_settings table (e.g. conflict_control_enabled)
+│   │   │   ├── settings/            # GET/PATCH — app_settings table (e.g. conflict_control_enabled)
 │   │   │   ├── conflicts/           # GET   — vehicle assignment conflicts
 │   │   │   ├── process-cancellation/ # POST — process refund & cancel booking
 │   │   │   ├── cleanup-pending/     # POST  — delete stale pending bookings (daily cron)
@@ -1913,7 +1920,7 @@ Switch to live by replacing `NEXT_PUBLIC_RAZORPAY_KEY_ID` (`rzp_live_…`) and `
 ### 14.10 Coding Conventions
 | Topic | Rule |
 |-------|------|
-| Booking ID | `generateBookingId()` — `BK` + timestamp suffix |
+| Booking ID | `generateBookingId()` — UUID v4 string |
 | Invoice number | `generateInvoiceNumber()` — written into `payment_records.invoice_number` at verify time |
 | Currency | INR; display via `formatCurrency()`; Razorpay amounts in paise (× 100) |
 | Dates | ISO 8601 UTC in DB; displayed in IST (UTC+5:30) via `date-fns` |
@@ -1958,7 +1965,7 @@ Browser console (F12) · `npm run dev` terminal for server logs · Supabase dash
 | **Refund status** | `none` \| `pending` \| `processed` \| `failed` (refunds are manual). |
 | **Car model vs car** | Customers pick a *model* (name/class/capacity/price/available count); admins later assign a specific *car* (with number plate) and driver. |
 | **Vehicle assignment** | A row linking a specific car + driver to a booking for a time window; basis of conflict detection. |
-| **Conflict control** | The toggle (`app_settings.conflict_control_enabled`) that, when ON, blocks overlapping vehicle commitments. |
+| **Conflict control** | The toggle (`app_settings.conflict_control_enabled`) that, when ON, blocks customer airport/hourly model overbooking, warns for tour preferred-model shortages, and records explicit admin overrides for hard assignment overlaps. |
 | **Overlap** | Two windows overlap iff `start_A < end_B AND end_A > start_B`. |
 | **Advance / cash split** | Advance = `round(total × 0.30 × 100)/100`; cash = `total − advance`. |
 | **Invoice number** | Generated at payment verification; stored on the `payment_records` row; rendered into the PDF. |

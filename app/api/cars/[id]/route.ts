@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { requireAdminRequest } from '@/lib/admin-auth'
 
 export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
+  const unauthorized = requireAdminRequest(request)
+  if (unauthorized) return unauthorized
+
   try {
     const { id } = params
     const body = await request.json()
@@ -33,17 +37,30 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
 }
 
 export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
+  const unauthorized = requireAdminRequest(request)
+  if (unauthorized) return unauthorized
+
   try {
     const { id } = params
-
-    const { error } = await supabaseAdmin.from('cars').update({ is_active: false }).eq('id', id)
+    const { error } = await supabaseAdmin.from('cars').delete().eq('id', id)
 
     if (error) {
+      // Preserve historical records integrity by blocking hard-delete when links exist.
+      if (error.code === '23503') {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              'Cannot permanently delete this car because related records exist (for example vehicle assignments). Historical records are preserved; deactivate this car instead.',
+          },
+          { status: 409 }
+        )
+      }
       console.error('Error deleting car:', error)
       return NextResponse.json({ success: false, error: error.message }, { status: 500 })
     }
 
-    return NextResponse.json({ success: true, message: 'Car deleted successfully' })
+    return NextResponse.json({ success: true, message: 'Car permanently deleted successfully' })
   } catch (error) {
     console.error('Unexpected error deleting car:', error)
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
@@ -51,6 +68,9 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
 }
 
 export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
+  const unauthorized = requireAdminRequest(request)
+  if (unauthorized) return unauthorized
+
   try {
     const { id } = params
     const body = await request.json()

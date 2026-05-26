@@ -519,6 +519,10 @@ export default function BookTaxi() {
 
       if (!savedBooking) {
         toast.error(result.error || 'Failed to save booking. Please try again.')
+        if (result.code === 'MODEL_UNAVAILABLE') {
+          setSelectedCarModel(null)
+          await loadCars()
+        }
         setIsSubmitting(false)
         return
       }

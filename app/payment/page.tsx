@@ -16,7 +16,6 @@ declare global {
 function PaymentContent() {
   const searchParams = useSearchParams()
   const router = useNextRouter()
-  const bookingId = searchParams.get('bookingId')
   const bookingType = searchParams.get('type') || 'taxi'
 
   const scrollRef = useRef<HTMLDivElement | null>(null)
@@ -34,7 +33,7 @@ function PaymentContent() {
       gsap.to(scroller, { scrollTop: targetTop, duration: 0.75, ease: 'power3.out', overwrite: true })
     }
     scroller.addEventListener('wheel', onWheel, { passive: false })
-    return () => scroller.removeEventListener('wheel', onWheel)
+    return () => { scroller.removeEventListener('wheel', onWheel) }
   }, [])
 
   useEffect(() => {
@@ -48,7 +47,7 @@ function PaymentContent() {
     script.async = true
     document.body.appendChild(script)
     return () => { document.body.removeChild(script) }
-  }, [])
+  }, [bookingType])
 
   const handleRazorpayPayment = async (method: 'partial' | 'full') => {
     if (!bookingData) { toast.error('Booking data not found'); return }
@@ -80,10 +79,16 @@ function PaymentContent() {
                 paymentId: response.razorpay_payment_id,
                 signature: response.razorpay_signature,
                 bookingId: bookingData.dbBookingId,
-                bookingType, paymentMethod: method, amount: paymentAmount,
-                userEmail: bookingData.email, userName: bookingData.name,
-                destination: bookingData.destination, tourPackageName: bookingData.tourName,
-                pickupDate: bookingData.date, pickupTime: bookingData.time, carType: bookingData.carType,
+                bookingType,
+                paymentMethod: method,
+                amount: paymentAmount,
+                userEmail: bookingData.email,
+                userName: bookingData.name,
+                destination: bookingData.destination,
+                tourPackageName: bookingData.tourName,
+                pickupDate: bookingData.date,
+                pickupTime: bookingData.time,
+                carType: bookingData.carType,
               }),
             })
             const verifyData = await verifyResponse.json()
@@ -102,11 +107,7 @@ function PaymentContent() {
         },
         prefill: { name: bookingData.name, email: bookingData.email, contact: bookingData.phone },
         theme: { color: '#ffda00' },
-        config: {
-          display: {
-            preferences: { show_default_blocks: true },
-          },
-        },
+        config: { display: { preferences: { show_default_blocks: true } } },
         modal: {
           ondismiss: () => {
             toast.error('Payment cancelled.')
@@ -126,6 +127,40 @@ function PaymentContent() {
     } catch (error) {
       console.error('Payment error:', error)
       toast.error('Failed to initiate payment. Please try again.')
+      setLoading(false)
+    }
+  }
+
+  const handleDemoPayment = async (method: 'partial' | 'full') => {
+    if (!bookingData) { toast.error('Booking data not found'); return }
+    setLoading(true)
+    try {
+      const paymentAmount = method === 'full' ? bookingData.totalPrice : bookingData.advancePayment
+      const demoTxnId = `demo_txn_${Date.now()}_${method}`
+      const response = await fetch('/api/payment/create-payment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          bookingId: bookingData.dbBookingId,
+          paymentType: method,
+          amountTotal: bookingData.totalPrice,
+          amountOnlinePaid: paymentAmount,
+          txnId: demoTxnId,
+          txnStatus: 'success',
+          gateway: 'razorpay_demo',
+        }),
+      })
+      const result = await response.json()
+      if (result.success) {
+        toast.success('Demo payment successful! Booking confirmed.')
+        setTimeout(() => { router.replace(`/booking-confirmed?bookingId=${bookingData.dbBookingId}`) }, 1200)
+      } else {
+        toast.error(result.error || 'Demo payment failed.')
+        setLoading(false)
+      }
+    } catch (error) {
+      console.error('Demo payment error:', error)
+      toast.error('Failed to process demo payment.')
       setLoading(false)
     }
   }
@@ -152,31 +187,21 @@ function PaymentContent() {
       <Header />
 
       <main className="relative overflow-x-hidden">
-        {/* Dot grid */}
         <div
           className="absolute inset-0 opacity-[0.03] pointer-events-none"
           style={{ backgroundImage: 'radial-gradient(circle, rgba(255,218,0,0.75) 1px, transparent 1px)', backgroundSize: '36px 36px' }}
         />
-        {/* Glow blobs */}
-        <div className="absolute -top-40 -left-40 w-[500px] h-[500px] rounded-full pointer-events-none"
-          style={{ background: 'radial-gradient(circle, rgba(255,193,7,0.07) 0%, transparent 70%)' }} />
-        <div className="absolute top-60 -right-40 w-[440px] h-[440px] rounded-full pointer-events-none"
-          style={{ background: 'radial-gradient(circle, rgba(255,193,7,0.05) 0%, transparent 70%)' }} />
+        <div className="absolute -top-40 -left-40 w-[500px] h-[500px] rounded-full pointer-events-none" style={{ background: 'radial-gradient(circle, rgba(255,193,7,0.07) 0%, transparent 70%)' }} />
+        <div className="absolute top-60 -right-40 w-[440px] h-[440px] rounded-full pointer-events-none" style={{ background: 'radial-gradient(circle, rgba(255,193,7,0.05) 0%, transparent 70%)' }} />
 
         <div className="relative z-10 container mx-auto px-4 pt-20 pb-10">
-
-          {/* Title */}
           <div className="text-center mb-8">
             <p className="text-secondary-500 font-semibold text-xs tracking-[0.22em] uppercase mb-2">Secure Checkout</p>
             <h1 className="font-black text-white text-2xl md:text-3xl">Complete Your Payment</h1>
           </div>
 
           <div className="max-w-4xl mx-auto grid md:grid-cols-3 gap-4 md:gap-6">
-
-            {/* Payment Panel */}
             <div className="md:col-span-2 bg-primary-900/60 border border-primary-800 rounded-2xl backdrop-blur-sm p-5 md:p-7">
-
-              {/* Booking Summary */}
               <div className="bg-primary-950 border border-primary-800 rounded-xl p-4 mb-6">
                 <p className="text-gray-500 text-[10px] font-semibold uppercase tracking-wider mb-2.5">Booking Summary</p>
                 <div className="space-y-1.5 text-sm">
@@ -189,13 +214,11 @@ function PaymentContent() {
                 </div>
               </div>
 
-              {/* Total amount display */}
               <div className="flex items-baseline justify-between mb-6 px-1">
                 <span className="text-gray-400 text-sm font-semibold">Booking Amount</span>
                 <span className="text-3xl font-black text-secondary-500">₹{bookingData.totalPrice.toFixed(2)}</span>
               </div>
 
-              {/* Full Payment */}
               <div className="space-y-2.5 mb-5">
                 <p className="text-gray-500 text-[10px] font-semibold uppercase tracking-wider">Pay in Full</p>
                 <button
@@ -205,16 +228,21 @@ function PaymentContent() {
                 >
                   💳 {loading ? 'Processing...' : `Pay ₹${bookingData.totalPrice.toFixed(2)} — Full Payment`}
                 </button>
+                <button
+                  onClick={() => handleDemoPayment('full')}
+                  disabled={loading}
+                  className="w-full px-6 py-3 border border-dashed border-secondary-500/60 text-secondary-500 rounded-xl font-semibold hover:bg-secondary-500/10 transition-colors disabled:opacity-50 text-sm"
+                >
+                  {loading ? 'Processing...' : 'Demo Pay (Skip Razorpay)'}
+                </button>
               </div>
 
-              {/* Divider */}
               <div className="flex items-center gap-4 my-5">
                 <div className="flex-1 border-t border-primary-800" />
                 <span className="text-gray-600 text-xs font-medium">or prebook</span>
                 <div className="flex-1 border-t border-primary-800" />
               </div>
 
-              {/* Prebook / Partial */}
               <div className="bg-primary-950 border border-primary-800 rounded-xl p-4 mb-5">
                 <p className="text-gray-400 text-sm mb-3">
                   Pay <span className="text-white font-black">₹{advanceAmount.toFixed(2)}</span> (30% advance) now and the remaining{' '}
@@ -227,16 +255,21 @@ function PaymentContent() {
                 >
                   💳 {loading ? 'Processing...' : `Pay ₹${advanceAmount.toFixed(2)} to Prebook`}
                 </button>
+                <button
+                  onClick={() => handleDemoPayment('partial')}
+                  disabled={loading}
+                  className="w-full mt-2 px-5 py-3 border border-dashed border-secondary-500/60 text-secondary-500 rounded-xl font-semibold hover:bg-secondary-500/10 transition-colors disabled:opacity-50 text-sm"
+                >
+                  {loading ? 'Processing...' : 'Demo Prebook (Skip Razorpay)'}
+                </button>
               </div>
 
-              {/* Security note */}
               <div className="flex items-center gap-2.5 text-xs text-gray-500">
                 <Shield size={13} className="text-green-500 flex-shrink-0" />
                 <span>All payments are encrypted and secure. Your data is protected.</span>
               </div>
             </div>
 
-            {/* Order Summary Sidebar */}
             <div className="bg-primary-900/60 border border-primary-800 rounded-2xl backdrop-blur-sm p-5">
               <p className="text-gray-500 text-[10px] font-semibold uppercase tracking-wider mb-4">Order Summary</p>
 
@@ -295,7 +328,6 @@ function PaymentContent() {
                 Or prebook for just <span className="text-secondary-500 font-black">₹{advanceAmount.toFixed(2)}</span> — pay rest in cash at the airport.
               </div>
             </div>
-
           </div>
         </div>
       </main>

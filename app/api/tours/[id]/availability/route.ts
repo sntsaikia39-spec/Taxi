@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import {
+  addMinutesToISTDateTime,
+  createDateTimeIST,
+  getConflictControlEnabled,
+  getModelAvailability,
+} from '@/lib/conflicts'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,85 +33,41 @@ export async function GET(
       return NextResponse.json({ success: true, available: true, available_count: null, car_model: null })
     }
 
-    // Check conflict control toggle — if OFF, skip conflict logic
-    const { data: settingRow } = await supabaseAdmin
-      .from('app_settings')
-      .select('value')
-      .eq('key', 'conflict_control_enabled')
-      .single()
-
-    if (settingRow?.value === 'false') {
-      return NextResponse.json({ success: true, available: true, available_count: null, car_model: tour.car_model, conflict_control_enabled: false })
-    }
-
-    // Extract HH:mm from arrival_time (stored as datetime string like "...T09:00...")
-    const timeMatch = tour.arrival_time?.match(/T(\d{2}):(\d{2})/)
-    const startTime = timeMatch ? `${timeMatch[1]}:${timeMatch[2]}` : '09:00'
-    const durationHours = tour.duration_hours || 4
-
-    const requestStart = new Date(`${bookingDate}T${startTime}:00`)
-    if (isNaN(requestStart.getTime())) {
-      return NextResponse.json({ success: false, error: 'Invalid booking_date' }, { status: 400 })
-    }
-    const requestEnd = new Date(requestStart.getTime() + durationHours * 3600000)
-
-    // Count physical active cars of this model
-    const { data: carsOfModel, error: carsError } = await supabaseAdmin
-      .from('cars')
-      .select('id')
-      .eq('model_name', tour.car_model)
-      .eq('is_active', true)
-
-    if (carsError) throw new Error('Failed to fetch cars')
-
-    const totalCars = carsOfModel?.length ?? 0
-    if (totalCars === 0) {
-      return NextResponse.json({ success: true, available: false, available_count: 0, car_model: tour.car_model })
-    }
-
-    // Active bookings for this model
-    const { data: activeBookings, error: bookingsError } = await supabaseAdmin
-      .from('bookings')
-      .select('booking_id, start_datetime, end_datetime')
-      .eq('car_model', tour.car_model)
-      .in('booking_status', ['pending', 'confirmed'])
-
-    if (bookingsError) throw new Error('Failed to fetch bookings')
-
-    // Filter to overlapping window
-    const overlapping = (activeBookings || []).filter(b => {
-      if (!b.start_datetime || !b.end_datetime) return false
-      const bStart = new Date(b.start_datetime)
-      const bEnd = new Date(b.end_datetime)
-      return requestStart < bEnd && requestEnd > bStart
-    })
-
-    const overlappingIds = overlapping.map(b => b.booking_id)
-    const assignedCarIds = new Set<string>()
-    const assignedBookingIds = new Set<string>()
-
-    if (overlappingIds.length > 0) {
-      const { data: assignments } = await supabaseAdmin
-        .from('vehicle_assignments')
-        .select('booking_id, car_id')
-        .in('booking_id', overlappingIds)
-
-      ;(assignments || []).forEach(a => {
-        assignedCarIds.add(a.car_id)
-        assignedBookingIds.add(a.booking_id)
+    const conflictControlEnabled = await getConflictControlEnabled()
+    if (!conflictControlEnabled) {
+      return NextResponse.json({
+        success: true,
+        available: true,
+        available_count: null,
+        car_model: tour.car_model,
+        conflict_control_enabled: false,
       })
     }
 
-    const blockedByAssignment = (carsOfModel ?? []).filter(c => assignedCarIds.has(c.id)).length
-    const blockedByUnassigned = overlapping.filter(b => !assignedBookingIds.has(b.booking_id)).length
-    const totalBlocked = Math.min(blockedByAssignment + blockedByUnassigned, totalCars)
-    const availableCount = totalCars - totalBlocked
+    const arrivalTime = String(tour.arrival_time || '')
+    const timeMatch = arrivalTime.match(/[T\s](\d{2}):(\d{2})/) || arrivalTime.match(/^(\d{2}):(\d{2})/)
+    const startTime = timeMatch ? `${timeMatch[1]}:${timeMatch[2]}` : '09:00'
+    const durationHours = Number(tour.duration_hours || 4)
+    const requestStart = createDateTimeIST(bookingDate, startTime)
+    const requestEnd = addMinutesToISTDateTime(requestStart, durationHours * 60)
+
+    const availability = await getModelAvailability(tour.car_model, {
+      start: requestStart,
+      end: requestEnd,
+    })
+
+    const availableCount = availability?.available_count || 0
+    const available = availableCount > 0
 
     return NextResponse.json({
       success: true,
-      available: availableCount > 0,
+      available,
       available_count: availableCount,
       car_model: tour.car_model,
+      conflict_control_enabled: true,
+      warning: available
+        ? null
+        : `The preferred ${tour.car_model} vehicle may not be available for this timeslot. You can still book the tour, and another suitable vehicle may be assigned.`,
     })
   } catch (error) {
     console.error('Tour availability check error:', error)

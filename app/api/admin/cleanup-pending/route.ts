@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { requireAdminRequest } from '@/lib/admin-auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -101,7 +102,10 @@ export async function GET(request: NextRequest) {
 
 // POST — manual "Clean Up Now" from admin panel
 // Always runs immediately regardless of last cleanup time
-export async function POST() {
+export async function POST(request: NextRequest) {
+  const unauthorized = requireAdminRequest(request)
+  if (unauthorized) return unauthorized
+
   try {
     const { data: settings } = await supabaseAdmin
       .from('app_settings')

@@ -1,24 +1,12 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { NextRequest } from 'next/server'
-
-// Helper function to create ISO datetime string in IST (without timezone conversion)
-// User enters time in IST, so we preserve it as-is without converting to UTC
-function createDateTimeIST(dateStr: string, timeStr: string): string {
-  const [hours, minutes] = timeStr.split(':').map(Number)
-  const date = new Date(dateStr)
-  date.setHours(hours, minutes, 0, 0)
-  
-  // Format as ISO string with IST timezone offset (+05:30)
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  const hour = String(date.getHours()).padStart(2, '0')
-  const minute = String(date.getMinutes()).padStart(2, '0')
-  const second = String(date.getSeconds()).padStart(2, '0')
-  
-  // Return in ISO format with IST timezone offset
-  return `${year}-${month}-${day}T${hour}:${minute}:${second}+05:30`
-}
+import {
+  addMinutesToISTDateTime,
+  createDateTimeIST,
+  getConflictControlEnabled,
+  getModelAvailability,
+  isBookingWithinModelQuota,
+} from '@/lib/conflicts'
 
 export async function POST(request: NextRequest) {
   try {
@@ -67,7 +55,22 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Validate booking_status enum (optional, defaults to 'pending')
+    if (bookingData.booking_type === 'airport' && !bookingData.destination_id) {
+      return Response.json(
+        { success: false, error: 'destination_id is required for airport bookings' },
+        { status: 400 }
+      )
+    }
+
+    if (bookingData.booking_type === 'hourly' && !bookingData.no_of_hours) {
+      return Response.json(
+        { success: false, error: 'no_of_hours is required for hourly bookings' },
+        { status: 400 }
+      )
+    }
+
+    // Validate booking_status enum for legacy clients. New public bookings are
+    // always stored as pending below, regardless of any client-supplied status.
     const validStatuses = ['pending', 'confirmed', 'completed', 'cancelled']
     if (bookingData.booking_status && !validStatuses.includes(bookingData.booking_status)) {
       return Response.json(
@@ -108,21 +111,31 @@ export async function POST(request: NextRequest) {
     // Calculate end_datetime based on booking type
     let endDateTimeStr: string = startDateTimeStr
     let durationMinutes = 0
+    let tourPkg: { duration_hours: number | null; max_passengers: number | null; car_model: string | null } | null = null
 
     if (bookingData.booking_type === 'hourly' && bookingData.no_of_hours) {
       // For hourly bookings: use the provided no_of_hours directly
       durationMinutes = parseFloat(String(bookingData.no_of_hours)) * 60
       console.log(`Hourly booking: ${bookingData.no_of_hours} hrs (${durationMinutes} minutes)`)
     } else if (bookingData.booking_type === 'tour' && bookingData.tour_package_id) {
-      // For tour bookings: fetch duration_hours from the tour package
+      // For tour bookings: fetch authoritative package data from the database.
       try {
-        const { data: tourPkg, error: tourErr } = await supabaseAdmin
+        const { data: fetchedTourPkg, error: tourErr } = await supabaseAdmin
           .from('tour_packages')
-          .select('duration_hours')
+          .select('duration_hours, max_passengers, car_model')
           .eq('id', bookingData.tour_package_id)
           .single()
 
-        if (!tourErr && tourPkg && tourPkg.duration_hours) {
+        if (tourErr || !fetchedTourPkg) {
+          return Response.json(
+            { success: false, error: 'Tour package not found' },
+            { status: 404 }
+          )
+        }
+
+        tourPkg = fetchedTourPkg
+
+        if (tourPkg.duration_hours) {
           durationMinutes = parseInt(String(tourPkg.duration_hours)) * 60
           console.log(`Tour booking: ${tourPkg.duration_hours} hrs (${durationMinutes} minutes)`)
         } else {
@@ -131,8 +144,16 @@ export async function POST(request: NextRequest) {
         }
       } catch (e) {
         console.error('Error fetching tour package:', e)
-        durationMinutes = 240
+        return Response.json(
+          { success: false, error: 'Failed to validate tour package' },
+          { status: 500 }
+        )
       }
+    } else if (bookingData.booking_type === 'tour') {
+      return Response.json(
+        { success: false, error: 'tour_package_id is required for tour bookings' },
+        { status: 400 }
+      )
     } else if (bookingData.destination_id) {
       // For airport bookings: use estimated_duration_minutes directly from the destination
       try {
@@ -142,55 +163,40 @@ export async function POST(request: NextRequest) {
           .eq('id', bookingData.destination_id)
           .single()
 
-        if (!destError && destination?.estimated_duration_minutes) {
+        if (destError || !destination) {
+          return Response.json(
+            { success: false, error: 'Destination not found' },
+            { status: 404 }
+          )
+        }
+
+        if (destination.estimated_duration_minutes) {
           // Double the one-way duration: car is busy for trip + return to base
           durationMinutes = destination.estimated_duration_minutes * 2
-          console.log(`Destination duration (×2 for return): ${durationMinutes} minutes`)
+          console.log(`Destination duration (x2 for return): ${durationMinutes} minutes`)
         } else {
           console.warn('Could not fetch destination duration, using default of 60 minutes')
           durationMinutes = 60
         }
       } catch (e) {
         console.error('Error fetching destination:', e)
-        durationMinutes = 60
+        return Response.json(
+          { success: false, error: 'Failed to validate destination' },
+          { status: 500 }
+        )
       }
     } else {
       durationMinutes = 60
     }
 
-    // Calculate end_datetime by adding duration to start_datetime (in milliseconds)
-    // Parse the ISO format string: "2026-04-30T13:30:00+05:30"
-    const timeMatch = startDateTimeStr.match(/(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})/)
-    if (!timeMatch) {
+    if (!Number.isFinite(durationMinutes) || durationMinutes <= 0) {
       return Response.json(
-        { error: 'Invalid start_datetime format' },
+        { success: false, error: 'Booking duration must be greater than zero' },
         { status: 400 }
       )
     }
 
-    const [, yearStr, monthStr, dayStr, hourStr, minuteStr, secondStr] = timeMatch
-    const year = parseInt(yearStr)
-    const month = parseInt(monthStr) - 1 // JavaScript months are 0-indexed
-    const day = parseInt(dayStr)
-    const hours = parseInt(hourStr)
-    const minutes = parseInt(minuteStr)
-    const seconds = parseInt(secondStr)
-
-    // Create start Date object with extracted components
-    const startDate = new Date(year, month, day, hours, minutes, seconds, 0)
-    
-    // Calculate end_datetime by adding duration
-    const endDate = new Date(startDate.getTime() + durationMinutes * 60000)
-    
-    // Format end_datetime back to ISO string with IST timezone
-    const endYear = endDate.getFullYear()
-    const endMonth = String(endDate.getMonth() + 1).padStart(2, '0')
-    const endDay = String(endDate.getDate()).padStart(2, '0')
-    const endHour = String(endDate.getHours()).padStart(2, '0')
-    const endMinute = String(endDate.getMinutes()).padStart(2, '0')
-    const endSecond = String(endDate.getSeconds()).padStart(2, '0')
-    
-    endDateTimeStr = `${endYear}-${endMonth}-${endDay}T${endHour}:${endMinute}:${endSecond}+05:30`
+    endDateTimeStr = addMinutesToISTDateTime(startDateTimeStr, durationMinutes)
     console.log(`Start: ${startDateTimeStr}, End: ${endDateTimeStr}, Duration: ${durationMinutes} minutes (${(durationMinutes / 60).toFixed(2)} hours)`)
 
     // Determine no_of_hours
@@ -199,6 +205,83 @@ export async function POST(request: NextRequest) {
     let noOfHours: number | null = null
     if (bookingData.booking_type === 'hourly' && bookingData.no_of_hours) {
       noOfHours = parseFloat(String(bookingData.no_of_hours))
+    }
+
+    const resolvedCarModel =
+      bookingData.booking_type === 'tour'
+        ? (tourPkg?.car_model || bookingData.car_model || null)
+        : (bookingData.car_model || null)
+
+    if (bookingData.booking_type !== 'tour' && !resolvedCarModel) {
+      return Response.json(
+        { success: false, error: 'car_model is required for airport and hourly bookings' },
+        { status: 400 }
+      )
+    }
+
+    if (bookingData.booking_type === 'tour' && tourPkg?.max_passengers && passengerCount > Number(tourPkg.max_passengers)) {
+      return Response.json(
+        { success: false, error: `This tour allows a maximum of ${tourPkg.max_passengers} passenger(s)` },
+        { status: 400 }
+      )
+    }
+
+    if (resolvedCarModel && bookingData.booking_type !== 'tour') {
+      const { data: carsOfModel, error: carsError } = await supabaseAdmin
+        .from('cars')
+        .select('capacity')
+        .eq('model_name', resolvedCarModel)
+        .eq('is_active', true)
+
+      if (carsError) {
+        console.error('Error checking car model capacity:', carsError)
+        return Response.json(
+          { success: false, error: 'Failed to validate selected car model' },
+          { status: 500 }
+        )
+      }
+
+      if (!carsOfModel || carsOfModel.length === 0) {
+        return Response.json(
+          { success: false, error: `No active ${resolvedCarModel} vehicles are available` },
+          { status: 409 }
+        )
+      }
+
+      const maxCapacity = Math.max(...carsOfModel.map(car => Number(car.capacity || 0)))
+      if (passengerCount > maxCapacity) {
+        return Response.json(
+          { success: false, error: `${resolvedCarModel} supports up to ${maxCapacity} passenger(s)` },
+          { status: 400 }
+        )
+      }
+    }
+
+    const conflictControlEnabled = await getConflictControlEnabled()
+    let conflictWarning: string | null = null
+
+    if (conflictControlEnabled && resolvedCarModel) {
+      const availability = await getModelAvailability(resolvedCarModel, {
+        start: startDateTimeStr,
+        end: endDateTimeStr,
+      })
+
+      const isAvailable = (availability?.available_count || 0) > 0
+
+      if (!isAvailable && bookingData.booking_type !== 'tour') {
+        return Response.json(
+          {
+            success: false,
+            code: 'MODEL_UNAVAILABLE',
+            error: `${resolvedCarModel} is no longer available for the selected timeslot. Please choose another vehicle or time.`,
+          },
+          { status: 409 }
+        )
+      }
+
+      if (!isAvailable && bookingData.booking_type === 'tour') {
+        conflictWarning = `The preferred ${resolvedCarModel} vehicle may not be available for this timeslot. The tour can still be booked, and another suitable vehicle may be assigned.`
+      }
     }
 
     // Prepare booking data with new datetime schema
@@ -214,9 +297,9 @@ export async function POST(request: NextRequest) {
       destination_id: bookingData.destination_id || null,
       tour_package_id: bookingData.tour_package_id || null,
       no_of_hours: noOfHours,
-      car_model: bookingData.car_model || null,
+      car_model: resolvedCarModel,
       amount_total: amountTotal,
-      booking_status: bookingData.booking_status || 'pending',
+      booking_status: 'pending',
     }
 
     console.log('Prepared booking data:', preparedBookingData)
@@ -235,8 +318,32 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    if (conflictControlEnabled && bookingData.booking_type !== 'tour' && resolvedCarModel) {
+      const quotaWinner = await isBookingWithinModelQuota({
+        bookingId: data.booking_id,
+        modelName: resolvedCarModel,
+        window: { start: startDateTimeStr, end: endDateTimeStr },
+      })
+
+      if (!quotaWinner) {
+        await supabaseAdmin
+          .from('bookings')
+          .delete()
+          .eq('id', data.id)
+
+        return Response.json(
+          {
+            success: false,
+            code: 'MODEL_UNAVAILABLE',
+            error: `${resolvedCarModel} was just booked for this timeslot. Please choose another vehicle or time.`,
+          },
+          { status: 409 }
+        )
+      }
+    }
+
     console.log('Booking created successfully:', data)
-    return Response.json({ success: true, booking: data })
+    return Response.json({ success: true, booking: data, conflict_warning: conflictWarning })
   } catch (error) {
     console.error('Booking creation error:', error)
     return Response.json(

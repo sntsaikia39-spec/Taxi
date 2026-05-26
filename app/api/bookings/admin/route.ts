@@ -1,8 +1,12 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { requireAdminRequest } from '@/lib/admin-auth'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET() {
+export async function GET(request: Request) {
+  const unauthorized = requireAdminRequest(request)
+  if (unauthorized) return unauthorized
+
   try {
     const { data, error } = await supabaseAdmin
       .from('bookings')
@@ -22,6 +26,9 @@ export async function GET() {
 }
 
 export async function DELETE(request: Request) {
+  const unauthorized = requireAdminRequest(request)
+  if (unauthorized) return unauthorized
+
   try {
     const { booking_id } = await request.json()
 

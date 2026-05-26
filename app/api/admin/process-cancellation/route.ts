@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { refundPayment } from '@/lib/payment'
+import { requireAdminRequest } from '@/lib/admin-auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -10,6 +11,9 @@ function toNum(val: unknown): number {
 }
 
 export async function POST(request: NextRequest) {
+  const unauthorized = requireAdminRequest(request)
+  if (unauthorized) return unauthorized
+
   try {
     const { booking_id, action, refund_amount, refund_notes } = await request.json()
 
