@@ -7,6 +7,7 @@ import {
   getModelAvailability,
   isBookingWithinModelQuota,
 } from '@/lib/conflicts'
+import { logSystemEvent } from '@/lib/system-events'
 
 export async function POST(request: NextRequest) {
   try {
@@ -343,9 +344,31 @@ export async function POST(request: NextRequest) {
     }
 
     console.log('Booking created successfully:', data)
+    await logSystemEvent({
+      severity: 'info',
+      event_type: 'booking_created',
+      actor_type: 'user',
+      actor_label: bookingData.user_email || bookingData.user_name || null,
+      entity_type: 'booking',
+      entity_id: data.booking_id || data.id,
+      message: `Booking created (${bookingData.booking_type})`,
+      metadata: {
+        booking_type: bookingData.booking_type,
+        amount_total: amountTotal,
+        passenger_count: passengerCount,
+        conflict_warning: Boolean(conflictWarning),
+      },
+    })
     return Response.json({ success: true, booking: data, conflict_warning: conflictWarning })
   } catch (error) {
     console.error('Booking creation error:', error)
+    await logSystemEvent({
+      severity: 'error',
+      event_type: 'booking_create_failed',
+      actor_type: 'system',
+      message: 'Booking creation failed',
+      metadata: { error: error instanceof Error ? error.message : String(error) },
+    })
     return Response.json(
       { error: 'Failed to create booking', details: String(error) },
       { status: 500 }

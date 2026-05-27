@@ -1,11 +1,13 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { requireAdminRequest } from '@/lib/admin-auth'
+import { getAdminFromRequest, requireAdminRequest } from '@/lib/admin-auth'
 import { sendCashPaymentInvoice } from '@/lib/resend-notifications'
 import { createPaymentRecord } from '@/lib/payment-db'
+import { logSystemEvent } from '@/lib/system-events'
 
 export async function POST(request: Request) {
   const unauthorized = requireAdminRequest(request)
   if (unauthorized) return unauthorized
+  const admin = getAdminFromRequest(request)
 
   try {
     const body = await request.json()
@@ -124,6 +126,22 @@ export async function POST(request: Request) {
       }).catch((err) => console.error('Invoice email error:', err))
     }
 
+    await logSystemEvent({
+      severity: 'info',
+      event_type: 'cash_payment_confirmed',
+      actor_type: 'admin',
+      actor_id: admin?.id || null,
+      actor_label: admin?.email || null,
+      entity_type: 'booking',
+      entity_id: booking_id,
+      message: 'Cash payment confirmed',
+      metadata: {
+        payment_id,
+        amount_cash_paid: cashAmount,
+        payment_status: newPaymentStatus,
+      },
+    })
+
     return Response.json(
       {
         success: true,
@@ -134,6 +152,15 @@ export async function POST(request: Request) {
     )
   } catch (error) {
     console.error('Error in confirm-cash route:', error)
+    await logSystemEvent({
+      severity: 'error',
+      event_type: 'cash_payment_confirm_failed',
+      actor_type: 'admin',
+      actor_id: admin?.id || null,
+      actor_label: admin?.email || null,
+      message: 'Cash payment confirmation failed',
+      metadata: { error: error instanceof Error ? error.message : String(error) },
+    })
     return Response.json(
       {
         success: false,

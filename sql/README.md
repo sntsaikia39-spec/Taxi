@@ -16,7 +16,9 @@ pricing is embedded on the `cars` row (`per_km_charge`, `per_hr_charge`).
 | 6 | `admin_schema.sql` | `admins` | Admin users, bcrypt passwords, RLS. |
 | 7 | `reviews_schema.sql` | `reviews` | Polymorphic reviews for tours and taxi bookings. Includes seed data. |
 | 8 | `app_settings_schema.sql` | `app_settings` | Key-value settings. Seeds `conflict_control_enabled = 'true'`. |
-| 9 | `cleanup_demo_payment_data.sql` | - | One-time cleanup for demo payment rows (`demo_txn_*` / `razorpay_demo`). |
+| 9 | `system_events_schema.sql` | `system_events` | Sanitized operational/audit events for the admin Logs tab. |
+| 10 | `seed_system_logs_setting.sql` | - | One-time seed for `app_settings.system_logs_max_rows` in existing deployments. |
+| 11 | `cleanup_demo_payment_data.sql` | - | One-time cleanup for demo payment rows (`demo_txn_*` / `razorpay_demo`). |
 
 ## Booking Types & Their Key Columns
 

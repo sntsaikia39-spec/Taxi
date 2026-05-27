@@ -129,6 +129,20 @@ type PaymentsResponse = {
   error?: string
 }
 
+type SystemLog = {
+  id: string
+  created_at: string
+  severity: 'info' | 'warn' | 'error' | 'security'
+  event_type: string
+  actor_type: string
+  actor_id: string | null
+  actor_label: string | null
+  entity_type: string | null
+  entity_id: string | null
+  message: string
+  metadata: Record<string, unknown>
+}
+
 const ACTIVE_STATUSES = new Set(['pending', 'confirmed'])
 
 function toNum(val: unknown): number {
@@ -212,6 +226,13 @@ function findSimilarModels(input: string, candidates: string[]): string[] {
 function adminHeaders(extra: Record<string, string> = {}) {
   const token = typeof window !== 'undefined' ? localStorage.getItem('adminToken') : null
   return token ? { ...extra, Authorization: `Bearer ${token}` } : extra
+}
+
+function getSeverityClass(severity: string) {
+  if (severity === 'error') return 'bg-red-100 text-red-800'
+  if (severity === 'warn') return 'bg-amber-100 text-amber-800'
+  if (severity === 'security') return 'bg-purple-100 text-purple-800'
+  return 'bg-blue-100 text-blue-800'
 }
 
 function hasAdminToken(): boolean {
@@ -338,6 +359,17 @@ export default function AdminDashboard() {
     confirmNewPassword: '',
   })
   const [submittingProfile, setSubmittingProfile] = useState(false)
+  const [logs, setLogs] = useState<SystemLog[]>([])
+  const [loadingLogs, setLoadingLogs] = useState(false)
+  const [logsPage, setLogsPage] = useState(1)
+  const [logsTotalPages, setLogsTotalPages] = useState(1)
+  const [logsSeverity, setLogsSeverity] = useState<'all' | 'info' | 'warn' | 'error' | 'security'>('all')
+  const [logsEventType, setLogsEventType] = useState('')
+  const [logsQuery, setLogsQuery] = useState('')
+  const [logsMaxRows, setLogsMaxRows] = useState<number>(2000)
+  const [savingLogsMaxRows, setSavingLogsMaxRows] = useState(false)
+  const [editingLogsMaxRows, setEditingLogsMaxRows] = useState(false)
+  const [logsMaxRowsDraft, setLogsMaxRowsDraft] = useState<number>(2000)
 
   // Conflict control feature
   const [conflictControlEnabled, setConflictControlEnabled] = useState(true)
@@ -433,6 +465,11 @@ export default function AdminDashboard() {
         for (const s of data.settings) {
           if (s.key === 'pending_booking_timeout_hours') setPendingTimeoutDays(Math.round((parseInt(s.value) || 24) / 24) || 1)
           if (s.key === 'auto_cleanup_enabled') setAutoCleanupEnabled(s.value !== 'false')
+          if (s.key === 'system_logs_max_rows') {
+            const value = Math.max(100, parseInt(s.value) || 2000)
+            setLogsMaxRows(value)
+            setLogsMaxRowsDraft(value)
+          }
         }
       }
     } catch {
@@ -530,6 +567,12 @@ export default function AdminDashboard() {
     loadConflictSetting()
     loadPendingTimeoutSetting()
   }, [router])
+
+  useEffect(() => {
+    if (activeTab !== 'logs') return
+    loadLogs(logsPage)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, logsPage, logsSeverity, logsEventType, logsQuery])
 
   const loadConflictSetting = async () => {
     setLoadingConflictSetting(true)
@@ -752,6 +795,77 @@ export default function AdminDashboard() {
       setTours([])
     } finally {
       setLoadingTours(false)
+    }
+  }
+
+  const handleSaveLogsMaxRows = async () => {
+    const nextValue = Math.floor(logsMaxRowsDraft)
+    if (!Number.isFinite(nextValue) || nextValue < 100 || nextValue > 50000) {
+      toast.error('Logs limit must be between 100 and 50,000 rows.')
+      return
+    }
+    setSavingLogsMaxRows(true)
+    try {
+      const res = await fetch('/api/admin/settings', {
+        method: 'PATCH',
+        headers: adminHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ key: 'system_logs_max_rows', value: String(nextValue) }),
+      })
+      const data = await res.json()
+      if (!data.success) throw new Error(data.error || 'Failed to save logs setting')
+      setLogsMaxRows(nextValue)
+      setLogsMaxRowsDraft(nextValue)
+      setEditingLogsMaxRows(false)
+      toast.success(`Logs retention set to ${nextValue.toLocaleString('en-IN')} rows.`)
+    } catch (error) {
+      console.error('Error saving logs max rows:', error)
+      toast.error('Failed to save logs retention setting.')
+    } finally {
+      setSavingLogsMaxRows(false)
+    }
+  }
+
+  const loadLogs = async (page = logsPage) => {
+    setLoadingLogs(true)
+    if (!hasAdminToken()) {
+      setLogs([])
+      setLogsTotalPages(1)
+      setLoadingLogs(false)
+      return
+    }
+    try {
+      const sp = new URLSearchParams()
+      sp.set('page', String(page))
+      sp.set('limit', '30')
+      if (logsSeverity !== 'all') sp.set('severity', logsSeverity)
+      if (logsEventType.trim()) sp.set('event_type', logsEventType.trim())
+      if (logsQuery.trim()) sp.set('q', logsQuery.trim())
+
+      const response = await fetch(`/api/admin/logs?${sp.toString()}`, {
+        method: 'GET',
+        cache: 'no-store',
+        headers: adminHeaders({ 'Cache-Control': 'no-cache' }),
+      })
+      const result = await response.json()
+      if (!response.ok || !result.success) {
+        if (response.status === 401 || response.status === 403) {
+          setLogs([])
+          setLogsTotalPages(1)
+          return
+        }
+        throw new Error(result.error || 'Failed to fetch logs')
+      }
+
+      setLogs(result.logs || [])
+      setLogsPage(result.pagination?.page || page)
+      setLogsTotalPages(result.pagination?.total_pages || 1)
+    } catch (error) {
+      console.error('Error loading logs:', error)
+      if (hasAdminToken()) toast.error('Failed to load system logs')
+      setLogs([])
+      setLogsTotalPages(1)
+    } finally {
+      setLoadingLogs(false)
     }
   }
 
@@ -4296,6 +4410,69 @@ export default function AdminDashboard() {
           </div>
 
           <div className="pt-2 md:pt-4 border-t border-gray-100">
+            <p className={`text-xs font-semibold uppercase tracking-widest mb-3 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>System Logs</p>
+            <div className={`rounded-lg border p-3 md:p-4 ${darkMode ? 'border-amber-700/50 bg-amber-950/30' : 'border-amber-200 bg-amber-50'}`}>
+              <div className="flex flex-col md:flex-row md:items-center gap-2 md:gap-3">
+                <div className="flex-1">
+                  <p className={`text-sm font-semibold ${darkMode ? 'text-amber-300' : 'text-amber-800'}`}>Logs Retention Limit</p>
+                  <p className={`text-xs ${darkMode ? 'text-amber-200/90' : 'text-amber-700'}`}>
+                    Higher limits use more database storage and can increase query cost/latency on free tier.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className={`inline-flex items-center rounded-md px-2.5 py-1 text-xs font-semibold ${darkMode ? 'border border-amber-600/60 bg-primary-900 text-amber-200' : 'border border-amber-300 bg-white text-amber-900'}`}>
+                    {logsMaxRows.toLocaleString('en-IN')} rows
+                  </span>
+                  {!editingLogsMaxRows && (
+                    <button
+                      onClick={() => {
+                        setLogsMaxRowsDraft(logsMaxRows)
+                        setEditingLogsMaxRows(true)
+                      }}
+                      className="btn-secondary text-[11px] md:text-sm px-3 py-1.5"
+                    >
+                      Edit
+                    </button>
+                  )}
+                </div>
+              </div>
+              {editingLogsMaxRows && (
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <input
+                    type="number"
+                    min={100}
+                    max={50000}
+                    step={100}
+                    className={`input-field h-9 md:h-10 w-40 text-[12px] md:text-sm px-2.5 ${darkMode ? 'bg-primary-900 text-gray-100 border-amber-700/50' : 'bg-white'}`}
+                    value={logsMaxRowsDraft}
+                    onChange={(e) => setLogsMaxRowsDraft(parseInt(e.target.value || '0', 10))}
+                  />
+                  <button
+                    onClick={handleSaveLogsMaxRows}
+                    disabled={savingLogsMaxRows}
+                    className="btn-secondary text-[11px] md:text-sm px-3 py-1.5 disabled:opacity-50"
+                  >
+                    {savingLogsMaxRows ? 'Saving...' : 'Save'}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setLogsMaxRowsDraft(logsMaxRows)
+                      setEditingLogsMaxRows(false)
+                    }}
+                    disabled={savingLogsMaxRows}
+                    className={`px-3 py-1.5 text-[11px] md:text-sm font-semibold rounded-lg border disabled:opacity-50 ${darkMode ? 'border-amber-700/50 text-amber-200 hover:bg-amber-900/30' : 'border-amber-300 text-amber-800 hover:bg-amber-100'}`}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              )}
+              <p className={`mt-1 text-[10px] md:text-xs ${darkMode ? 'text-amber-200/80' : 'text-amber-700'}`}>
+                Recommended: 1,000 to 5,000 rows for free-tier projects.
+              </p>
+            </div>
+          </div>
+
+          <div className="pt-2 md:pt-4 border-t border-gray-100">
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3">About</p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4 text-xs md:text-sm">
               <div className="p-3 md:p-4 rounded-lg border border-gray-200 bg-gray-50">
@@ -5204,11 +5381,114 @@ export default function AdminDashboard() {
     </div>
   )
 
+  const renderLogs = () => (
+    <div className="space-y-4 md:space-y-6">
+      <div className="bg-white rounded-lg shadow-lg p-3 md:p-6">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2 md:gap-3 mb-3 md:mb-4">
+          <h3 className="text-lg md:text-2xl font-bold">System Logs</h3>
+          <button
+            onClick={() => loadLogs(logsPage)}
+            className="btn-secondary text-[11px] md:text-sm px-2.5 md:px-3 py-1.5"
+          >
+            Refresh Logs
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-1.5 md:gap-2 mb-3 md:mb-4">
+          <select
+            className="input-field text-[12px] md:text-sm h-9 md:h-10 px-2.5"
+            value={logsSeverity}
+            onChange={(e) => { setLogsPage(1); setLogsSeverity(e.target.value as 'all' | 'info' | 'warn' | 'error' | 'security') }}
+          >
+            <option value="all">All Severities</option>
+            <option value="info">Info</option>
+            <option value="warn">Warn</option>
+            <option value="error">Error</option>
+            <option value="security">Security</option>
+          </select>
+
+          <input
+            className="input-field text-[12px] md:text-sm h-9 md:h-10 px-2.5"
+            placeholder="Event type (exact)"
+            value={logsEventType}
+            onChange={(e) => { setLogsPage(1); setLogsEventType(e.target.value) }}
+          />
+
+          <input
+            className="input-field text-[12px] md:text-sm h-9 md:h-10 px-2.5 md:col-span-2"
+            placeholder="Search message, actor, entity..."
+            value={logsQuery}
+            onChange={(e) => { setLogsPage(1); setLogsQuery(e.target.value) }}
+          />
+        </div>
+
+        {loadingLogs ? (
+          <p className="text-gray-600 text-sm">Loading logs...</p>
+        ) : logs.length === 0 ? (
+          <p className="text-gray-500 text-sm">No logs found for selected filters.</p>
+        ) : (
+          <div className="space-y-1.5 md:space-y-2">
+            {logs.map((log) => (
+              <div key={log.id} className="border rounded-lg p-2.5 md:p-4">
+                <div className="flex flex-wrap items-center gap-1.5 md:gap-2 mb-1.5 md:mb-2">
+                  <span className={`px-1.5 md:px-2 py-0.5 rounded-full text-[10px] md:text-xs font-semibold ${getSeverityClass(log.severity)}`}>{log.severity}</span>
+                  <span className="px-1.5 md:px-2 py-0.5 rounded-full text-[10px] md:text-xs font-semibold bg-gray-100 text-gray-700 max-w-full truncate">{log.event_type}</span>
+                  <span className="text-[10px] md:text-xs text-gray-500 ml-auto">{new Date(log.created_at).toLocaleString('en-IN')}</span>
+                </div>
+                <p className="text-[12px] md:text-sm text-gray-900 font-medium leading-snug">{log.message}</p>
+                <div className="mt-1 text-[11px] md:text-xs text-gray-600 leading-snug">
+                  <span>Actor: {log.actor_label || log.actor_type}</span>
+                  {log.entity_type && <span> · Entity: {log.entity_type}</span>}
+                  {log.entity_id && <span> · ID: {log.entity_id}</span>}
+                </div>
+                {log.metadata && Object.keys(log.metadata).length > 0 && (
+                  <>
+                    <details className="mt-2 md:hidden">
+                      <summary className="text-[11px] text-gray-600 cursor-pointer select-none">View metadata</summary>
+                      <pre className="mt-1 text-[10px] bg-gray-50 border rounded p-2 overflow-x-auto text-gray-700">
+{JSON.stringify(log.metadata, null, 2)}
+                      </pre>
+                    </details>
+                    <pre className="mt-2 hidden md:block text-[11px] bg-gray-50 border rounded p-2 overflow-x-auto text-gray-700">
+{JSON.stringify(log.metadata, null, 2)}
+                    </pre>
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="mt-3 md:mt-4 flex items-center justify-between gap-2">
+          <button
+            onClick={() => setLogsPage((p) => Math.max(1, p - 1))}
+            disabled={logsPage <= 1}
+            className="btn-secondary text-[11px] md:text-sm px-2.5 md:px-3 py-1.5 disabled:opacity-50"
+          >
+            Previous
+          </button>
+          <p className="text-[11px] md:text-sm text-gray-600 whitespace-nowrap">Page {logsPage}/{logsTotalPages}</p>
+          <button
+            onClick={() => setLogsPage((p) => Math.min(logsTotalPages, p + 1))}
+            disabled={logsPage >= logsTotalPages}
+            className="btn-secondary text-[11px] md:text-sm px-2.5 md:px-3 py-1.5 disabled:opacity-50"
+          >
+            Next
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+
   const adminFirstName = adminFullName?.trim().split(/\s+/)[0] || 'Admin'
 
   return (
     <ProtectedAdminPage>
-      <div className="scrollbar-thin-modern flex h-[100dvh] flex-col overflow-y-auto overflow-x-hidden" data-admin-theme={darkMode ? 'dark' : 'light'}>
+      <div
+        className="scrollbar-thin-modern flex h-[100dvh] flex-col overflow-y-auto overflow-x-hidden"
+        data-admin-theme={darkMode ? 'dark' : 'light'}
+        style={{ scrollbarGutter: 'stable' }}
+      >
       {/* Admin Panel Header */}
       <header className="sticky top-0 z-50 bg-primary-950/95 backdrop-blur-md border-b border-white/[0.07]">
         <div className="container mx-auto px-4">
@@ -5262,9 +5542,30 @@ export default function AdminDashboard() {
         <div className="container mx-auto px-3 md:px-4 lg:px-6">
           <div className="flex items-center justify-between mb-3 md:mb-4 lg:mb-8 gap-3">
             <h1 className="text-lg md:text-3xl lg:text-4xl font-bold">Dashboard</h1>
-            <button onClick={handleDashboardRefresh} className="btn-secondary text-xs md:text-sm px-2.5 md:px-4 py-1.5 md:py-2">
-              Refresh
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  setActiveTab('logs')
+                  setLogsPage(1)
+                }}
+                aria-pressed={activeTab === 'logs'}
+                className={`relative text-xs md:text-sm px-2.5 md:px-4 py-1.5 md:py-2 rounded-lg border font-semibold tracking-wide transition-all duration-200 ${
+                  activeTab === 'logs'
+                    ? 'bg-slate-900 text-emerald-300 border-emerald-500/70 ring-2 ring-emerald-400/45 shadow-[0_0_20px_rgba(16,185,129,0.25)]'
+                    : 'bg-slate-900/80 text-slate-200 border-slate-600 hover:bg-slate-900 hover:border-emerald-500/50 hover:text-emerald-200'
+                }`}
+              >
+                <span>Logs</span>
+                <span
+                  className={`ml-2 inline-block w-1.5 h-1.5 rounded-full ${
+                    activeTab === 'logs' ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'
+                  }`}
+                />
+              </button>
+              <button onClick={handleDashboardRefresh} className="btn-secondary text-xs md:text-sm px-2.5 md:px-4 py-1.5 md:py-2">
+                Refresh
+              </button>
+            </div>
           </div>
 
           {/* Tab bar — responsive wrapping on mobile, no scroll needed */}
@@ -5312,6 +5613,7 @@ export default function AdminDashboard() {
           {activeTab === 'destinations' && renderDestinations()}
           {activeTab === 'tours' && renderTours()}
           {activeTab === 'analytics' && renderAnalytics()}
+          {activeTab === 'logs' && renderLogs()}
           {activeTab === 'misc' && renderMisc()}
         </div>
       </main>

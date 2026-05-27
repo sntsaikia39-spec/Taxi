@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
+import { logSystemEvent } from '@/lib/system-events'
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production'
 
@@ -26,6 +27,13 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (error || !admin) {
+      await logSystemEvent({
+        severity: 'security',
+        event_type: 'admin_login_failed',
+        actor_type: 'admin',
+        actor_label: email || null,
+        message: 'Admin login failed due to invalid credentials',
+      })
       return NextResponse.json(
         { error: 'Invalid email or password' },
         { status: 401 }
@@ -36,6 +44,13 @@ export async function POST(request: NextRequest) {
     const passwordMatch = await bcrypt.compare(password, admin.password_hash)
 
     if (!passwordMatch) {
+      await logSystemEvent({
+        severity: 'security',
+        event_type: 'admin_login_failed',
+        actor_type: 'admin',
+        actor_label: email || null,
+        message: 'Admin login failed due to invalid credentials',
+      })
       return NextResponse.json(
         { error: 'Invalid email or password' },
         { status: 401 }
@@ -59,6 +74,18 @@ export async function POST(request: NextRequest) {
       JWT_SECRET,
       { expiresIn: '24h' }
     )
+
+    await logSystemEvent({
+      severity: 'info',
+      event_type: 'admin_login_success',
+      actor_type: 'admin',
+      actor_id: admin.id,
+      actor_label: admin.email,
+      entity_type: 'admin',
+      entity_id: admin.id,
+      message: 'Admin login successful',
+      metadata: { role: admin.role || null },
+    })
 
     return NextResponse.json(
       {

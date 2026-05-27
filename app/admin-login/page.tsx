@@ -2,22 +2,40 @@
 
 export const dynamic = 'force-dynamic'
 
-import { Suspense, useState, useEffect } from 'react'
+import { Suspense, useEffect, useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useAdmin } from '@/context/AdminContext'
-import Header from '@/components/Header'
-import Footer from '@/components/Footer'
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { Mail, Lock, LogIn } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { useAdmin } from '@/context/AdminContext'
+import Logo from '@/components/Logo'
 
 function AdminLoginContent() {
   const router = useRouter()
+  const supabase = createClientComponentClient()
   const { login, isAdmin, isLoading } = useAdmin()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
 
-  // Redirect if already logged in
+  // Clear customer auth session on admin-login entry.
+  // This keeps admin auth separated from public user auth state.
+  useEffect(() => {
+    const clearCustomerSession = async () => {
+      try {
+        await supabase.auth.signOut()
+      } catch (error) {
+        console.error('Failed to clear customer session on admin-login:', error)
+      } finally {
+        sessionStorage.removeItem('bookingData')
+        sessionStorage.removeItem('tourBookingData')
+      }
+    }
+    clearCustomerSession()
+  }, [supabase])
+
+  // Redirect if already logged in as admin
   useEffect(() => {
     if (isAdmin && !isLoading) {
       router.push('/admin')
@@ -45,39 +63,42 @@ function AdminLoginContent() {
 
   if (isLoading) {
     return (
-      <div className="flex flex-col min-h-screen">
-        <Header />
-        <main className="flex-1 flex items-center justify-center">
-          <div className="text-center">
-            <p className="text-lg text-gray-600">Loading...</p>
+      <div className="flex flex-col min-h-screen bg-gray-50">
+        <header className="sticky top-0 z-30 bg-primary-950 border-b border-white/10">
+          <div className="container mx-auto px-4 py-3">
+            <Link href="/" className="inline-flex items-center">
+              <Logo size="sm" showName nameClass="text-secondary-500 text-sm" />
+            </Link>
           </div>
+        </header>
+        <main className="flex-1 flex items-center justify-center">
+          <p className="text-lg text-gray-600">Loading...</p>
         </main>
-        <Footer />
       </div>
     )
   }
 
   return (
     <div className="flex flex-col min-h-screen">
-      <Header />
+      <header className="sticky top-0 z-30 bg-primary-950 border-b border-white/10">
+        <div className="container mx-auto px-4 py-3 flex items-center justify-between">
+          <Link href="/" className="inline-flex items-center">
+            <Logo size="sm" showName nameClass="text-secondary-500 text-sm" />
+          </Link>
+          <span className="text-xs uppercase tracking-wide text-gray-400 font-semibold">Admin Access</span>
+        </div>
+      </header>
 
       <main className="flex-1 flex items-center justify-center py-20 bg-gradient-to-br from-primary-950 via-primary-900 to-secondary-900 px-4">
         <div className="w-full max-w-md">
-          {/* Card */}
           <div className="bg-white rounded-2xl shadow-2xl overflow-hidden">
-            {/* Header */}
             <div className="bg-gradient-to-r from-primary-950 to-secondary-900 px-8 py-12">
-              <div className="flex items-center justify-center gap-3 mb-4">
-                <span className="text-4xl">🛡️</span>
-              </div>
               <h1 className="text-3xl font-bold text-white text-center">Admin Panel</h1>
               <p className="text-secondary-200 text-center mt-2">Secure Access</p>
             </div>
 
-            {/* Form */}
             <div className="px-8 py-8">
               <form onSubmit={handleEmailLogin} className="space-y-6">
-                {/* Email Input */}
                 <div>
                   <label className="block text-sm font-semibold mb-2 text-gray-700">Admin Email</label>
                   <div className="relative">
@@ -94,7 +115,6 @@ function AdminLoginContent() {
                   </div>
                 </div>
 
-                {/* Password Input */}
                 <div>
                   <label className="block text-sm font-semibold mb-2 text-gray-700">Password</label>
                   <div className="relative">
@@ -103,7 +123,7 @@ function AdminLoginContent() {
                       type="password"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      placeholder="••••••••"
+                      placeholder="********"
                       className="w-full pl-10 pr-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-200 transition"
                       required
                       disabled={loading}
@@ -111,7 +131,6 @@ function AdminLoginContent() {
                   </div>
                 </div>
 
-                {/* Submit Button */}
                 <button
                   type="submit"
                   disabled={loading}
@@ -122,25 +141,19 @@ function AdminLoginContent() {
                 </button>
               </form>
 
-              {/* Security Info */}
               <div className="mt-6 pt-6 border-t border-gray-200">
                 <p className="text-xs text-gray-600 text-center">
-                  🔒 All communications are encrypted and secure. Never share your admin credentials.
+                  All communications are encrypted and secure. Never share your admin credentials.
                 </p>
               </div>
             </div>
           </div>
 
-          {/* Footer Info */}
           <div className="mt-8 text-center text-white">
-            <p className="text-sm opacity-75">
-              TaxiHollongi Admin Management System
-            </p>
+            <p className="text-sm opacity-75">TaxiHollongi Admin Management System</p>
           </div>
         </div>
       </main>
-
-      <Footer />
     </div>
   )
 }
@@ -150,13 +163,16 @@ export default function AdminLogin() {
     <Suspense
       fallback={
         <div className="flex flex-col min-h-screen bg-gray-50">
-          <Header />
-          <main className="flex-1 flex items-center justify-center py-20">
-            <div className="text-center">
-              <p className="text-lg text-gray-600">Loading admin login...</p>
+          <header className="sticky top-0 z-30 bg-primary-950 border-b border-white/10">
+            <div className="container mx-auto px-4 py-3">
+              <Link href="/" className="inline-flex items-center">
+                <Logo size="sm" showName nameClass="text-secondary-500 text-sm" />
+              </Link>
             </div>
+          </header>
+          <main className="flex-1 flex items-center justify-center py-20">
+            <p className="text-lg text-gray-600">Loading admin login...</p>
           </main>
-          <Footer />
         </div>
       }
     >
@@ -164,3 +180,4 @@ export default function AdminLogin() {
     </Suspense>
   )
 }
+

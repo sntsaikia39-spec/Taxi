@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { requireAdminRequest } from '@/lib/admin-auth'
+import { getAdminFromRequest, requireAdminRequest } from '@/lib/admin-auth'
+import { logSystemEvent } from '@/lib/system-events'
 
 export const dynamic = 'force-dynamic'
 
@@ -71,6 +72,12 @@ export async function GET(request: NextRequest) {
 
     if (s['auto_cleanup_enabled'] === 'false') {
       console.log('[CRON] Auto-cleanup is disabled — skipping')
+      await logSystemEvent({
+        severity: 'info',
+        event_type: 'cleanup_cron_skipped',
+        actor_type: 'job',
+        message: 'Pending booking cleanup skipped (disabled)',
+      })
       return NextResponse.json({ success: true, skipped: true, reason: 'disabled' })
     }
 
@@ -85,17 +92,38 @@ export async function GET(request: NextRequest) {
       if (msSinceLastRun < timeoutMs) {
         const daysLeft = Math.ceil((timeoutMs - msSinceLastRun) / (24 * 60 * 60 * 1000))
         console.log(`[CRON] Too soon — ${daysLeft}d remaining until next cleanup window`)
+        await logSystemEvent({
+          severity: 'info',
+          event_type: 'cleanup_cron_skipped',
+          actor_type: 'job',
+          message: 'Pending booking cleanup skipped (too soon)',
+          metadata: { days_left: daysLeft },
+        })
         return NextResponse.json({ success: true, skipped: true, reason: 'too_soon', daysLeft })
       }
     }
 
     const deleted = await deleteExpiredPendingBookings(timeoutDays)
     await updateLastCleanupTime()
+    await logSystemEvent({
+      severity: 'info',
+      event_type: 'cleanup_cron_completed',
+      actor_type: 'job',
+      message: 'Pending booking cleanup completed by cron',
+      metadata: { deleted, timeout_days: timeoutDays },
+    })
 
     console.log(`[CRON] Cleanup complete — deleted: ${deleted}, window: ${timeoutDays}d`)
     return NextResponse.json({ success: true, deleted, timeoutDays })
   } catch (error) {
     console.error('[CRON] Cleanup error:', error)
+    await logSystemEvent({
+      severity: 'error',
+      event_type: 'cleanup_cron_failed',
+      actor_type: 'job',
+      message: 'Pending booking cleanup failed by cron',
+      metadata: { error: error instanceof Error ? error.message : String(error) },
+    })
     return NextResponse.json({ success: false, error: 'Cleanup failed' }, { status: 500 })
   }
 }
@@ -105,6 +133,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const unauthorized = requireAdminRequest(request)
   if (unauthorized) return unauthorized
+  const admin = getAdminFromRequest(request)
 
   try {
     const { data: settings } = await supabaseAdmin
@@ -123,10 +152,28 @@ export async function POST(request: NextRequest) {
     const timeoutDays = timeoutHours / 24
     const deleted = await deleteExpiredPendingBookings(timeoutDays)
     await updateLastCleanupTime()
+    await logSystemEvent({
+      severity: 'info',
+      event_type: 'cleanup_manual_completed',
+      actor_type: 'admin',
+      actor_id: admin?.id || null,
+      actor_label: admin?.email || null,
+      message: 'Pending booking cleanup completed manually by admin',
+      metadata: { deleted, timeout_days: timeoutDays },
+    })
 
     return NextResponse.json({ success: true, deleted, timeoutDays })
   } catch (error) {
     console.error('Cleanup error:', error)
+    await logSystemEvent({
+      severity: 'error',
+      event_type: 'cleanup_manual_failed',
+      actor_type: 'admin',
+      actor_id: admin?.id || null,
+      actor_label: admin?.email || null,
+      message: 'Pending booking cleanup failed',
+      metadata: { error: error instanceof Error ? error.message : String(error) },
+    })
     return NextResponse.json({ success: false, error: 'Cleanup failed' }, { status: 500 })
   }
 }

@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { requireAdminRequest } from '@/lib/admin-auth'
+import { getAdminFromRequest, requireAdminRequest } from '@/lib/admin-auth'
+import { logSystemEvent } from '@/lib/system-events'
 
 export const dynamic = 'force-dynamic'
 
@@ -8,6 +9,7 @@ const VALID_STATUSES = ['pending', 'confirmed', 'completed', 'cancelled']
 export async function PATCH(request: Request) {
   const unauthorized = requireAdminRequest(request)
   if (unauthorized) return unauthorized
+  const admin = getAdminFromRequest(request)
 
   try {
     const { booking_id, status } = await request.json()
@@ -32,9 +34,30 @@ export async function PATCH(request: Request) {
       return Response.json({ error: error.message }, { status: 500 })
     }
 
+    await logSystemEvent({
+      severity: 'info',
+      event_type: 'booking_status_updated',
+      actor_type: 'admin',
+      actor_id: admin?.id || null,
+      actor_label: admin?.email || null,
+      entity_type: 'booking',
+      entity_id: booking_id,
+      message: `Booking status changed to ${status}`,
+      metadata: { status },
+    })
+
     return Response.json({ success: true, booking: data })
   } catch (error) {
     console.error('update-status error:', error)
+    await logSystemEvent({
+      severity: 'error',
+      event_type: 'booking_status_update_failed',
+      actor_type: 'admin',
+      actor_id: admin?.id || null,
+      actor_label: admin?.email || null,
+      message: 'Booking status update failed',
+      metadata: { error: error instanceof Error ? error.message : String(error) },
+    })
     return Response.json({ error: 'Failed to update booking status' }, { status: 500 })
   }
 }

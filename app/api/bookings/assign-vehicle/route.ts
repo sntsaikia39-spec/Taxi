@@ -1,7 +1,8 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { requireAdminRequest } from '@/lib/admin-auth'
+import { getAdminFromRequest, requireAdminRequest } from '@/lib/admin-auth'
 import { getSpecificCarAssignmentConflicts } from '@/lib/conflicts'
 import { isValidEmail, sendAdminDriverEmailAlert, sendDriverAssignment, sendVehicleAssignment } from '@/lib/resend-notifications'
+import { logSystemEvent } from '@/lib/system-events'
 
 // Helper function to get current time in IST format
 function getCurrentTimeIST(): string {
@@ -27,6 +28,7 @@ function isAssignmentOverlapError(error: unknown): boolean {
 export async function POST(request: Request) {
   const unauthorized = requireAdminRequest(request)
   if (unauthorized) return unauthorized
+  const admin = getAdminFromRequest(request)
 
   try {
     const body = await request.json()
@@ -280,6 +282,22 @@ export async function POST(request: Request) {
       }
     })().catch((err) => console.error('[EMAIL] Driver email flow error:', err))
 
+    await logSystemEvent({
+      severity: warnings.length > 0 ? 'warn' : 'info',
+      event_type: 'vehicle_assigned',
+      actor_type: 'admin',
+      actor_id: admin?.id || null,
+      actor_label: admin?.email || null,
+      entity_type: 'booking',
+      entity_id: booking_id,
+      message: 'Vehicle assigned to booking',
+      metadata: {
+        car_id,
+        warnings: warnings.length,
+        conflict_override: Boolean(shouldRecordOverride),
+      },
+    })
+
     return Response.json(
       {
         success: true,
@@ -292,6 +310,15 @@ export async function POST(request: Request) {
     )
   } catch (error) {
     console.error('Error in assign-vehicle route:', error)
+    await logSystemEvent({
+      severity: 'error',
+      event_type: 'vehicle_assignment_failed',
+      actor_type: 'admin',
+      actor_id: admin?.id || null,
+      actor_label: admin?.email || null,
+      message: 'Vehicle assignment failed',
+      metadata: { error: error instanceof Error ? error.message : String(error) },
+    })
     return Response.json(
       {
         success: false,
