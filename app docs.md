@@ -2,7 +2,7 @@
 
 **Product:** Rina's Tours and Travels (RT&T)
 **Version:** 2.0
-**Last Updated:** 2026-05-12
+**Last Updated:** 2026-05-27
 **Branch:** v2-stable
 
 
@@ -879,11 +879,17 @@ erDiagram
     VEHICLE_ASSIGNMENTS {
         uuid    id               PK
         uuid    booking_id       FK  "→ BOOKINGS"
-        uuid    car_id           FK  "→ CARS"
+        uuid    car_id           FK  "→ CARS (nullable; ON DELETE SET NULL)"
         timestamp start_datetime
         timestamp end_datetime
         timestamp assigned_at
         timestamp created_at
+        string  car_model_snapshot
+        string  car_number_plate_snapshot
+        string  car_class_snapshot
+        string  driver_name_snapshot
+        string  driver_phone_snapshot
+        string  driver_email_snapshot
     }
     CARS {
         uuid    id               PK
@@ -991,7 +997,7 @@ erDiagram
 | `payments` | `payment_records` | 1 : N | `payment_records.payment_id` | one row per online/cash transaction |
 | `bookings` | `payment_records` | 1 : N | `payment_records.booking_id` | denormalised text back-reference |
 | `bookings` | `vehicle_assignments` | 1 : N | `vehicle_assignments.booking_id` | usually one; reassignment adds rows |
-| `cars` | `vehicle_assignments` | 1 : N | `vehicle_assignments.car_id` | a car is used in many assignments over time |
+| `cars` | `vehicle_assignments` | 1 : N | `vehicle_assignments.car_id` | nullable FK with `ON DELETE SET NULL`; historical assignments remain after car hard-delete |
 | `destinations` | `bookings` | 1 : N | `bookings.destination_id` | **airport bookings only** — FROM Hollongi Airport TO this destination |
 | `tour_packages` | `bookings` | 1 : N | `bookings.tour_package_id` | **tour bookings only** |
 | `tour_packages` | `reviews` | 1 : N | polymorphic (`reviewable_type = 'tour'`) | |
@@ -1182,11 +1188,17 @@ classDiagram
     class VehicleAssignment {
         +string id
         +string booking_id
-        +string car_id
+        +string car_id?  "nullable when linked car was deleted"
         +Date start_datetime
         +Date end_datetime
         +Date assigned_at
         +Date created_at
+        +string car_model_snapshot
+        +string car_number_plate_snapshot
+        +string car_class_snapshot
+        +string driver_name_snapshot
+        +string driver_phone_snapshot
+        +string driver_email_snapshot
     }
     class Car {
         +string id
@@ -1533,10 +1545,10 @@ All use semantic HTML and the Next.js Metadata API; tour images may be arbitrary
 Stat cards: **Total Bookings**, **Total Revenue** (`Rs. {total}`), **Active Bookings**, **Completed Today**, **Pending Bookings** (filtered), **Cancelled Bookings** (filtered). Below: **Recent Bookings** list — each row links to a detail modal; desktop shows a 6-column grid (Booking ID, Customer, Type, Start Date, Amount, Status), mobile a stacked card.
 
 ### 12.2 Bookings Tab (`renderBookings`)
-Full booking list with filters and the pending-cancellation badge. Per-booking actions: open details; **assign vehicle & driver** (`/api/bookings/assign-vehicle`, `/update-assignment`, `/get-assignments`); **update status** (`/api/bookings/update-status`); **confirm cash** (`/api/payment/confirm-cash`); **process cancellation** (`/api/admin/process-cancellation`). Hard-delete of a booking is also supported. Statuses revert to `confirmed` after a marked state is undone where applicable.
+Full booking list with filters and the pending-cancellation badge. Assignment filters include **All Assignments**, **Assigned**, **Assigned (Car Deleted)**, and **Not Assigned**. If an assignment exists but its linked car row was hard-deleted, the booking summary still surfaces that state via the compact vehicle status label (`Car Deleted`) and the expanded panel shows snapshot details from `vehicle_assignments` (`car_model_snapshot`, plate/driver snapshots). Per-booking actions: open details; **assign vehicle & driver** (`/api/bookings/assign-vehicle`, `/update-assignment`, `/get-assignments`); **update status** (`/api/bookings/update-status`); **confirm cash** (`/api/payment/confirm-cash`); **process cancellation** (`/api/admin/process-cancellation`). Hard-delete of a booking is also supported. Statuses revert to `confirmed` after a marked state is undone where applicable.
 
 ### 12.3 Cars Tab (`renderCarManagement`)
-CRUD over `cars` (`GET/POST /api/cars`, `GET/PUT/DELETE /api/cars/[id]`): `model_name`, `class`, `capacity`, `number_plate`, `per_km_charge`, `per_hr_charge`, `is_active`. Adding a car runs a strict validation check (e.g. plate uniqueness, sane numbers). Active/inactive toggle controls availability listings.
+CRUD over `cars` (`GET/POST /api/cars`, `GET/PUT/DELETE /api/cars/[id]`): `model_name`, `class`, `capacity`, `number_plate`, `per_km_charge`, `per_hr_charge`, `is_active`. Adding a car runs a strict validation check (e.g. plate uniqueness, sane numbers). Active/inactive toggle controls availability listings. Permanent delete is supported: if a deleted car was referenced by historical `vehicle_assignments`, those assignment rows are preserved and `vehicle_assignments.car_id` is set to `NULL` (`ON DELETE SET NULL`), while snapshot columns keep historical vehicle/driver details readable.
 
 ### 12.4 Destinations Tab (`renderDestinations`)
 CRUD over `destinations` (`GET/POST /api/destinations`, `GET/PUT/DELETE /api/destinations/[id]`): `name`, `distance_km`, `estimated_duration_minutes`, `description`, `is_active`. Distances are measured FROM Hollongi Airport. Distance and duration feed airport-fare calculation and ETAs shown to customers.
@@ -1617,7 +1629,7 @@ SELECT email, full_name, last_login, is_active FROM public.admins ORDER BY last_
 | `POST /api/bookings/assign-vehicle` | Bearer | `{ booking_id, car_id, start_datetime, end_datetime }` | `{ success, warnings?, conflict_override }` |
 | `POST /api/bookings/update-assignment` | Bearer | `{ assignment_id, car_id, start_datetime?, end_datetime? }` | `{ success, warnings?, conflict_override }` |
 | `GET /api/bookings/get-assignments` | Bearer | `?booking_id=` | `{ assignments:[...] }` |
-| `GET /api/bookings/user-assignments` | session | `?email=` | `{ assignments:[...] }` |
+| `POST /api/bookings/user-assignments` | session | `{ bookingIds: string[] }` | `{ assignments:[{ id, booking_id, car_id, start_datetime, end_datetime, assigned_at, car_model_snapshot, car_number_plate_snapshot, car_class_snapshot, driver_name_snapshot, driver_phone_snapshot, driver_email_snapshot, cars? }] }` |
 | `PUT /api/bookings/update-status` | Bearer | `{ booking_id, status }` | `{ success }` |
 | `POST /api/bookings/resume` | session | `{ booking_id }` | resume an incomplete booking |
 | `POST /api/bookings/cancel-request` | session | `{ booking_id, reason }` | `{ success }` · 400 if ≤ 24 h before trip |
@@ -1753,7 +1765,7 @@ TaxiHollongi/                        # repo root — RT&T platform
 │   │   │   ├── assign-vehicle/      # POST  — assign car + driver to a booking
 │   │   │   ├── update-assignment/   # PUT   — edit an existing assignment
 │   │   │   ├── get-assignments/     # GET   — assignments for a booking
-│   │   │   ├── user-assignments/    # GET   — assignments visible to a customer
+│   │   │   ├── user-assignments/    # POST  — assignments visible to a customer (batch by booking IDs)
 │   │   │   ├── update-status/       # PUT   — change booking_status
 │   │   │   ├── resume/              # POST  — re-open a cancelled booking
 │   │   │   └── cancel-request/      # POST  — customer cancellation request
@@ -1886,7 +1898,7 @@ All 10 tables are in `sql/`. Run them in order in the Supabase SQL Editor (see `
 2. `sql/destinations_schema.sql` — `destinations` table (FROM-airport routes + distance)
 3. `sql/tour_packages.sql` — `tour_packages` table (+ seed data)
 4. `sql/bookings_and_payments_schema.sql` — `bookings`, `payments`, `payment_records` (+ enum types, constraints, alterations)
-5. `sql/assignments_schema.sql` — `vehicle_assignments` table (booking ↔ car FK)
+5. `sql/assignments_schema.sql` — `vehicle_assignments` table (booking ↔ car FK, `car_id` nullable with `ON DELETE SET NULL`, plus vehicle/driver snapshot fields)
 6. `sql/admin_schema.sql` — `admins` table (+ default admin, RLS, indexes)
 7. `sql/reviews_schema.sql` — `reviews` table (polymorphic, + unique index)
 8. `sql/app_settings_schema.sql` — `app_settings` table (+ seeds `conflict_control_enabled='true'`)
@@ -1974,4 +1986,4 @@ Browser console (F12) · `npm run dev` terminal for server logs · Supabase dash
 
 ---
 
-*Rina's Tours and Travels — Complete Application Documentation v2.0 · Generated 2026-05-12 (branch v2-unstable). Diagrams rendered via Mermaid in the in-app viewer at /admin/docs.*
+*Rina's Tours and Travels — Complete Application Documentation v2.0 · Generated 2026-05-27 (branch v2-unstable). Diagrams rendered via Mermaid in the in-app viewer at /admin/docs.*

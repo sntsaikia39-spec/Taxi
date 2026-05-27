@@ -35,11 +35,17 @@ interface CarDetails {
 interface Assignment {
   id: string
   booking_id: string
-  car_id: string
+  car_id: string | null
   start_datetime: string
   end_datetime: string
   assigned_at: string
-  cars: CarDetails
+  car_model_snapshot?: string | null
+  car_number_plate_snapshot?: string | null
+  car_class_snapshot?: string | null
+  driver_name_snapshot?: string | null
+  driver_phone_snapshot?: string | null
+  driver_email_snapshot?: string | null
+  cars: CarDetails | null
 }
 
 export default function MyBookings() {
@@ -560,6 +566,13 @@ export default function MyBookings() {
                     ? 'Tour'
                     : 'Hourly Rental'
                 const assignment = assignmentMap[booking.booking_id || booking.id]
+                const assignmentCar = assignment?.cars || null
+                const assignmentModel = assignmentCar?.model_name || assignment?.car_model_snapshot || 'Vehicle record deleted'
+                const assignmentClass = assignmentCar?.class || assignment?.car_class_snapshot || '-'
+                const assignmentPlate = assignmentCar?.number_plate || assignment?.car_number_plate_snapshot || '-'
+                const assignmentDriver = assignmentCar?.driver_name || assignment?.driver_name_snapshot || '-'
+                const assignmentDriverPhone = assignmentCar?.driver_phone || assignment?.driver_phone_snapshot || '-'
+                const assignmentDriverEmail = assignmentCar?.driver_email || assignment?.driver_email_snapshot || null
                 const isExpanded = expandedBookingId === booking.id
 
                 return (
@@ -627,15 +640,20 @@ export default function MyBookings() {
                             <h4 className="text-green-400 font-bold text-xs uppercase tracking-wider">Vehicle Assigned</h4>
                           </div>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-2 text-sm">
-                            <p className="text-gray-300"><span className="text-gray-500 font-medium">Car:</span> {assignment.cars.model_name} ({assignment.cars.class})</p>
-                            <p className="text-gray-300"><span className="text-gray-500 font-medium">Number Plate:</span> {assignment.cars.number_plate}</p>
-                            <p className="text-gray-300"><span className="text-gray-500 font-medium">Driver:</span> {assignment.cars.driver_name}</p>
-                            <p className="text-gray-300"><span className="text-gray-500 font-medium">Driver Phone:</span> {assignment.cars.driver_phone}</p>
-                            {assignment.cars.driver_email && (
-                              <p className="text-gray-300"><span className="text-gray-500 font-medium">Driver Email:</span> {assignment.cars.driver_email}</p>
+                            <p className="text-gray-300"><span className="text-gray-500 font-medium">Car:</span> {assignmentModel} ({assignmentClass})</p>
+                            <p className="text-gray-300"><span className="text-gray-500 font-medium">Number Plate:</span> {assignmentPlate}</p>
+                            <p className="text-gray-300"><span className="text-gray-500 font-medium">Driver:</span> {assignmentDriver}</p>
+                            <p className="text-gray-300"><span className="text-gray-500 font-medium">Driver Phone:</span> {assignmentDriverPhone}</p>
+                            {assignmentDriverEmail && (
+                              <p className="text-gray-300"><span className="text-gray-500 font-medium">Driver Email:</span> {assignmentDriverEmail}</p>
                             )}
                             <p className="text-gray-300"><span className="text-gray-500 font-medium">Pickup:</span> {formatDate(assignment.start_datetime)} at {formatTime(assignment.start_datetime)}</p>
                           </div>
+                          {!assignmentCar && (
+                            <div className="mt-3 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2 text-[11px] md:text-xs text-amber-300">
+                              Vehicle record was deleted, but assignment history is preserved.
+                            </div>
+                          )}
                           <div className="mt-3 bg-green-500/10 border border-green-500/10 rounded-lg px-3 py-2 text-[11px] md:text-xs text-green-300/70 italic">
                             Tip: Arrive at the pickup point 10 minutes early for a smooth departure.
                           </div>

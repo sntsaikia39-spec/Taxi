@@ -22,6 +22,12 @@ export async function POST(request: NextRequest) {
         start_datetime,
         end_datetime,
         assigned_at,
+        car_model_snapshot,
+        car_number_plate_snapshot,
+        car_class_snapshot,
+        driver_name_snapshot,
+        driver_phone_snapshot,
+        driver_email_snapshot,
         cars (
           id,
           model_name,

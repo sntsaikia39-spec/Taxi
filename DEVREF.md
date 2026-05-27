@@ -366,6 +366,8 @@ Overlap condition: `booking_start < assignment_end AND booking_end > assignment_
 
 After payment, admin assigns specific car via `/api/bookings/assign-vehicle`.
 
+Hard delete behavior: deleting a car keeps historical `vehicle_assignments` rows by setting `vehicle_assignments.car_id` to `NULL` (`ON DELETE SET NULL`). Snapshot columns on `vehicle_assignments` preserve last-known model/plate/driver details for history views.
+
 ---
 
 ## Payment System

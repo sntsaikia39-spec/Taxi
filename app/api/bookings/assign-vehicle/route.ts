@@ -85,7 +85,7 @@ export async function POST(request: Request) {
     // Verify car exists
     const { data: car, error: carError } = await supabaseAdmin
       .from('cars')
-      .select('id, model_name, number_plate, driver_name, driver_phone, driver_email, capacity')
+      .select('id, model_name, class, number_plate, driver_name, driver_phone, driver_email, capacity')
       .eq('id', car_id)
       .single()
 
@@ -133,6 +133,12 @@ export async function POST(request: Request) {
       end_datetime: end_datetime,
       assigned_at: currentTimeIST,
       created_at: currentTimeIST,
+      car_model_snapshot: car.model_name,
+      car_number_plate_snapshot: car.number_plate,
+      car_class_snapshot: car.class || null,
+      driver_name_snapshot: car.driver_name || null,
+      driver_phone_snapshot: car.driver_phone || null,
+      driver_email_snapshot: car.driver_email || null,
       conflict_override: shouldRecordOverride,
       conflict_override_reason: shouldRecordOverride ? 'Admin assigned this vehicle despite an overlapping active assignment.' : null,
       conflict_override_at: shouldRecordOverride ? currentTimeIST : null,

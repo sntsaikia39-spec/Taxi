@@ -110,11 +110,17 @@ type Payment = {
 type VehicleAssignment = {
   id: string
   booking_id: string
-  car_id: string
+  car_id: string | null
   start_datetime: string
   end_datetime: string
   assigned_at: string
   created_at: string
+  car_model_snapshot?: string | null
+  car_number_plate_snapshot?: string | null
+  car_class_snapshot?: string | null
+  driver_name_snapshot?: string | null
+  driver_phone_snapshot?: string | null
+  driver_email_snapshot?: string | null
 }
 
 type PaymentsResponse = {
@@ -1109,7 +1115,7 @@ export default function AdminDashboard() {
     const warningMessage =
       `Permanently delete car ${car.model_name} (${car.number_plate})?\n\n` +
       'This will remove the car row from the database and cannot be undone.\n' +
-      'If related records exist (for example assignments), deletion will be blocked.\n\n' +
+      'If assignment history exists, those rows are kept and their linked car_id will be set to null.\n\n' +
       `Car ID: ${shortId}...`
 
     if (!window.confirm(warningMessage)) return
@@ -1207,10 +1213,19 @@ export default function AdminDashboard() {
 
     if (assignmentFilter !== 'all') {
       result = result.filter((booking) => {
-        const isAssigned = vehicleAssignments.some(
+        const assignment = vehicleAssignments.find(
           (va) => va.booking_id === (booking.booking_id || booking.id)
         )
-        return assignmentFilter === 'assigned' ? isAssigned : !isAssigned
+        const isAssigned = Boolean(assignment)
+        const hasLinkedCar = Boolean(
+          assignment?.car_id && cars.some((car) => car.id === assignment.car_id)
+        )
+        const isAssignedCarDeleted = isAssigned && !hasLinkedCar
+
+        if (assignmentFilter === 'assigned') return isAssigned
+        if (assignmentFilter === 'unassigned') return !isAssigned
+        if (assignmentFilter === 'assigned_deleted_car') return isAssignedCarDeleted
+        return true
       })
     }
 
@@ -1227,7 +1242,7 @@ export default function AdminDashboard() {
     }
 
     return result
-  }, [bookings, statusFilter, assignmentFilter, vehicleAssignments, bookingSearchQuery])
+  }, [bookings, statusFilter, assignmentFilter, vehicleAssignments, cars, bookingSearchQuery])
 
   const stats = useMemo(() => {
     const totalRevenue = bookings.reduce((sum, booking) => sum + toNum(booking.amount_total), 0)
@@ -1770,6 +1785,7 @@ export default function AdminDashboard() {
               >
                 <option value="all">All Assignments</option>
                 <option value="assigned">Assigned</option>
+                <option value="assigned_deleted_car">Assigned (Car Deleted)</option>
                 <option value="unassigned">Not Assigned</option>
               </select>
               <select
@@ -1807,7 +1823,8 @@ export default function AdminDashboard() {
                 (va) => va.booking_id === (booking.booking_id || booking.id)
               )
               const assignedCar = assignment ? cars.find((c) => c.id === assignment.car_id) : null
-              const isCarAssigned = !!assignedCar
+              const isCarAssigned = !!assignment
+              const hasDeletedAssignedCar = !!assignment && !assignedCar
 
               return (
                 <div key={booking.id} className="border rounded-lg overflow-hidden hover:shadow-md transition-shadow">
@@ -1837,8 +1854,10 @@ export default function AdminDashboard() {
                               : 'Pending'}
                           </span>
                           {booking.booking_status === 'confirmed' && (
-                            <p className={`text-xs font-semibold mb-1 ${isCarAssigned ? 'text-green-700' : 'text-orange-600'}`}>
-                              {isCarAssigned ? '✓ Car Assigned' : '⚠ No Car'}
+                            <p className={`text-xs font-semibold mb-1 ${
+                              hasDeletedAssignedCar ? 'text-amber-700' : isCarAssigned ? 'text-green-700' : 'text-orange-600'
+                            }`}>
+                              {hasDeletedAssignedCar ? '⚠ Assigned Car Deleted' : isCarAssigned ? '✓ Car Assigned' : '⚠ No Car'}
                             </p>
                           )}
                           <p className="text-xs font-semibold text-green-700">Rs. {toNum(booking.amount_total).toFixed(0)}</p>
@@ -1884,8 +1903,14 @@ export default function AdminDashboard() {
                         {booking.booking_status === 'confirmed' && (
                           <div>
                             <p className="text-xs text-gray-500 font-semibold mb-0.5">Vehicle</p>
-                            <span className={`px-2 py-1 rounded-full text-xs font-semibold inline-block ${isCarAssigned ? 'bg-green-100 text-green-800' : 'bg-orange-100 text-orange-800'}`}>
-                              {isCarAssigned ? '✓ Assigned' : '⚠ Not Assigned'}
+                            <span className={`px-2 py-1 rounded-full text-xs font-semibold inline-block ${
+                              hasDeletedAssignedCar
+                                ? 'bg-amber-100 text-amber-800'
+                                : isCarAssigned
+                                  ? 'bg-green-100 text-green-800'
+                                  : 'bg-orange-100 text-orange-800'
+                            }`}>
+                              {hasDeletedAssignedCar ? '⚠ Car Deleted' : isCarAssigned ? '✓ Assigned' : '⚠ Not Assigned'}
                             </span>
                           </div>
                         )}
@@ -2125,31 +2150,41 @@ export default function AdminDashboard() {
                             (va) => va.booking_id === (booking.booking_id || booking.id)
                           )
                           const assignedCar = assignment ? cars.find((c) => c.id === assignment.car_id) : null
+                          const carModel = assignedCar?.model_name || assignment?.car_model_snapshot || 'Vehicle record deleted'
+                          const carPlate = assignedCar?.number_plate || assignment?.car_number_plate_snapshot || '-'
+                          const carClass = assignedCar?.class || assignment?.car_class_snapshot || '-'
+                          const driverName = assignedCar?.driver_name || assignment?.driver_name_snapshot || '-'
+                          const driverPhone = assignedCar?.driver_phone || assignment?.driver_phone_snapshot || '-'
                           
-                          return assignment && assignedCar ? (
+                          return assignment ? (
                             <div className="bg-green-50 rounded-lg border border-green-200 p-4">
                               <h4 className="font-semibold text-base mb-3 text-green-800">✓ Vehicle Assignment</h4>
                               <dl className="space-y-2 text-sm">
                                 <div className="flex justify-between gap-2">
                                   <dt className="text-gray-600 shrink-0">Car Model</dt>
-                                  <dd className="font-semibold text-green-700">{assignedCar.model_name}</dd>
+                                  <dd className="font-semibold text-green-700">{carModel}</dd>
                                 </div>
                                 <div className="flex justify-between gap-2">
                                   <dt className="text-gray-600 shrink-0">Registration</dt>
-                                  <dd className="font-mono">{assignedCar.number_plate}</dd>
+                                  <dd className="font-mono">{carPlate}</dd>
                                 </div>
                                 <div className="flex justify-between gap-2">
                                   <dt className="text-gray-600 shrink-0">Class</dt>
-                                  <dd>{assignedCar.class}</dd>
+                                  <dd>{carClass}</dd>
                                 </div>
                                 <div className="flex justify-between gap-2">
                                   <dt className="text-gray-600 shrink-0">Driver</dt>
-                                  <dd>{assignedCar.driver_name}</dd>
+                                  <dd>{driverName}</dd>
                                 </div>
                                 <div className="flex justify-between gap-2">
                                   <dt className="text-gray-600 shrink-0">Driver Phone</dt>
-                                  <dd className="font-mono">{assignedCar.driver_phone}</dd>
+                                  <dd className="font-mono">{driverPhone}</dd>
                                 </div>
+                                {!assignedCar && (
+                                  <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-2 py-1">
+                                    Linked car was deleted. Snapshot details are shown from assignment history.
+                                  </div>
+                                )}
                                 <div className="flex justify-between gap-2 pt-2 border-t border-green-200">
                                   <dt className="text-gray-600 shrink-0">Assigned At</dt>
                                   <dd className="text-xs">{new Date(assignment.assigned_at).toLocaleString('en-IN')}</dd>
@@ -5185,6 +5220,13 @@ export default function AdminDashboard() {
                       <p className="text-sm text-gray-600 mt-1">Booking ID: {(selectedBookingForVehicle.booking_id || selectedBookingForVehicle.id).slice(0, 12)}…</p>
                       {existingAssignment && assignedCar && (
                         <p className="text-sm text-blue-600 mt-2">Currently assigned: <span className="font-semibold">{assignedCar.model_name}</span> ({assignedCar.number_plate})</p>
+                      )}
+                      {existingAssignment && !assignedCar && (
+                        <p className="text-sm text-amber-700 mt-2">
+                          Previously assigned vehicle record was deleted.
+                          {existingAssignment.car_model_snapshot ? ` Last known model: ${existingAssignment.car_model_snapshot}` : ''}
+                          {existingAssignment.car_number_plate_snapshot ? ` (${existingAssignment.car_number_plate_snapshot})` : ''}
+                        </p>
                       )}
                     </div>
                     <button

@@ -45,17 +45,6 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
     const { error } = await supabaseAdmin.from('cars').delete().eq('id', id)
 
     if (error) {
-      // Preserve historical records integrity by blocking hard-delete when links exist.
-      if (error.code === '23503') {
-        return NextResponse.json(
-          {
-            success: false,
-            error:
-              'Cannot permanently delete this car because related records exist (for example vehicle assignments). Historical records are preserved; deactivate this car instead.',
-          },
-          { status: 409 }
-        )
-      }
       console.error('Error deleting car:', error)
       return NextResponse.json({ success: false, error: error.message }, { status: 500 })
     }

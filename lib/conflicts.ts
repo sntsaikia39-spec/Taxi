@@ -22,7 +22,7 @@ export type ConflictBooking = {
 export type ConflictAssignment = {
   id: string
   booking_id: string
-  car_id: string
+  car_id: string | null
   start_datetime: string
   end_datetime: string
   assigned_at?: string | null
@@ -232,6 +232,7 @@ function buildModelAvailabilitySnapshot(
   const assignedCarIdsByModel = new Map<string, Set<string>>()
 
   state.assignments.forEach(assignment => {
+    if (!assignment.car_id) return
     const booking = bookingByKey.get(assignment.booking_id)
     if (!booking) return
     if (!windowsOverlap(assignment.start_datetime, assignment.end_datetime, window.start, window.end)) return
@@ -345,6 +346,7 @@ export async function isBookingWithinModelQuota(input: {
   const demandItems: { booking: ConflictBooking; source: 'assigned' | 'unassigned' }[] = []
 
   state.assignments.forEach(assignment => {
+    if (!assignment.car_id) return
     const booking = bookingByKey.get(assignment.booking_id)
     const car = carById.get(assignment.car_id)
     if (!booking || !car) return
@@ -382,7 +384,9 @@ export async function scanSystemConflicts() {
   })
 
   const carById = new Map(state.activeCars.map(car => [car.id, car]))
-  const activeAssignments = state.assignments.filter(assignment => bookingByKey.has(assignment.booking_id))
+  const activeAssignments = state.assignments.filter(
+    assignment => Boolean(assignment.car_id) && bookingByKey.has(assignment.booking_id)
+  )
 
   const assignmentConflicts: {
     issue_type?: 'same_car_overlap' | 'booking_double_assignment'
@@ -466,7 +470,7 @@ export async function scanSystemConflicts() {
 
   const assignedBookingKeys = new Set(
     activeAssignments
-      .filter(assignment => carById.has(assignment.car_id))
+      .filter(assignment => assignment.car_id && carById.has(assignment.car_id))
       .map(assignment => assignment.booking_id)
   )
   const demandByModel = new Map<string, {

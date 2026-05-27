@@ -1,11 +1,17 @@
 CREATE TABLE IF NOT EXISTS vehicle_assignments (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     booking_id UUID NOT NULL,
-    car_id UUID NOT NULL,
+    car_id UUID,
     start_datetime TIMESTAMP NOT NULL,
     end_datetime TIMESTAMP NOT NULL,
     assigned_at TIMESTAMP DEFAULT NOW(),
     created_at TIMESTAMP DEFAULT NOW(),
+    car_model_snapshot TEXT,
+    car_number_plate_snapshot TEXT,
+    car_class_snapshot TEXT,
+    driver_name_snapshot TEXT,
+    driver_phone_snapshot TEXT,
+    driver_email_snapshot TEXT,
     conflict_override BOOLEAN NOT NULL DEFAULT false,
     conflict_override_reason TEXT,
     conflict_override_at TIMESTAMP WITH TIME ZONE,
@@ -18,7 +24,7 @@ CREATE TABLE IF NOT EXISTS vehicle_assignments (
     CONSTRAINT fk_assignment_car
         FOREIGN KEY (car_id)
         REFERENCES cars(id)
-        ON DELETE RESTRICT,
+        ON DELETE SET NULL,
     
     CONSTRAINT check_valid_datetime CHECK (end_datetime > start_datetime)
 );
@@ -31,7 +37,36 @@ CREATE INDEX IF NOT EXISTS idx_assignments_datetime ON vehicle_assignments(start
 ALTER TABLE vehicle_assignments
   ADD COLUMN IF NOT EXISTS conflict_override BOOLEAN NOT NULL DEFAULT false,
   ADD COLUMN IF NOT EXISTS conflict_override_reason TEXT,
-  ADD COLUMN IF NOT EXISTS conflict_override_at TIMESTAMP WITH TIME ZONE;
+  ADD COLUMN IF NOT EXISTS conflict_override_at TIMESTAMP WITH TIME ZONE,
+  ADD COLUMN IF NOT EXISTS car_model_snapshot TEXT,
+  ADD COLUMN IF NOT EXISTS car_number_plate_snapshot TEXT,
+  ADD COLUMN IF NOT EXISTS car_class_snapshot TEXT,
+  ADD COLUMN IF NOT EXISTS driver_name_snapshot TEXT,
+  ADD COLUMN IF NOT EXISTS driver_phone_snapshot TEXT,
+  ADD COLUMN IF NOT EXISTS driver_email_snapshot TEXT;
+
+ALTER TABLE vehicle_assignments
+  ALTER COLUMN car_id DROP NOT NULL;
+
+ALTER TABLE vehicle_assignments
+  DROP CONSTRAINT IF EXISTS fk_assignment_car;
+
+ALTER TABLE vehicle_assignments
+  ADD CONSTRAINT fk_assignment_car
+  FOREIGN KEY (car_id)
+  REFERENCES cars(id)
+  ON DELETE SET NULL;
+
+UPDATE vehicle_assignments va
+SET
+  car_model_snapshot = COALESCE(va.car_model_snapshot, c.model_name),
+  car_number_plate_snapshot = COALESCE(va.car_number_plate_snapshot, c.number_plate),
+  car_class_snapshot = COALESCE(va.car_class_snapshot, c.class),
+  driver_name_snapshot = COALESCE(va.driver_name_snapshot, c.driver_name),
+  driver_phone_snapshot = COALESCE(va.driver_phone_snapshot, c.driver_phone),
+  driver_email_snapshot = COALESCE(va.driver_email_snapshot, c.driver_email)
+FROM cars c
+WHERE va.car_id = c.id;
 
 -- Mark already-overlapping rows as explicit legacy overrides before adding
 -- the non-override trigger guard below.
@@ -69,7 +104,8 @@ BEGIN
   FROM bookings
   WHERE booking_id = NEW.booking_id;
 
-  IF NEW.conflict_override
+  IF NEW.car_id IS NULL
+     OR NEW.conflict_override
      OR new_booking_status IS NULL
      OR new_booking_status NOT IN ('pending', 'confirmed') THEN
     RETURN NEW;
