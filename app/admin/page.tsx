@@ -3951,6 +3951,7 @@ export default function AdminDashboard() {
     const totalRevenue = bookings.reduce((sum, booking) => sum + toNum(booking.amount_total), 0)
     const completedBookings = bookings.filter((booking) => booking.booking_status === 'completed').length
     const pendingBookings = bookings.filter((booking) => booking.booking_status === 'pending').length
+    const confirmedBookings = bookings.filter((booking) => booking.booking_status === 'confirmed').length
     const cancelledBookings = bookings.filter((booking) => booking.booking_status === 'cancelled').length
     const averageBookingValue = bookings.length > 0 ? totalRevenue / bookings.length : 0
 
@@ -3959,6 +3960,11 @@ export default function AdminDashboard() {
     const totalCashCollected = payments.reduce((sum, p) => sum + toNum(p.amount_cash_paid), 0)
     const paidBookings = payments.filter((p) => p.payment_status === 'paid').length
     const partialPayments = payments.filter((p) => p.payment_status === 'partial').length
+    const pendingPayments = payments.filter((p) => p.payment_status === 'pending').length
+    const totalOutstanding = payments.reduce(
+      (sum, p) => sum + Math.max(0, toNum(p.amount_total) - toNum(p.amount_online_paid) - toNum(p.amount_cash_paid)),
+      0
+    )
 
     // Real booking trend - group by date (last 7 days)
     const last7Days = Array.from({ length: 7 }, (_, i) => {
@@ -4016,7 +4022,46 @@ export default function AdminDashboard() {
     // Calculate tour revenue from topTours
     const tourRevenue = topTours.reduce((sum, tour) => sum + tour.revenue, 0)
 
-    const fleetUtilization = cars.length > 0 ? (bookings.filter((b) => b.car_model).length / bookings.length) * 100 : 0
+    const fleetUtilization = bookings.length > 0 ? (bookings.filter((b) => b.car_model).length / bookings.length) * 100 : 0
+    const completionRate = bookings.length > 0 ? (completedBookings / bookings.length) * 100 : 0
+    const cancellationRate = bookings.length > 0 ? (cancelledBookings / bookings.length) * 100 : 0
+    const paymentCollectionRate = totalRevenue > 0 ? ((totalPaid + totalCashCollected) / totalRevenue) * 100 : 0
+
+    const activeBookingsForOps = bookings.filter((b) => b.booking_status === 'pending' || b.booking_status === 'confirmed')
+    const assignedActiveBookings = activeBookingsForOps.filter((b) =>
+      vehicleAssignments.some((a) => a.booking_id === (b.booking_id || b.id))
+    ).length
+    const assignmentCoverage = activeBookingsForOps.length > 0
+      ? (assignedActiveBookings / activeBookingsForOps.length) * 100
+      : 0
+
+    const bookingTypeStats = (['airport', 'tour', 'hourly'] as const).map((type) => {
+      const typeBookings = bookings.filter((b) => b.booking_type === type)
+      const typeRevenue = typeBookings.reduce((sum, b) => sum + toNum(b.amount_total), 0)
+      return { type, count: typeBookings.length, revenue: typeRevenue }
+    })
+
+    const upcomingDepartures = bookings
+      .filter((b) => {
+        if (!b.start_datetime) return false
+        const startMs = new Date(b.start_datetime).getTime()
+        if (Number.isNaN(startMs)) return false
+        return startMs >= Date.now() && (b.booking_status === 'pending' || b.booking_status === 'confirmed')
+      })
+      .sort((a, b) => new Date(a.start_datetime).getTime() - new Date(b.start_datetime).getTime())
+      .slice(0, 8)
+
+    const hourlyDemand = Array.from({ length: 24 }, (_, hour) => {
+      const count = bookings.filter((b) => {
+        if (!b.start_datetime) return false
+        const d = new Date(b.start_datetime)
+        if (Number.isNaN(d.getTime())) return false
+        return d.getHours() === hour
+      }).length
+      return { hour, count }
+    }).sort((a, b) => b.count - a.count)
+
+    const topDemandHours = hourlyDemand.slice(0, 5)
 
     return {
       totalRevenue,
@@ -4024,17 +4069,29 @@ export default function AdminDashboard() {
       totalCashCollected,
       paidBookings,
       partialPayments,
+      pendingPayments,
+      totalOutstanding,
       completedBookings,
+      confirmedBookings,
       pendingBookings,
       cancelledBookings,
       averageBookingValue,
       fleetUtilization,
+      completionRate,
+      cancellationRate,
+      paymentCollectionRate,
+      assignmentCoverage,
       bookingTrend,
       topDestinations,
       topTours,
       tourRevenue,
+      bookingTypeStats,
+      upcomingDepartures,
+      topDemandHours,
+      assignedActiveBookings,
+      activeOpsCount: activeBookingsForOps.length,
     }
-  }, [bookings, payments, tours, cars, destinations])
+  }, [bookings, payments, tours, cars, destinations, vehicleAssignments])
 
   const handleCreateAdmin = async () => {
     // Validate form
@@ -4844,6 +4901,34 @@ export default function AdminDashboard() {
         </div>
       </div>
 
+      <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6">
+        <div className="card p-4 md:p-6 bg-gradient-to-br from-emerald-50 to-emerald-100">
+          <p className="text-gray-600 text-xs md:text-sm font-semibold mb-2">Completion Rate</p>
+          <p className="text-xl md:text-3xl font-bold text-emerald-700">{analytics.completionRate.toFixed(1)}%</p>
+          <p className="text-xs text-gray-500 mt-1 md:mt-2">{analytics.completedBookings} completed bookings</p>
+        </div>
+
+        <div className="card p-4 md:p-6 bg-gradient-to-br from-rose-50 to-rose-100">
+          <p className="text-gray-600 text-xs md:text-sm font-semibold mb-2">Cancellation Rate</p>
+          <p className="text-xl md:text-3xl font-bold text-rose-700">{analytics.cancellationRate.toFixed(1)}%</p>
+          <p className="text-xs text-gray-500 mt-1 md:mt-2">{analytics.cancelledBookings} cancelled bookings</p>
+        </div>
+
+        <div className="card p-4 md:p-6 bg-gradient-to-br from-cyan-50 to-cyan-100">
+          <p className="text-gray-600 text-xs md:text-sm font-semibold mb-2">Collection Rate</p>
+          <p className="text-xl md:text-3xl font-bold text-cyan-700">{analytics.paymentCollectionRate.toFixed(1)}%</p>
+          <p className="text-xs text-gray-500 mt-1 md:mt-2">Collected vs booking value</p>
+        </div>
+
+        <div className="card p-4 md:p-6 bg-gradient-to-br from-amber-50 to-amber-100">
+          <p className="text-gray-600 text-xs md:text-sm font-semibold mb-2">Outstanding</p>
+          <p className="text-xl md:text-3xl font-bold text-amber-700">
+            Rs. {analytics.totalOutstanding.toLocaleString('en-IN', { notation: 'compact', maximumFractionDigits: 1 })}
+          </p>
+          <p className="text-xs text-gray-500 mt-1 md:mt-2">Pending collection amount</p>
+        </div>
+      </div>
+
       {/* Status Overview */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
         <div className="bg-white rounded-lg shadow-lg p-4 md:p-6">
@@ -4862,6 +4947,13 @@ export default function AdminDashboard() {
                 <span className="text-xs md:text-sm text-gray-600">Completed</span>
               </div>
               <span className="font-semibold text-sm md:text-base">{analytics.completedBookings}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full bg-blue-500"></div>
+                <span className="text-xs md:text-sm text-gray-600">Confirmed</span>
+              </div>
+              <span className="font-semibold text-sm md:text-base">{analytics.confirmedBookings}</span>
             </div>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -4917,6 +5009,62 @@ export default function AdminDashboard() {
               <span>Total Collected</span>
               <span className="md:text-base">Rs. {(analytics.totalPaid + analytics.totalCashCollected).toLocaleString('en-IN', { notation: 'compact' })}</span>
             </div>
+            <div className="flex items-center justify-between text-xs md:text-sm">
+              <span className="text-gray-600">Pending Payments</span>
+              <span className="font-semibold">{analytics.pendingPayments}</span>
+            </div>
+            <div className="flex items-center justify-between text-xs md:text-sm">
+              <span className="text-gray-600">Partial Payments</span>
+              <span className="font-semibold">{analytics.partialPayments}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-8">
+        <div className="bg-white rounded-lg shadow-lg p-4 md:p-8">
+          <h3 className="text-lg md:text-2xl font-bold mb-4 md:mb-6">Booking Type Mix</h3>
+          <div className="space-y-2 md:space-y-4">
+            {analytics.bookingTypeStats.map((row) => (
+              <div key={row.type} className="p-3 border rounded-lg">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="font-semibold text-sm md:text-base capitalize">{row.type}</p>
+                  <p className="font-semibold text-sm md:text-base">{row.count} bookings</p>
+                </div>
+                <div className="flex items-center justify-between text-xs text-gray-600">
+                  <span>Revenue</span>
+                  <span className="font-medium text-green-700">Rs. {row.revenue.toLocaleString('en-IN', { notation: 'compact' })}</span>
+                </div>
+                <div className="mt-2 h-2 bg-gray-100 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-secondary-500"
+                    style={{ width: `${bookings.length > 0 ? (row.count / bookings.length) * 100 : 0}%` }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="bg-white rounded-lg shadow-lg p-4 md:p-8">
+          <h3 className="text-lg md:text-2xl font-bold mb-4 md:mb-6">Operations Coverage</h3>
+          <div className="space-y-3 md:space-y-4">
+            <div className="flex items-center justify-between text-sm md:text-base">
+              <span className="text-gray-600">Active Bookings (Pending + Confirmed)</span>
+              <span className="font-semibold">{analytics.activeOpsCount}</span>
+            </div>
+            <div className="flex items-center justify-between text-sm md:text-base">
+              <span className="text-gray-600">Assigned Active Bookings</span>
+              <span className="font-semibold">{analytics.assignedActiveBookings}</span>
+            </div>
+            <div className="flex items-center justify-between text-sm md:text-base">
+              <span className="text-gray-600">Assignment Coverage</span>
+              <span className="font-semibold">{analytics.assignmentCoverage.toFixed(1)}%</span>
+            </div>
+            <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
+              <div className="h-full bg-blue-500" style={{ width: `${analytics.assignmentCoverage}%` }} />
+            </div>
+            <p className="text-xs text-gray-500">Higher coverage means fewer unassigned near-term rides.</p>
           </div>
         </div>
       </div>
@@ -5003,6 +5151,54 @@ export default function AdminDashboard() {
               <p className="text-gray-500 text-center py-4">No tour data available</p>
             )}
           </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-8">
+        <div className="bg-white rounded-lg shadow-lg p-4 md:p-8">
+          <h3 className="text-lg md:text-2xl font-bold mb-4 md:mb-6">Upcoming Departures</h3>
+          {analytics.upcomingDepartures.length === 0 ? (
+            <p className="text-sm text-gray-500">No upcoming pending/confirmed departures found.</p>
+          ) : (
+            <div className="space-y-2">
+              {analytics.upcomingDepartures.map((bk) => (
+                <div key={bk.id} className="flex items-center justify-between border rounded-lg px-3 py-2">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold truncate">{bk.user_name || 'Customer'} • {bookingTypeLabel(bk.booking_type)}</p>
+                    <p className="text-xs text-gray-500">
+                      {bk.start_datetime ? new Date(bk.start_datetime).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '-'}
+                    </p>
+                  </div>
+                  <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${getStatusClass(bk.booking_status)}`}>
+                    {bk.booking_status}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="bg-white rounded-lg shadow-lg p-4 md:p-8">
+          <h3 className="text-lg md:text-2xl font-bold mb-4 md:mb-6">Peak Booking Hours</h3>
+          <div className="space-y-2 md:space-y-3">
+            {analytics.topDemandHours.map((slot) => (
+              <div key={slot.hour} className="flex items-center gap-3">
+                <div className="w-16 text-xs text-gray-600 font-medium">
+                  {String(slot.hour).padStart(2, '0')}:00
+                </div>
+                <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-indigo-500"
+                    style={{
+                      width: `${analytics.topDemandHours[0]?.count ? (slot.count / analytics.topDemandHours[0].count) * 100 : 0}%`,
+                    }}
+                  />
+                </div>
+                <div className="w-10 text-right text-xs font-semibold">{slot.count}</div>
+              </div>
+            ))}
+          </div>
+          <p className="text-xs text-gray-500 mt-3">Use this for staffing, driver shifts, and assignment planning.</p>
         </div>
       </div>
     </div>
