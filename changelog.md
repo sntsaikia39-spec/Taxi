@@ -4,6 +4,27 @@ All notable changes to TaxiHollongi will be documented in this file.
 
 ---
 
+## [2026-05-27]
+
+**Author:** Yami
+
+### Changes
+- update: Car hard delete store snapshot.
+
+## [2026-05-26]
+
+**Author:** Yami
+
+### Changes
+- update: conflict control fix
+
+## [2026-05-25]
+
+**Author:** Yami
+
+### Changes
+- update: Ui changes mostly and bug fixes
+
 ## [2026-05-22]
 
 **Author:** Yami

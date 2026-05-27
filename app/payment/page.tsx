@@ -131,40 +131,6 @@ function PaymentContent() {
     }
   }
 
-  const handleDemoPayment = async (method: 'partial' | 'full') => {
-    if (!bookingData) { toast.error('Booking data not found'); return }
-    setLoading(true)
-    try {
-      const paymentAmount = method === 'full' ? bookingData.totalPrice : bookingData.advancePayment
-      const demoTxnId = `demo_txn_${Date.now()}_${method}`
-      const response = await fetch('/api/payment/create-payment', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          bookingId: bookingData.dbBookingId,
-          paymentType: method,
-          amountTotal: bookingData.totalPrice,
-          amountOnlinePaid: paymentAmount,
-          txnId: demoTxnId,
-          txnStatus: 'success',
-          gateway: 'razorpay_demo',
-        }),
-      })
-      const result = await response.json()
-      if (result.success) {
-        toast.success('Demo payment successful! Booking confirmed.')
-        setTimeout(() => { router.replace(`/booking-confirmed?bookingId=${bookingData.dbBookingId}`) }, 1200)
-      } else {
-        toast.error(result.error || 'Demo payment failed.')
-        setLoading(false)
-      }
-    } catch (error) {
-      console.error('Demo payment error:', error)
-      toast.error('Failed to process demo payment.')
-      setLoading(false)
-    }
-  }
-
   if (!bookingData) {
     return (
       <div ref={scrollRef} className="h-[100dvh] overflow-y-auto overflow-x-hidden bg-primary-950">
@@ -228,13 +194,6 @@ function PaymentContent() {
                 >
                   💳 {loading ? 'Processing...' : `Pay ₹${bookingData.totalPrice.toFixed(2)} — Full Payment`}
                 </button>
-                <button
-                  onClick={() => handleDemoPayment('full')}
-                  disabled={loading}
-                  className="w-full px-6 py-3 border border-dashed border-secondary-500/60 text-secondary-500 rounded-xl font-semibold hover:bg-secondary-500/10 transition-colors disabled:opacity-50 text-sm"
-                >
-                  {loading ? 'Processing...' : 'Demo Pay (Skip Razorpay)'}
-                </button>
               </div>
 
               <div className="flex items-center gap-4 my-5">
@@ -254,13 +213,6 @@ function PaymentContent() {
                   className="w-full px-5 py-3 border border-primary-700 text-white rounded-xl font-semibold hover:border-secondary-500/50 hover:text-secondary-500 transition-colors disabled:opacity-50 flex items-center justify-center gap-2 text-sm"
                 >
                   💳 {loading ? 'Processing...' : `Pay ₹${advanceAmount.toFixed(2)} to Prebook`}
-                </button>
-                <button
-                  onClick={() => handleDemoPayment('partial')}
-                  disabled={loading}
-                  className="w-full mt-2 px-5 py-3 border border-dashed border-secondary-500/60 text-secondary-500 rounded-xl font-semibold hover:bg-secondary-500/10 transition-colors disabled:opacity-50 text-sm"
-                >
-                  {loading ? 'Processing...' : 'Demo Prebook (Skip Razorpay)'}
                 </button>
               </div>
 
