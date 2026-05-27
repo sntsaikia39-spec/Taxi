@@ -3,7 +3,7 @@ CREATE TABLE IF NOT EXISTS public.tour_packages (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name VARCHAR(255) NOT NULL,
   description TEXT,
-  arrival_time TIMESTAMP,
+  arrival_time TIME,
   duration_hours INT,
   price DECIMAL(10, 2) NOT NULL,
   max_passengers INT,
@@ -34,7 +34,7 @@ INSERT INTO public.tour_packages (
 (
   'Tawang 3 Days Tour',
   'Explore the beautiful Tawang including monasteries, lakes and mountain passes.',
-  NOW(),
+  CURRENT_TIME,
   72,
   15000.00,
   6,
@@ -49,7 +49,7 @@ INSERT INTO public.tour_packages (
 (
   'Ziro Valley Nature Tour',
   'Experience the scenic beauty and Apatani tribal culture in Ziro valley.',
-  NOW(),
+  CURRENT_TIME,
   48,
   9000.00,
   4,
@@ -64,7 +64,7 @@ INSERT INTO public.tour_packages (
 (
   'Bomdila & Dirang Tour',
   'Short scenic trip covering Bomdila monastery and Dirang valley.',
-  NOW(),
+  CURRENT_TIME,
   36,
   7000.00,
   4,
@@ -79,7 +79,7 @@ INSERT INTO public.tour_packages (
 (
   'Mechuka Adventure Tour',
   'Remote adventure trip to Mechuka valley near Indo-China border.',
-  NOW(),
+  CURRENT_TIME,
   96,
   20000.00,
   6,
@@ -94,7 +94,7 @@ INSERT INTO public.tour_packages (
 (
   'Itanagar Local Sightseeing',
   'Half-day city tour covering major attractions in Itanagar.',
-  NOW(),
+  CURRENT_TIME,
   8,
   2500.00,
   4,
@@ -109,7 +109,7 @@ INSERT INTO public.tour_packages (
 (
   'Pasighat Riverside Tour',
   'Relaxing trip to Arunachal’s oldest town with river views.',
-  NOW(),
+  CURRENT_TIME,
   48,
   8500.00,
   4,
@@ -143,3 +143,14 @@ ALTER TABLE tour_packages
 UPDATE tour_packages
 SET image_urls = ARRAY[image_url]
 WHERE image_url IS NOT NULL AND image_url != '';
+
+
+-- Migration
+BEGIN;
+
+ALTER TABLE public.tour_packages
+  ALTER COLUMN arrival_time TYPE TIME
+  USING arrival_time::time;
+
+COMMIT;
+

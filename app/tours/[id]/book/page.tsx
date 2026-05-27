@@ -23,13 +23,13 @@ function toNum(val: unknown): number {
 }
 
 function extractTime(arrival_time: string): string {
-  const match = arrival_time.match(/T(\d{2}):(\d{2})/)
+  const match = arrival_time.match(/[T\s]?(\d{2}):(\d{2})/)
   return match ? `${match[1]}:${match[2]}` : '00:00'
 }
 
 function formatDisplayTime(arrival_time: string | null): string {
   if (!arrival_time) return 'To be announced'
-  const match = arrival_time.match(/T(\d{2}):(\d{2})/)
+  const match = arrival_time.match(/[T\s]?(\d{2}):(\d{2})/)
   if (!match) return 'To be announced'
   const h = parseInt(match[1])
   const m = match[2]

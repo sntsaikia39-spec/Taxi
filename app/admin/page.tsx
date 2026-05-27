@@ -214,6 +214,10 @@ function adminHeaders(extra: Record<string, string> = {}) {
   return token ? { ...extra, Authorization: `Bearer ${token}` } : extra
 }
 
+function hasAdminToken(): boolean {
+  return typeof window !== 'undefined' && !!localStorage.getItem('adminToken')
+}
+
 export default function AdminDashboard() {
   const router = useRouter()
   const { logout, adminEmail, adminFullName, updateAdminProfile } = useAdmin()
@@ -508,6 +512,15 @@ export default function AdminDashboard() {
   }
 
   useEffect(() => {
+    if (!hasAdminToken()) {
+      setLoadingBookings(false)
+      setLoadingPayments(false)
+      setLoadingCars(false)
+      setLoadingDestinations(false)
+      setLoadingTours(false)
+      router.replace('/admin-login')
+      return
+    }
     loadBookings()
     loadPayments()
     loadVehicleAssignments()
@@ -516,7 +529,7 @@ export default function AdminDashboard() {
     loadTours()
     loadConflictSetting()
     loadPendingTimeoutSetting()
-  }, [])
+  }, [router])
 
   const loadConflictSetting = async () => {
     setLoadingConflictSetting(true)
@@ -574,6 +587,11 @@ export default function AdminDashboard() {
 
   const loadBookings = async () => {
     setLoadingBookings(true)
+    if (!hasAdminToken()) {
+      setBookings([])
+      setLoadingBookings(false)
+      return
+    }
 
     try {
       const response = await fetch('/api/bookings/admin', {
@@ -584,13 +602,17 @@ export default function AdminDashboard() {
       const result: AdminApiResponse = await response.json()
 
       if (!response.ok || !result.success) {
+        if (response.status === 401 || response.status === 403) {
+          setBookings([])
+          return
+        }
         throw new Error(result.error || 'Failed to fetch bookings')
       }
 
       setBookings(result.bookings || [])
     } catch (error) {
       console.error('Error loading admin bookings:', error)
-      toast.error('Failed to load booking data')
+      if (hasAdminToken()) toast.error('Failed to load booking data')
       setBookings([])
     } finally {
       setLoadingBookings(false)
@@ -599,6 +621,11 @@ export default function AdminDashboard() {
 
   const loadPayments = async () => {
     setLoadingPayments(true)
+    if (!hasAdminToken()) {
+      setPayments([])
+      setLoadingPayments(false)
+      return
+    }
 
     try {
       const response = await fetch('/api/payment/get-all', {
@@ -609,6 +636,10 @@ export default function AdminDashboard() {
       const result: PaymentsResponse = await response.json()
 
       if (!response.ok || !result.success) {
+        if (response.status === 401 || response.status === 403) {
+          setPayments([])
+          return
+        }
         throw new Error(result.error || 'Failed to fetch payments')
       }
 
@@ -623,6 +654,10 @@ export default function AdminDashboard() {
   }
 
   const loadVehicleAssignments = async () => {
+    if (!hasAdminToken()) {
+      setVehicleAssignments([])
+      return
+    }
     try {
       const response = await fetch('/api/bookings/get-assignments', {
         method: 'GET',
@@ -632,6 +667,10 @@ export default function AdminDashboard() {
       const result = await response.json()
 
       if (!response.ok || !result.success) {
+        if (response.status === 401 || response.status === 403) {
+          setVehicleAssignments([])
+          return
+        }
         console.warn('Failed to fetch vehicle assignments')
         setVehicleAssignments([])
         return
@@ -646,19 +685,28 @@ export default function AdminDashboard() {
 
   const loadCars = async () => {
     setLoadingCars(true)
+    if (!hasAdminToken()) {
+      setCars([])
+      setLoadingCars(false)
+      return
+    }
 
     try {
       const response = await fetch('/api/cars?include_inactive=true', { method: 'GET', headers: adminHeaders() })
       const result: CarsResponse = await response.json()
 
       if (!response.ok || !result.success) {
+        if (response.status === 401 || response.status === 403) {
+          setCars([])
+          return
+        }
         throw new Error(result.error || 'Failed to fetch cars')
       }
 
       setCars(result.cars || [])
     } catch (error) {
       console.error('Error loading cars:', error)
-      toast.error('Failed to load cars data')
+      if (hasAdminToken()) toast.error('Failed to load cars data')
       setCars([])
     } finally {
       setLoadingCars(false)
@@ -855,12 +903,11 @@ export default function AdminDashboard() {
 
   const startEditTour = (tour: Tour) => {
     setEditingTour(tour)
-    // Format arrival_time from ISO timestamp to datetime-local format (YYYY-MM-DDTHH:mm)
+    // Normalize both legacy timestamp values and new HH:mm values to time-only.
     let arrivalTimeLocal = ''
     if (tour.arrival_time) {
-      const dt = new Date(tour.arrival_time)
-      const pad = (n: number) => String(n).padStart(2, '0')
-      arrivalTimeLocal = `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}T${pad(dt.getHours())}:${pad(dt.getMinutes())}`
+      const match = String(tour.arrival_time).match(/[T\s]?(\d{2}):(\d{2})/)
+      arrivalTimeLocal = match ? `${match[1]}:${match[2]}` : ''
     }
     setTourData({
       name: tour.name,
@@ -3523,9 +3570,9 @@ export default function AdminDashboard() {
                 required
               />
               <div className="flex flex-col gap-1">
-                <label className="text-xs text-gray-500 font-medium">Arrival Time</label>
+                <label className="text-xs text-gray-500 font-medium">Departure Time</label>
                 <input
-                  type="datetime-local"
+                  type="time"
                   className="input-field"
                   value={tourData.arrival_time}
                   onChange={(e) => setTourData({ ...tourData, arrival_time: e.target.value })}
@@ -3688,7 +3735,7 @@ export default function AdminDashboard() {
                   <tr className="border-b">
                     <th className="text-left py-3 px-4 font-semibold">Name</th>
                     <th className="text-left py-3 px-4 font-semibold">Price</th>
-                    <th className="text-left py-3 px-4 font-semibold">Arrival Time</th>
+                    <th className="text-left py-3 px-4 font-semibold">Departure Time</th>
                     <th className="text-left py-3 px-4 font-semibold">Duration</th>
                     <th className="text-left py-3 px-4 font-semibold">Max Pax</th>
                     <th className="text-left py-3 px-4 font-semibold">Car Model</th>
@@ -3727,10 +3774,10 @@ export default function AdminDashboard() {
                         <td className="py-3 px-4">Rs. {toNum(tour.price).toFixed(2)}</td>
                         <td className="py-3 px-4 text-sm">
                           {tour.arrival_time
-                            ? new Date(tour.arrival_time).toLocaleString('en-IN', {
-                                day: 'numeric', month: 'short', year: 'numeric',
-                                hour: '2-digit', minute: '2-digit', hour12: false,
-                              })
+                            ? (() => {
+                                const match = String(tour.arrival_time).match(/[T\s]?(\d{2}):(\d{2})/)
+                                return match ? `${match[1]}:${match[2]}` : '-'
+                              })()
                             : '-'}
                         </td>
                         <td className="py-3 px-4">{tour.duration_hours ? `${tour.duration_hours}h` : '-'}</td>
@@ -3824,13 +3871,13 @@ export default function AdminDashboard() {
                   <div className="p-4 space-y-3">
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Arrival Time</p>
+                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Departure Time</p>
                         <p className="text-sm text-gray-900">
                           {tour.arrival_time
-                            ? new Date(tour.arrival_time).toLocaleString('en-IN', {
-                                day: 'numeric', month: 'short',
-                                hour: '2-digit', minute: '2-digit', hour12: false,
-                              })
+                            ? (() => {
+                                const match = String(tour.arrival_time).match(/[T\s]?(\d{2}):(\d{2})/)
+                                return match ? `${match[1]}:${match[2]}` : '-'
+                              })()
                             : '-'}
                         </p>
                       </div>

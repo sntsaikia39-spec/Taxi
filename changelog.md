@@ -9,6 +9,7 @@ All notable changes to TaxiHollongi will be documented in this file.
 **Author:** Yami
 
 ### Changes
+- fix: minor
 - update: Car hard delete store snapshot.
 
 ## [2026-05-26]

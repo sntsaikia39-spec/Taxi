@@ -21,7 +21,7 @@ const TOUR_IMAGES = [
 
 function formatDepartureTime(arrival_time: string | null): string {
   if (!arrival_time) return 'Time TBD'
-  const match = arrival_time.match(/T(\d{2}):(\d{2})/)
+  const match = arrival_time.match(/[T\s]?(\d{2}):(\d{2})/)
   if (!match) return 'Time TBD'
   const h = parseInt(match[1])
   const m = match[2]

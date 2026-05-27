@@ -1,6 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 
+function normalizeArrivalTime(value: unknown): string | null {
+  if (!value) return null
+  const raw = String(value).trim()
+  if (!raw) return null
+  const match = raw.match(/[T\s]?(\d{2}):(\d{2})/)
+  if (!match) return null
+  return `${match[1]}:${match[2]}`
+}
+
 export async function GET() {
   try {
     const { data, error } = await supabaseAdmin
@@ -38,7 +47,7 @@ export async function POST(request: NextRequest) {
       {
         name,
         description: description || null,
-        arrival_time: arrival_time || null,
+        arrival_time: normalizeArrivalTime(arrival_time),
         duration_hours: duration_hours ? parseInt(duration_hours) : null,
         price: parseFloat(price),
         max_passengers: max_passengers ? parseInt(max_passengers) : null,
