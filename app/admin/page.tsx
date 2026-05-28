@@ -4467,7 +4467,7 @@ export default function AdminDashboard() {
                 </div>
               )}
               <p className={`mt-1 text-[10px] md:text-xs ${darkMode ? 'text-amber-200/80' : 'text-amber-700'}`}>
-                Recommended: 1,000 to 5,000 rows for free-tier projects.
+                Recommended: 1,000 to 3,000 for current database tier.
               </p>
             </div>
           </div>
@@ -5079,30 +5079,30 @@ export default function AdminDashboard() {
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6">
-        <div className="card p-4 md:p-6 bg-gradient-to-br from-emerald-50 to-emerald-100">
-          <p className="text-gray-600 text-xs md:text-sm font-semibold mb-2">Completion Rate</p>
-          <p className="text-xl md:text-3xl font-bold text-emerald-700">{analytics.completionRate.toFixed(1)}%</p>
-          <p className="text-xs text-gray-500 mt-1 md:mt-2">{analytics.completedBookings} completed bookings</p>
+        <div className={`card p-4 md:p-6 bg-gradient-to-br ${darkMode ? 'from-emerald-950/40 to-emerald-900/30' : 'from-emerald-50 to-emerald-100'}`}>
+          <p className={`text-xs md:text-sm font-semibold mb-2 ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>Completion Rate</p>
+          <p className={`text-xl md:text-3xl font-bold ${darkMode ? 'text-emerald-300' : 'text-emerald-700'}`}>{analytics.completionRate.toFixed(1)}%</p>
+          <p className={`text-xs mt-1 md:mt-2 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{analytics.completedBookings} completed bookings</p>
         </div>
 
-        <div className="card p-4 md:p-6 bg-gradient-to-br from-rose-50 to-rose-100">
-          <p className="text-gray-600 text-xs md:text-sm font-semibold mb-2">Cancellation Rate</p>
-          <p className="text-xl md:text-3xl font-bold text-rose-700">{analytics.cancellationRate.toFixed(1)}%</p>
-          <p className="text-xs text-gray-500 mt-1 md:mt-2">{analytics.cancelledBookings} cancelled bookings</p>
+        <div className={`card p-4 md:p-6 bg-gradient-to-br ${darkMode ? 'from-rose-950/40 to-rose-900/30' : 'from-rose-50 to-rose-100'}`}>
+          <p className={`text-xs md:text-sm font-semibold mb-2 ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>Cancellation Rate</p>
+          <p className={`text-xl md:text-3xl font-bold ${darkMode ? 'text-rose-300' : 'text-rose-700'}`}>{analytics.cancellationRate.toFixed(1)}%</p>
+          <p className={`text-xs mt-1 md:mt-2 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{analytics.cancelledBookings} cancelled bookings</p>
         </div>
 
-        <div className="card p-4 md:p-6 bg-gradient-to-br from-cyan-50 to-cyan-100">
-          <p className="text-gray-600 text-xs md:text-sm font-semibold mb-2">Collection Rate</p>
-          <p className="text-xl md:text-3xl font-bold text-cyan-700">{analytics.paymentCollectionRate.toFixed(1)}%</p>
-          <p className="text-xs text-gray-500 mt-1 md:mt-2">Collected vs booking value</p>
+        <div className={`card p-4 md:p-6 bg-gradient-to-br ${darkMode ? 'from-cyan-950/40 to-cyan-900/30' : 'from-cyan-50 to-cyan-100'}`}>
+          <p className={`text-xs md:text-sm font-semibold mb-2 ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>Collection Rate</p>
+          <p className={`text-xl md:text-3xl font-bold ${darkMode ? 'text-cyan-300' : 'text-cyan-700'}`}>{analytics.paymentCollectionRate.toFixed(1)}%</p>
+          <p className={`text-xs mt-1 md:mt-2 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Collected vs booking value</p>
         </div>
 
-        <div className="card p-4 md:p-6 bg-gradient-to-br from-amber-50 to-amber-100">
-          <p className="text-gray-600 text-xs md:text-sm font-semibold mb-2">Outstanding</p>
-          <p className="text-xl md:text-3xl font-bold text-amber-700">
+        <div className={`card p-4 md:p-6 bg-gradient-to-br ${darkMode ? 'from-amber-950/40 to-amber-900/30' : 'from-amber-50 to-amber-100'}`}>
+          <p className={`text-xs md:text-sm font-semibold mb-2 ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>Outstanding</p>
+          <p className={`text-xl md:text-3xl font-bold ${darkMode ? 'text-amber-300' : 'text-amber-700'}`}>
             Rs. {analytics.totalOutstanding.toLocaleString('en-IN', { notation: 'compact', maximumFractionDigits: 1 })}
           </p>
-          <p className="text-xs text-gray-500 mt-1 md:mt-2">Pending collection amount</p>
+          <p className={`text-xs mt-1 md:mt-2 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Pending collection amount</p>
         </div>
       </div>
 
@@ -5199,20 +5199,20 @@ export default function AdminDashboard() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-8">
-        <div className="bg-white rounded-lg shadow-lg p-4 md:p-8">
+        <div className={`rounded-lg shadow-lg p-4 md:p-8 ${darkMode ? 'bg-slate-800/95 border border-slate-700/60' : 'bg-white'}`}>
           <h3 className="text-lg md:text-2xl font-bold mb-4 md:mb-6">Booking Type Mix</h3>
           <div className="space-y-2 md:space-y-4">
             {analytics.bookingTypeStats.map((row) => (
-              <div key={row.type} className="p-3 border rounded-lg">
+              <div key={row.type} className={`p-3 border rounded-lg ${darkMode ? 'border-slate-700/70 bg-slate-900/45' : ''}`}>
                 <div className="flex items-center justify-between mb-2">
                   <p className="font-semibold text-sm md:text-base capitalize">{row.type}</p>
                   <p className="font-semibold text-sm md:text-base">{row.count} bookings</p>
                 </div>
-                <div className="flex items-center justify-between text-xs text-gray-600">
+                <div className={`flex items-center justify-between text-xs ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>
                   <span>Revenue</span>
-                  <span className="font-medium text-green-700">Rs. {row.revenue.toLocaleString('en-IN', { notation: 'compact' })}</span>
+                  <span className={`font-medium ${darkMode ? 'text-green-300' : 'text-green-700'}`}>Rs. {row.revenue.toLocaleString('en-IN', { notation: 'compact' })}</span>
                 </div>
-                <div className="mt-2 h-2 bg-gray-100 rounded-full overflow-hidden">
+                <div className={`mt-2 h-2 rounded-full overflow-hidden ${darkMode ? 'bg-slate-700/80' : 'bg-gray-100'}`}>
                   <div
                     className="h-full bg-secondary-500"
                     style={{ width: `${bookings.length > 0 ? (row.count / bookings.length) * 100 : 0}%` }}
@@ -5223,25 +5223,25 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow-lg p-4 md:p-8">
+        <div className={`rounded-lg shadow-lg p-4 md:p-8 ${darkMode ? 'bg-slate-800/95 border border-slate-700/60' : 'bg-white'}`}>
           <h3 className="text-lg md:text-2xl font-bold mb-4 md:mb-6">Operations Coverage</h3>
           <div className="space-y-3 md:space-y-4">
             <div className="flex items-center justify-between text-sm md:text-base">
-              <span className="text-gray-600">Active Bookings (Pending + Confirmed)</span>
+              <span className={darkMode ? 'text-gray-300' : 'text-gray-600'}>Active Bookings (Pending + Confirmed)</span>
               <span className="font-semibold">{analytics.activeOpsCount}</span>
             </div>
             <div className="flex items-center justify-between text-sm md:text-base">
-              <span className="text-gray-600">Assigned Active Bookings</span>
+              <span className={darkMode ? 'text-gray-300' : 'text-gray-600'}>Assigned Active Bookings</span>
               <span className="font-semibold">{analytics.assignedActiveBookings}</span>
             </div>
             <div className="flex items-center justify-between text-sm md:text-base">
-              <span className="text-gray-600">Assignment Coverage</span>
+              <span className={darkMode ? 'text-gray-300' : 'text-gray-600'}>Assignment Coverage</span>
               <span className="font-semibold">{analytics.assignmentCoverage.toFixed(1)}%</span>
             </div>
-            <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
+            <div className={`h-3 rounded-full overflow-hidden ${darkMode ? 'bg-slate-700/80' : 'bg-gray-100'}`}>
               <div className="h-full bg-blue-500" style={{ width: `${analytics.assignmentCoverage}%` }} />
             </div>
-            <p className="text-xs text-gray-500">Higher coverage means fewer unassigned near-term rides.</p>
+            <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Higher coverage means fewer unassigned near-term rides.</p>
           </div>
         </div>
       </div>
@@ -5332,17 +5332,17 @@ export default function AdminDashboard() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-8">
-        <div className="bg-white rounded-lg shadow-lg p-4 md:p-8">
+        <div className={`rounded-lg shadow-lg p-4 md:p-8 ${darkMode ? 'bg-slate-800/95 border border-slate-700/60' : 'bg-white'}`}>
           <h3 className="text-lg md:text-2xl font-bold mb-4 md:mb-6">Upcoming Departures</h3>
           {analytics.upcomingDepartures.length === 0 ? (
-            <p className="text-sm text-gray-500">No upcoming pending/confirmed departures found.</p>
+            <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>No upcoming pending/confirmed departures found.</p>
           ) : (
             <div className="space-y-2">
               {analytics.upcomingDepartures.map((bk) => (
-                <div key={bk.id} className="flex items-center justify-between border rounded-lg px-3 py-2">
+                <div key={bk.id} className={`flex items-center justify-between border rounded-lg px-3 py-2 ${darkMode ? 'border-slate-700/70 bg-slate-900/45' : ''}`}>
                   <div className="min-w-0">
                     <p className="text-sm font-semibold truncate">{bk.user_name || 'Customer'} • {bookingTypeLabel(bk.booking_type)}</p>
-                    <p className="text-xs text-gray-500">
+                    <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                       {bk.start_datetime ? new Date(bk.start_datetime).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '-'}
                     </p>
                   </div>
@@ -5355,15 +5355,15 @@ export default function AdminDashboard() {
           )}
         </div>
 
-        <div className="bg-white rounded-lg shadow-lg p-4 md:p-8">
+        <div className={`rounded-lg shadow-lg p-4 md:p-8 ${darkMode ? 'bg-slate-800/95 border border-slate-700/60' : 'bg-white'}`}>
           <h3 className="text-lg md:text-2xl font-bold mb-4 md:mb-6">Peak Booking Hours</h3>
           <div className="space-y-2 md:space-y-3">
             {analytics.topDemandHours.map((slot) => (
               <div key={slot.hour} className="flex items-center gap-3">
-                <div className="w-16 text-xs text-gray-600 font-medium">
+                <div className={`w-16 text-xs font-medium ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>
                   {String(slot.hour).padStart(2, '0')}:00
                 </div>
-                <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+                <div className={`flex-1 h-2 rounded-full overflow-hidden ${darkMode ? 'bg-slate-700/80' : 'bg-gray-100'}`}>
                   <div
                     className="h-full bg-indigo-500"
                     style={{
@@ -5375,7 +5375,7 @@ export default function AdminDashboard() {
               </div>
             ))}
           </div>
-          <p className="text-xs text-gray-500 mt-3">Use this for staffing, driver shifts, and assignment planning.</p>
+          <p className={`text-xs mt-3 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Use this for staffing, driver shifts, and assignment planning.</p>
         </div>
       </div>
     </div>
