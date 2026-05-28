@@ -196,6 +196,13 @@ function bookingTypeLabel(type: string | null | undefined) {
   return type ?? '-'
 }
 
+function compactLabel(value: string | null | undefined, maxLength = 18) {
+  const text = value?.trim()
+  if (!text) return null
+  if (text.length <= maxLength) return text
+  return `${text.slice(0, maxLength)}...`
+}
+
 function levenshtein(a: string, b: string): number {
   const m = a.length, n = b.length
   const dp: number[][] = Array.from({ length: m + 1 }, (_, i) => [i, ...Array(n).fill(0)])
@@ -247,6 +254,7 @@ export default function AdminDashboard() {
   const [statusFilter, setStatusFilter] = useState('all')
   const [assignmentFilter, setAssignmentFilter] = useState('all')
   const [bookingSearchQuery, setBookingSearchQuery] = useState('')
+  const [destinationSearchQuery, setDestinationSearchQuery] = useState('')
   const [bookings, setBookings] = useState<Booking[]>([])
   const [payments, setPayments] = useState<Payment[]>([])
   const [vehicleAssignments, setVehicleAssignments] = useState<VehicleAssignment[]>([])
@@ -1405,6 +1413,51 @@ export default function AdminDashboard() {
     return result
   }, [bookings, statusFilter, assignmentFilter, vehicleAssignments, cars, bookingSearchQuery])
 
+  const filteredDestinations = useMemo(() => {
+    const query = destinationSearchQuery.trim().toLowerCase()
+    if (!query) return destinations
+
+    return destinations.filter((destination) => (
+      destination.name.toLowerCase().includes(query) ||
+      (destination.description || '').toLowerCase().includes(query) ||
+      destination.id.toLowerCase().includes(query)
+    ))
+  }, [destinations, destinationSearchQuery])
+
+  const destinationNameById = useMemo(
+    () =>
+      destinations.reduce<Record<string, string>>((acc, destination) => {
+        acc[destination.id] = destination.name
+        return acc
+      }, {}),
+    [destinations]
+  )
+
+  const tourNameById = useMemo(
+    () =>
+      tours.reduce<Record<string, string>>((acc, tour) => {
+        acc[tour.id] = tour.name
+        return acc
+      }, {}),
+    [tours]
+  )
+
+  const getBookingServiceLabel = (booking: Booking) => {
+    if (booking.booking_type === 'tour' && booking.tour_package_id) {
+      return tourNameById[booking.tour_package_id] || 'Tour package'
+    }
+
+    if (booking.destination_id) {
+      return destinationNameById[booking.destination_id] || 'Destination unavailable'
+    }
+
+    if (booking.booking_type === 'hourly' && booking.no_of_hours != null) {
+      return `${booking.no_of_hours} hour${booking.no_of_hours === 1 ? '' : 's'} booking`
+    }
+
+    return bookingTypeLabel(booking.booking_type)
+  }
+
   const stats = useMemo(() => {
     const totalRevenue = bookings.reduce((sum, booking) => sum + toNum(booking.amount_total), 0)
     const activeBookings = bookings.filter((booking) => ACTIVE_STATUSES.has(booking.booking_status)).length
@@ -1845,21 +1898,46 @@ export default function AdminDashboard() {
                 (p) => p.booking_id === (booking.booking_id || booking.id)
               )
               const displayId = (booking.booking_id || booking.id).slice(0, 12)
+              const serviceLabel = getBookingServiceLabel(booking)
+              const serviceMeta = booking.booking_type === 'tour'
+                ? booking.tour_package_id
+                  ? `Package ID: ${booking.tour_package_id}`
+                  : 'Tour package'
+                : booking.destination_id
+                  ? `Destination ID: ${booking.destination_id}`
+                  : booking.booking_type === 'hourly' && booking.no_of_hours != null
+                    ? `${booking.no_of_hours} hour${booking.no_of_hours === 1 ? '' : 's'} reserved`
+                    : 'Route details unavailable'
+              const cardShellClass = darkMode
+                ? 'border border-primary-700/70 bg-primary-900/50 shadow-lg shadow-black/10'
+                : 'border border-slate-200 bg-white shadow-sm shadow-slate-200/70'
+              const summaryHoverClass = darkMode ? 'hover:bg-primary-800/50' : 'hover:bg-slate-50'
+              const subtleTextClass = darkMode ? 'text-gray-400' : 'text-gray-500'
+              const servicePillClass = darkMode
+                ? 'border border-cyan-500/30 bg-cyan-500/10 text-cyan-100'
+                : 'border border-cyan-200 bg-cyan-50 text-cyan-800'
 
               return (
-                <div key={booking.id} className="border rounded-lg overflow-hidden hover:shadow-md transition-shadow">
+                <div key={booking.id} className={`overflow-hidden rounded-2xl transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl ${cardShellClass}`}>
                   {/* Summary row — click to view details */}
                   <button
                     onClick={() => openBookingDetails(booking.id)}
-                    className="w-full text-left p-3 md:p-4 hover:bg-gray-50 transition-colors flex items-center justify-between gap-2"
+                    className={`w-full text-left p-3 md:p-5 transition-colors flex items-center justify-between gap-2 ${summaryHoverClass}`}
                   >
                     <div className="flex-1 min-w-0 text-sm">
                       {/* Mobile: stacked layout */}
                       <div className="flex items-start justify-between gap-2 md:hidden">
                         <div className="min-w-0">
-                          <p className="font-medium truncate">{booking.user_name || '-'}</p>
-                          <p className="text-xs text-gray-500">{booking.phone || '-'}</p>
-                          <p className="text-xs text-gray-400 font-mono mt-0.5">{displayId}…</p>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="font-semibold truncate">{booking.user_name || '-'}</p>
+                            <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${servicePillClass}`}>
+                              {bookingTypeLabel(booking.booking_type)}
+                            </span>
+                          </div>
+                          <p className={`mt-1 text-sm font-medium truncate ${darkMode ? 'text-white/90' : 'text-slate-700'}`}>{serviceLabel}</p>
+                          <p className={`text-xs truncate ${subtleTextClass}`}>{serviceMeta}</p>
+                          <p className={`text-xs mt-1 ${subtleTextClass}`}>{booking.phone || '-'}</p>
+                          <p className={`text-xs font-mono mt-1 ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>{displayId}...</p>
                         </div>
                         <div className="text-right shrink-0">
                           <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${getStatusClass(booking.booking_status)} inline-block mb-1`}>
@@ -1978,6 +2056,11 @@ export default function AdminDashboard() {
               const isExpanded = expandedBookingId === booking.id
               // display the application booking_id if present, otherwise fall back to table id
               const displayId = (booking.booking_id || booking.id).slice(0, 12)
+              const destinationName = booking.destination_id ? destinationNameById[booking.destination_id] : null
+              const serviceLabel = getBookingServiceLabel(booking)
+              const compactServiceLabel = serviceLabel !== bookingTypeLabel(booking.booking_type)
+                ? compactLabel(serviceLabel, 18)
+                : null
 
               // Check vehicle assignment for confirmed bookings
               const assignment = vehicleAssignments.find(
@@ -2005,6 +2088,10 @@ export default function AdminDashboard() {
                       <div className="flex items-start justify-between gap-2 md:hidden">
                         <div className="min-w-0">
                           <p className="font-medium truncate">{booking.user_name || '-'}</p>
+                          <p className="text-xs text-gray-500 truncate">
+                            {bookingTypeLabel(booking.booking_type)}
+                            {compactServiceLabel ? ` - ${compactServiceLabel}` : ''}
+                          </p>
                           <p className="text-xs text-gray-500">{booking.phone || '-'}</p>
                           <p className="text-xs text-gray-400 font-mono mt-0.5">{displayId}…</p>
                         </div>
@@ -2018,7 +2105,7 @@ export default function AdminDashboard() {
                             <p className={`text-xs font-semibold mb-1 ${
                               hasDeletedAssignedCar ? 'text-amber-700' : isCarAssigned ? 'text-green-700' : 'text-orange-600'
                             }`}>
-                              {hasDeletedAssignedCar ? '⚠ Assigned Car Deleted' : isCarAssigned ? '✓ Car Assigned' : '⚠ No Car'}
+                              {hasDeletedAssignedCar ? 'Assigned Car Deleted' : isCarAssigned ? 'Car Assigned' : 'No Car'}
                             </p>
                           )}
                           <p className="text-xs font-semibold text-green-700">Rs. {toNum(booking.amount_total).toFixed(0)}</p>
@@ -2039,6 +2126,9 @@ export default function AdminDashboard() {
                         <div>
                           <p className="text-xs text-gray-500 font-semibold mb-0.5">Type</p>
                           <p>{bookingTypeLabel(booking.booking_type)}</p>
+                          {compactServiceLabel && (
+                            <p className="text-xs text-gray-500 truncate">{compactServiceLabel}</p>
+                          )}
                         </div>
                         <div>
                           <p className="text-xs text-gray-500 font-semibold mb-0.5">Start Date</p>
@@ -2071,7 +2161,7 @@ export default function AdminDashboard() {
                                   ? 'bg-green-100 text-green-800'
                                   : 'bg-orange-100 text-orange-800'
                             }`}>
-                              {hasDeletedAssignedCar ? '⚠ Car Deleted' : isCarAssigned ? '✓ Assigned' : '⚠ Not Assigned'}
+                              {hasDeletedAssignedCar ? 'Car Deleted' : isCarAssigned ? 'Assigned' : 'Not Assigned'}
                             </span>
                           </div>
                         )}
@@ -2133,13 +2223,19 @@ export default function AdminDashboard() {
                             {booking.tour_package_id && (
                               <div className="flex justify-between gap-2">
                                 <dt className="text-gray-500 shrink-0">tour_package_id</dt>
-                                <dd className="font-mono text-xs text-right break-all">{booking.tour_package_id}</dd>
+                                <dd className="text-right">
+                                  <div className="font-medium">{tourNameById[booking.tour_package_id] || 'Tour package'}</div>
+                                  <div className="font-mono text-xs break-all">{booking.tour_package_id}</div>
+                                </dd>
                               </div>
                             )}
                             {booking.destination_id && (
                               <div className="flex justify-between gap-2">
                                 <dt className="text-gray-500 shrink-0">destination_id</dt>
-                                <dd className="font-mono text-xs text-right break-all">{booking.destination_id}</dd>
+                                <dd className="text-right">
+                                  <div className="font-medium">{destinationName || 'Destination unavailable'}</div>
+                                  <div className="font-mono text-xs break-all">{booking.destination_id}</div>
+                                </dd>
                               </div>
                             )}
                             {booking.no_of_hours != null && (
@@ -3563,18 +3659,42 @@ export default function AdminDashboard() {
       {/* Destinations List */}
       <div className="bg-white rounded-lg shadow-lg p-4 md:p-8">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 md:gap-4 mb-4 md:mb-6">
-          <h3 className="text-xl md:text-2xl font-bold">Manage Destinations</h3>
-          {!showAddDestination && !editingDestination && (
-            <button onClick={() => setShowAddDestination(true)} className="btn-primary text-sm md:text-base">
-              Add New Destination
-            </button>
-          )}
+          <div>
+            <h3 className="text-xl md:text-2xl font-bold">Manage Destinations</h3>
+            <p className="text-sm text-gray-500 mt-1">
+              {filteredDestinations.length} of {destinations.length} destination{destinations.length === 1 ? '' : 's'}
+            </p>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
+            <div className="relative flex-1 min-w-0 md:min-w-[260px]">
+              <input
+                type="text"
+                placeholder="Search destination, description, ID..."
+                className="input-field w-full pl-9 text-sm"
+                value={destinationSearchQuery}
+                onChange={(e) => setDestinationSearchQuery(e.target.value)}
+              />
+              <svg
+                className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"
+                fill="none" stroke="currentColor" viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </div>
+            {!showAddDestination && !editingDestination && (
+              <button onClick={() => setShowAddDestination(true)} className="btn-primary text-sm md:text-base">
+                Add New Destination
+              </button>
+            )}
+          </div>
         </div>
 
         {loadingDestinations ? (
           <p className="text-gray-600">Loading destinations...</p>
         ) : destinations.length === 0 ? (
           <p className="text-gray-600">No destinations available. Add a new destination to get started.</p>
+        ) : filteredDestinations.length === 0 ? (
+          <p className="text-gray-600">No destinations match "{destinationSearchQuery.trim()}".</p>
         ) : (
           <>
             {/* Desktop Table View */}
@@ -3590,7 +3710,7 @@ export default function AdminDashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {destinations.map((destination) => (
+                  {filteredDestinations.map((destination) => (
                     <tr key={destination.id} className="border-b hover:bg-gray-50">
                       <td className="py-3 px-4 font-semibold">{destination.name}</td>
                       <td className="py-3 px-4">{destination.distance_km}</td>
@@ -3620,7 +3740,7 @@ export default function AdminDashboard() {
 
             {/* Mobile Card View */}
             <div className="md:hidden grid grid-cols-1 gap-3">
-              {destinations.map((destination) => (
+              {filteredDestinations.map((destination) => (
                 <div key={destination.id} className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm hover:shadow-md transition-shadow">
                   <div className="flex items-start justify-between gap-3 mb-3">
                     <div className="flex-1">
