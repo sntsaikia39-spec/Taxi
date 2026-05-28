@@ -129,6 +129,12 @@ type PaymentsResponse = {
   error?: string
 }
 
+type CarModelLibraryResponse = {
+  success: boolean
+  models?: string[]
+  error?: string
+}
+
 type SystemLog = {
   id: string
   created_at: string
@@ -216,18 +222,88 @@ function levenshtein(a: string, b: string): number {
 }
 
 function normalizeModel(s: string) {
-  return s.toLowerCase().replace(/\s+/g, ' ').trim()
+  return s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim()
+}
+
+function tokenDistanceThreshold(token: string) {
+  return Math.max(1, Math.ceil(token.length * 0.25))
+}
+
+function normalizedDistance(a: string, b: string) {
+  return levenshtein(a, b) / Math.max(a.length, b.length, 1)
+}
+
+function tokenMatchScore(inputToken: string, candidateToken: string): number | null {
+  if (!inputToken || !candidateToken) return null
+  if (inputToken === candidateToken) return 0
+  if (candidateToken.startsWith(inputToken) || inputToken.startsWith(candidateToken)) return 0.08
+  if (candidateToken.includes(inputToken) || inputToken.includes(candidateToken)) return 0.14
+
+  const distance = levenshtein(inputToken, candidateToken)
+  if (distance <= tokenDistanceThreshold(inputToken)) {
+    return distance / Math.max(inputToken.length, candidateToken.length, 1)
+  }
+
+  return null
+}
+
+function scoreModelSimilarity(input: string, candidate: string): number | null {
+  const inputNorm = normalizeModel(input)
+  const candidateNorm = normalizeModel(candidate)
+
+  if (!inputNorm || !candidateNorm || inputNorm === candidateNorm) return null
+
+  const inputTokens = inputNorm.split(' ').filter(Boolean)
+  const candidateTokens = candidateNorm.split(' ').filter(Boolean)
+
+  if (inputTokens.length > 0 && candidateTokens.length > 0) {
+    const tokenScores = inputTokens.map((inputToken) => {
+      const scores = candidateTokens
+        .map((candidateToken) => tokenMatchScore(inputToken, candidateToken))
+        .filter((score): score is number => score !== null)
+      return scores.length > 0 ? Math.min(...scores) : null
+    })
+
+    const matchedCount = tokenScores.filter((score): score is number => score !== null).length
+    const minRequiredMatches = inputTokens.length === 1 ? 1 : Math.max(2, Math.ceil(inputTokens.length * 0.7))
+
+    if (matchedCount >= minRequiredMatches) {
+      const averageTokenScore = tokenScores
+        .filter((score): score is number => score !== null)
+        .reduce((sum, score) => sum + score, 0) / matchedCount
+      const extraWordPenalty = Math.max(0, candidateTokens.length - matchedCount) * 0.025
+      const orderedPhraseBonus = candidateNorm.includes(inputNorm) ? 0.08 : 0
+      return Math.max(0, averageTokenScore + extraWordPenalty - orderedPhraseBonus)
+    }
+  }
+
+  const candidatePrefixes = new Set<string>([candidateNorm])
+  if (candidateTokens.length > inputTokens.length && inputTokens.length > 0) {
+    candidatePrefixes.add(candidateTokens.slice(0, inputTokens.length).join(' '))
+  }
+  if (candidateTokens.length >= 2) {
+    candidatePrefixes.add(candidateTokens.slice(0, 2).join(' '))
+  }
+
+  const phraseScores = Array.from(candidatePrefixes)
+    .map((form) => normalizedDistance(inputNorm, form))
+    .filter((score) => score <= 0.24)
+
+  if (phraseScores.length > 0) {
+    return Math.min(...phraseScores) + 0.18
+  }
+
+  return null
 }
 
 function findSimilarModels(input: string, candidates: string[]): string[] {
   const inputNorm = normalizeModel(input)
   if (!inputNorm) return []
-  return candidates.filter(model => {
-    const modelNorm = normalizeModel(model)
-    if (modelNorm === inputNorm) return false
-    const threshold = Math.max(2, Math.floor(Math.min(inputNorm.length, modelNorm.length) * 0.3))
-    return levenshtein(inputNorm, modelNorm) <= threshold
-  })
+  return candidates
+    .map((model) => ({ model, score: scoreModelSimilarity(inputNorm, model) }))
+    .filter((entry): entry is { model: string; score: number } => entry.score !== null)
+    .sort((a, b) => a.score - b.score || a.model.length - b.model.length || a.model.localeCompare(b.model))
+    .map((entry) => entry.model)
 }
 
 function adminHeaders(extra: Record<string, string> = {}) {
@@ -282,6 +358,10 @@ export default function AdminDashboard() {
   const scheduleDateInputRef = useRef<HTMLInputElement>(null)
   const [showAddCar, setShowAddCar] = useState(false)
   const [carModelWarning, setCarModelWarning] = useState<string[]>([])
+  const [carModelWarningSource, setCarModelWarningSource] = useState<'existing' | 'library' | null>(null)
+  const [carModelLibrary, setCarModelLibrary] = useState<string[]>([])
+  const [lastCarModelSuggestions, setLastCarModelSuggestions] = useState<string[]>([])
+  const [lastCarModelSuggestionSource, setLastCarModelSuggestionSource] = useState<'existing' | 'library' | null>(null)
   const [showAddDestination, setShowAddDestination] = useState(false)
   const [showAddTour, setShowAddTour] = useState(false)
   const [editingCar, setEditingCar] = useState<Car | null>(null)
@@ -570,6 +650,7 @@ export default function AdminDashboard() {
     loadPayments()
     loadVehicleAssignments()
     loadCars()
+    loadCarModelLibrary()
     loadDestinations()
     loadTours()
     loadConflictSetting()
@@ -762,6 +843,82 @@ export default function AdminDashboard() {
     } finally {
       setLoadingCars(false)
     }
+  }
+
+  const loadCarModelLibrary = async () => {
+    if (!hasAdminToken()) {
+      setCarModelLibrary([])
+      return
+    }
+
+    try {
+      const response = await fetch('/api/admin/car-model-library', {
+        method: 'GET',
+        cache: 'no-store',
+        headers: adminHeaders({ 'Cache-Control': 'no-cache' }),
+      })
+      const result: CarModelLibraryResponse = await response.json()
+
+      if (!response.ok || !result.success) {
+        if (response.status === 401 || response.status === 403) {
+          setCarModelLibrary([])
+          return
+        }
+        throw new Error(result.error || 'Failed to fetch car model library')
+      }
+
+      setCarModelLibrary(result.models || [])
+    } catch (error) {
+      console.error('Error loading car model library:', error)
+      setCarModelLibrary([])
+    }
+  }
+
+  const updateCarModelSuggestions = (rawInput: string) => {
+    const input = rawInput.trim()
+
+    if (input.length < 3) {
+      setCarModelWarning([])
+      setCarModelWarningSource(null)
+      setLastCarModelSuggestions([])
+      setLastCarModelSuggestionSource(null)
+      return
+    }
+
+    const allModels = [...new Set(cars.map(c => c.model_name))]
+    const candidates = editingCar
+      ? allModels.filter(m => normalizeModel(m) !== normalizeModel(editingCar.model_name))
+      : allModels
+    const referenceModels = carModelLibrary.filter(
+      (model) => !allModels.some(existing => normalizeModel(existing) === normalizeModel(model))
+    )
+    const exactMatch = allModels.some(m => normalizeModel(m) === normalizeModel(input))
+    const exactReferenceMatch = referenceModels.some(
+      (model) => normalizeModel(model) === normalizeModel(input)
+    )
+
+    if (exactMatch || exactReferenceMatch) {
+      setCarModelWarning([])
+      setCarModelWarningSource(null)
+      setLastCarModelSuggestions([])
+      setLastCarModelSuggestionSource(null)
+      return
+    }
+
+    const existingMatches = findSimilarModels(input, candidates).slice(0, 4)
+    if (existingMatches.length > 0) {
+      setCarModelWarning(existingMatches)
+      setCarModelWarningSource('existing')
+      setLastCarModelSuggestions(existingMatches)
+      setLastCarModelSuggestionSource('existing')
+      return
+    }
+
+    const referenceMatches = findSimilarModels(input, referenceModels).slice(0, 4)
+    setCarModelWarning(referenceMatches)
+    setCarModelWarningSource(referenceMatches.length > 0 ? 'library' : null)
+    setLastCarModelSuggestions(referenceMatches)
+    setLastCarModelSuggestionSource(referenceMatches.length > 0 ? 'library' : null)
   }
 
   const loadDestinations = async () => {
@@ -1211,6 +1368,10 @@ export default function AdminDashboard() {
       }
 
       toast.success('Car added successfully!')
+      setCarModelWarning([])
+      setCarModelWarningSource(null)
+      setLastCarModelSuggestions([])
+      setLastCarModelSuggestionSource(null)
       setFormData({
         model_name: '',
         class: '',
@@ -1257,6 +1418,10 @@ export default function AdminDashboard() {
       }
 
       toast.success('Car updated successfully!')
+      setCarModelWarning([])
+      setCarModelWarningSource(null)
+      setLastCarModelSuggestions([])
+      setLastCarModelSuggestionSource(null)
       setFormData({
         model_name: '',
         class: '',
@@ -1333,6 +1498,9 @@ export default function AdminDashboard() {
   const startEditCar = (car: Car) => {
     setEditingCar(car)
     setCarModelWarning([])
+    setCarModelWarningSource(null)
+    setLastCarModelSuggestions([])
+    setLastCarModelSuggestionSource(null)
     setFormData({
       model_name: car.model_name,
       class: car.class,
@@ -1353,6 +1521,9 @@ export default function AdminDashboard() {
   const cancelEdit = () => {
     setEditingCar(null)
     setCarModelWarning([])
+    setCarModelWarningSource(null)
+    setLastCarModelSuggestions([])
+    setLastCarModelSuggestionSource(null)
     setFormData({
       model_name: '',
       class: '',
@@ -2691,26 +2862,27 @@ export default function AdminDashboard() {
                     className="input-field"
                     value={formData.model_name}
                     onChange={(e) => {
-                      setFormData({ ...formData, model_name: e.target.value })
-                      setCarModelWarning([])
+                      const nextValue = e.target.value
+                      setFormData({ ...formData, model_name: nextValue })
+                      updateCarModelSuggestions(nextValue)
                     }}
                     onBlur={(e) => {
-                      const input = e.target.value.trim()
-                      if (!input) return
-                      const allModels = [...new Set(cars.map(c => c.model_name))]
-                      // When editing, exclude the car's own current model from warning
-                      const candidates = editingCar
-                        ? allModels.filter(m => normalizeModel(m) !== normalizeModel(editingCar.model_name))
-                        : allModels
-                      // No warning if the typed value exactly matches an existing model
-                      const exactMatch = allModels.some(m => normalizeModel(m) === normalizeModel(input))
-                      setCarModelWarning(exactMatch ? [] : findSimilarModels(input, candidates))
+                      updateCarModelSuggestions(e.target.value)
                     }}
                     required
                   />
                   {carModelWarning.length > 0 && (
                     <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                      <p className="font-semibold mb-1">⚠ Similar model name{carModelWarning.length > 1 ? 's' : ''} already exist — did you mean:</p>
+                      <p className="font-semibold mb-1">
+                        {carModelWarningSource === 'existing'
+                          ? `Similar model name${carModelWarning.length > 1 ? 's' : ''} already exist in your cars - did you mean:`
+                          : 'Did you mean one of these common commercial model names?'}
+                      </p>
+                      {carModelWarningSource === 'library' && (
+                        <p className="mb-2 text-[11px] text-amber-700">
+                          No close match was found in your current car models, so this suggestion comes from the internal reference list.
+                        </p>
+                      )}
                       <div className="flex flex-wrap gap-1.5 mt-1">
                         {carModelWarning.map(name => (
                           <button
@@ -2719,6 +2891,9 @@ export default function AdminDashboard() {
                             onClick={() => {
                               setFormData(f => ({ ...f, model_name: name }))
                               setCarModelWarning([])
+                              setCarModelWarningSource(null)
+                              setLastCarModelSuggestions([])
+                              setLastCarModelSuggestionSource(null)
                             }}
                             className="px-2 py-0.5 bg-amber-100 hover:bg-amber-200 border border-amber-400 rounded font-medium transition-colors"
                           >
@@ -2727,12 +2902,30 @@ export default function AdminDashboard() {
                         ))}
                         <button
                           type="button"
-                          onClick={() => setCarModelWarning([])}
+                          onClick={() => {
+                            setCarModelWarning([])
+                            setCarModelWarningSource(null)
+                          }}
                           className="px-2 py-0.5 text-amber-600 hover:text-amber-800 underline"
                         >
                           Keep what I typed
                         </button>
                       </div>
+                    </div>
+                  )}
+                  {carModelWarning.length === 0 && lastCarModelSuggestions.length > 0 && (
+                    <div className="mt-1 flex items-center gap-2">
+                      <span className="text-[11px] text-gray-500">Suggestions hidden.</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCarModelWarning(lastCarModelSuggestions)
+                          setCarModelWarningSource(lastCarModelSuggestionSource)
+                        }}
+                        className="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-700 hover:bg-amber-100 transition-colors"
+                      >
+                        Show suggestions again
+                      </button>
                     </div>
                   )}
                 </div>

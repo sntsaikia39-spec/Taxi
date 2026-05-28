@@ -4,11 +4,22 @@ All notable changes to TaxiHollongi will be documented in this file.
 
 ---
 
+## [2026-05-28]
+
+**Author:** Yami
+
+### Changes
+- update: minor - destination name in bookings and search
+- fix: minor
+
 ## [2026-05-27]
 
 **Author:** Yami
 
 ### Changes
+- update: admin logs
+- update: analytics
+- fix: tour duration update fix
 - fix: minor
 - update: Car hard delete store snapshot.
 
